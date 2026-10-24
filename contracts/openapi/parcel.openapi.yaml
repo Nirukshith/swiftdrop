@@ -1,0 +1,9 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Parcel Service API
+  version: 0.1.0-SNAPSHOT
+  description: OpenAPI contract for SwiftDrop Parcel Lifecycle Service
+servers:
+  - url: http://localhost:8082
+    description: Local development server
+paths: {}

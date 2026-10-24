@@ -1,0 +1,11 @@
+server:
+  port: 8083
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5434}/ops_db
+    username: ${POSTGRES_USER:swiftdrop}
+    password: ${POSTGRES_PASSWORD:swiftdrop_password}
+    driver-class-name: org.postgresql.Driver
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}

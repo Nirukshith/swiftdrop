@@ -1,0 +1,13 @@
+<main class="min-h-screen bg-slate-50 text-slate-900 p-6">
+  <header class="mb-6 pb-4 border-b border-slate-200">
+    <h1 class="text-2xl font-bold text-slate-800">Hello, web</h1>
+    <nav class="flex gap-4 mt-3 text-sm font-medium text-indigo-600">
+      <a routerLink="/customer" class="hover:underline">Customer</a>
+      <a routerLink="/merchant" class="hover:underline">Merchant</a>
+      <a routerLink="/courier" class="hover:underline">Courier</a>
+      <a routerLink="/admin" class="hover:underline">Admin</a>
+      <a routerLink="/track/SWIFT-12345" class="hover:underline">Track Sample</a>
+    </nav>
+  </header>
+  <router-outlet></router-outlet>
+</main>

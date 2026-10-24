@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swiftdrop.com/schemas/event-envelope.schema.json",
+  "title": "EventEnvelope",
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string"
+    },
+    "eventType": {
+      "type": "string"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sequence": {
+      "type": "integer"
+    },
+    "parcelId": {
+      "type": "string"
+    },
+    "trackingNumber": {
+      "type": "string"
+    },
+    "fromStatus": {
+      "type": "string"
+    },
+    "toStatus": {
+      "type": "string"
+    },
+    "courierId": {
+      "type": ["string", "null"]
+    },
+    "previousCourierId": {
+      "type": ["string", "null"]
+    },
+    "merchantId": {
+      "type": ["string", "null"]
+    },
+    "customerId": {
+      "type": ["string", "null"]
+    },
+    "reason": {
+      "type": ["string", "null"]
+    }
+  },
+  "required": [
+    "eventId",
+    "eventType",
+    "occurredAt",
+    "sequence",
+    "parcelId",
+    "trackingNumber",
+    "fromStatus",
+    "toStatus"
+  ]
+}

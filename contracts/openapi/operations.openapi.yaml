@@ -1,0 +1,9 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Operations Service API
+  version: 0.1.0-SNAPSHOT
+  description: OpenAPI contract for SwiftDrop Operations and Dispatch Service
+servers:
+  - url: http://localhost:8083
+    description: Local development server
+paths: {}
