@@ -1,0 +1,46 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Local Data & Volumes
+/data/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# IDE & Editor files
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+.project
+.classpath
+.settings/
+
+# Java & Maven
+target/
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+.mvn/wrapper/maven-wrapper.jar
+
+# Node & Frontend
+node_modules/
+dist/
+.angular/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lcov.info
+coverage/
+.nx/

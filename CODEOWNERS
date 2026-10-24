@@ -1,0 +1,16 @@
+# SwiftDrop CODEOWNERS
+# Placeholder lines for team ownership assignments
+
+# Global fallback owners
+# * @swiftdrop/maintainers
+
+# Services & backend
+# /services/ @swiftdrop/backend-team
+# /common/ @swiftdrop/backend-team
+
+# Frontend workspace
+# /frontend/ @swiftdrop/frontend-team
+
+# Contracts & infrastructure
+# /contracts/ @swiftdrop/architecture-team
+# /deploy/ @swiftdrop/devops-team
