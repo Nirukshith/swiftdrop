@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TESTCONTAINERS_RYUK_DISABLED: 'true'
+      DOCKER_HOST: unix:///var/run/docker.sock
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,11 +26,17 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - name: Pre-pull Postgres image for Testcontainers
-        run: docker pull postgres:16-alpine
+      - name: Configure Docker socket & pull image
+        run: |
+          sudo chmod 666 /var/run/docker.sock
+          docker pull postgres:16-alpine
 
       - name: Run Maven verify
-        run: mvn -B verify
+        run: mvn -B verify -DtrimStackTrace=false
+
+      - name: Dump Surefire test logs on failure
+        if: failure()
+        run: tail -n 100 services/*/target/surefire-reports/*.txt
 
   frontend:
     name: Frontend CI
