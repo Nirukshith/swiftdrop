@@ -15,6 +15,7 @@ jobs:
     env:
       TESTCONTAINERS_RYUK_DISABLED: 'true'
       DOCKER_HOST: unix:///var/run/docker.sock
+      DOCKER_API_VERSION: '1.44'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,9 +27,10 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - name: Configure Docker socket & pull image
+      - name: Configure Docker socket & client API version
         run: |
           sudo chmod 666 /var/run/docker.sock
+          echo "api.version=1.44" > ~/.docker-java.properties
           docker pull postgres:16-alpine
 
       - name: Run Maven verify
