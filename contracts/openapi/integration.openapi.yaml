@@ -1,0 +1,9 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Integration Service API
+  version: 0.1.0-SNAPSHOT
+  description: OpenAPI contract for SwiftDrop External Integration and Notification Service
+servers:
+  - url: http://localhost:8084
+    description: Local development server
+paths: {}

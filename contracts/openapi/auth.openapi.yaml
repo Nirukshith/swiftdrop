@@ -1,0 +1,9 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Auth Service API
+  version: 0.1.0-SNAPSHOT
+  description: OpenAPI contract for SwiftDrop Authentication and User Service
+servers:
+  - url: http://localhost:8081
+    description: Local development server
+paths: {}
