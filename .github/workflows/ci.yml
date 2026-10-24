@@ -12,6 +12,8 @@ jobs:
   backend:
     name: Backend CI
     runs-on: ubuntu-latest
+    env:
+      TESTCONTAINERS_RYUK_DISABLED: 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -22,6 +24,9 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
           cache: 'maven'
+
+      - name: Pre-pull Postgres image for Testcontainers
+        run: docker pull postgres:16-alpine
 
       - name: Run Maven verify
         run: mvn -B verify
