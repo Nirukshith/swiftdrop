@@ -1,0 +1,4 @@
+CREATE DATABASE auth_db;
+CREATE DATABASE parcel_db;
+CREATE DATABASE ops_db;
+CREATE DATABASE integration_db;
