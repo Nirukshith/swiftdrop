@@ -12,9 +12,11 @@ Before running SwiftDrop locally, ensure the following developer tooling is inst
 | :--- | :--- | :--- |
 | **Java (JDK)** | Temurin JDK 21 | `java -version` |
 | **Maven** | 3.9+ | `mvn -v` |
-| **Node.js** | 20 LTS or 22 LTS | `node -v` |
+| **Node.js** | Node 22 LTS only | `node -v` |
 | **npm** | 10+ | `npm -v` |
 | **Docker Engine & Compose** | Docker v24+ / Compose v2+ | `docker compose version` |
+
+Run `nvm use` in the repo root to switch to the pinned version (nvm-windows users: `nvm use 22`).
 
 ---
 
