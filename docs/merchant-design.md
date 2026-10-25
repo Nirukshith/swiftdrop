@@ -16,6 +16,7 @@ The OpenAPI proposal is in `contracts/openapi/integration-merchant.yaml`.
 4. The merchant becomes `APPROVED` only when user activation and client provisioning succeed (exact transaction/compensation behavior needs agreement; services cannot share a database transaction).
 5. Auth-service must store only a hash of the client secret. The raw secret may be displayed once, never logged, and never returned by later list/read calls. The exact secure one-time delivery path is not settled. A client secret is distinct from the OAuth access token.
 6. The merchant obtains an OAuth 2.0 client-credentials access token from auth-service and sends it as `Authorization: Bearer <token>` to merchant APIs. This bearer-token pattern follows ADR 004. The exact token URL and client-credentials request/response contract are not in the available auth OpenAPI contract.
+	**Token lifetime proposal:** 15 minutes, matching the SRS access-token lifetime. M10 should confirm whether client-credentials tokens use the same lifetime and whether refresh tokens are intentionally not issued for this grant.
 
 ## Merchant states and transitions
 
