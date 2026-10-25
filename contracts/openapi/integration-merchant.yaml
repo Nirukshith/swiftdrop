@@ -1,0 +1,583 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Merchant Integration API
+  version: 0.1.0-SNAPSHOT
+  description: |
+    Proposed contract for merchant onboarding and merchant parcel orders in integration-service.
+    Payload shapes and operational policies not fixed by the SRS are proposals and are listed
+    as open questions in docs/merchant-design.md.
+servers:
+  - url: http://localhost:8084
+    description: Local development server
+paths:
+  /api/v1/merchants/register:
+    post:
+      summary: Register a merchant account
+      description: Public self-registration. A successfully registered merchant remains PENDING until an ADMIN approves it.
+      operationId: registerMerchant
+      tags: [Merchant Onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantRegistrationRequest'
+      responses:
+        '201':
+          description: Merchant registered and awaiting administrator approval.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantRegistrationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Merchant registration conflicts with an existing account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/admin/merchants:
+    get:
+      summary: List merchants for administration
+      description: Lists merchants for M5's approval page. Restricted to ADMIN.
+      operationId: listAdminMerchants
+      tags: [Merchant Administration]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/MerchantStatus'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Paginated merchant list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/merchants/{merchantId}/approve:
+    post:
+      summary: Approve a pending merchant
+      description: Restricted to ADMIN. Approval activates the associated MERCHANT user and provisions OAuth client credentials through auth-service; the client secret is returned only once to the authorized admin workflow.
+      operationId: approveMerchant
+      tags: [Merchant Administration]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/MerchantId'
+      responses:
+        '200':
+          description: Merchant approved. Secret delivery/display behavior is subject to the open questions in docs/merchant-design.md.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantApprovalResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Merchant is not in a state that can be approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/merchants/{merchantId}/reject:
+    post:
+      summary: Reject a pending merchant
+      description: Restricted to ADMIN. Rejection reason payload is a proposed shape; confirm it with M5 and M10.
+      operationId: rejectMerchant
+      tags: [Merchant Administration]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/MerchantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MerchantRejectionRequest'
+      responses:
+        '200':
+          description: Merchant rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Merchant is not in a state that can be rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/merchant/orders:
+    post:
+      summary: Create a merchant parcel order
+      description: |
+        Requires a valid merchant client-credentials bearer token. Uses the configured M5 pricing
+        quote and creates the parcel by calling M1's POST /internal/v1/parcels. An Idempotency-Key
+        is required. Replays with the same key and request body return the stored response; reuse
+        with a different body returns 409. Proposed retention is documented in docs/merchant-design.md.
+      operationId: createMerchantOrder
+      tags: [Merchant Orders]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMerchantOrderRequest'
+      responses:
+        '201':
+          description: Parcel order created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantOrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Merchant credentials are invalid, inactive, or not approved for ordering.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency key was reused with a different request, or order conflicts with current state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Address, district, or parcel data failed domain validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '502':
+          description: Downstream parcel or pricing service rejected the request or was unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/merchant/orders/{orderId}/cancel:
+    post:
+      summary: Cancel a merchant parcel order
+      description: Requires a valid merchant bearer token belonging to the order's merchant. Cancellation is accepted only before pickup, as specified by the parcel lifecycle. An Idempotency-Key is required.
+      operationId: cancelMerchantOrder
+      tags: [Merchant Orders]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelMerchantOrderRequest'
+      responses:
+        '200':
+          description: Cancellation accepted; returns the stored/current order response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantOrderResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Order is already picked up, terminal, or the idempotency key conflicts with a previous request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/merchant/orders/bulk:
+    post:
+      summary: Create merchant orders from CSV
+      description: |
+        Should-have feature per the project plan. Requires a valid merchant bearer token and an
+        Idempotency-Key for the entire upload. Upload format and partial-success semantics are
+        proposals; see docs/merchant-design.md.
+      operationId: createMerchantOrdersBulk
+      tags: [Merchant Orders]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: CSV parsed; response reports accepted and rejected rows.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkMerchantOrderResponse'
+        '400':
+          description: Invalid CSV encoding, header, or file-level format.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Idempotency key was reused with different file content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Upload exceeds the configured maximum size (proposed limit in design document).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: OAuth 2.0 client-credentials access token issued by auth-service.
+
+  parameters:
+    MerchantId:
+      name: merchantId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      description: Merchant order identifier returned by integration-service.
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-generated key scoped to merchant and operation; proposal is UUID or other opaque value up to 128 characters.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+
+  responses:
+    BadRequest:
+      description: Invalid request payload or parameter.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication required or bearer token invalid/expired.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Authenticated caller lacks the required role, merchant state, or ownership.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Merchant or order was not found for the caller.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: Request rate limit exceeded.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until the client may retry.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    MerchantRegistrationRequest:
+      type: object
+      required: [businessName, contactName, email, phoneNumber]
+      properties:
+        businessName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        contactName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        email:
+          type: string
+          format: email
+        phoneNumber:
+          type: string
+          pattern: '^\\+?[0-9]{10,14}$'
+        businessRegistrationNumber:
+          type: string
+          description: Optional pending confirmation with the team.
+    MerchantRegistrationResponse:
+      allOf:
+        - $ref: '#/components/schemas/MerchantSummary'
+        - type: object
+          properties:
+            message:
+              type: string
+              example: Registration submitted for administrator review.
+    MerchantSummary:
+      type: object
+      required: [id, businessName, contactName, email, phoneNumber, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        businessName:
+          type: string
+        contactName:
+          type: string
+        email:
+          type: string
+          format: email
+        phoneNumber:
+          type: string
+        status:
+          $ref: '#/components/schemas/MerchantStatus'
+        rejectionReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    MerchantStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED, SUSPENDED]
+      description: SUSPENDED is included as a state only; no suspension endpoint is currently specified.
+    MerchantPage:
+      type: object
+      required: [content, totalElements, totalPages, page, size]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/MerchantSummary'
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+    MerchantRejectionRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+    MerchantApprovalResponse:
+      type: object
+      required: [merchant, clientId]
+      properties:
+        merchant:
+          $ref: '#/components/schemas/MerchantSummary'
+        clientId:
+          type: string
+          description: OAuth client identifier; not a secret.
+        clientSecret:
+          type: string
+          description: Returned at most once if the agreed admin workflow exposes the generated secret here. Never persisted in plaintext or included in logs.
+    StructuredAddress:
+      type: object
+      description: Fixed address fields; district is required by ADR 002.
+      required: [line1, city, district]
+      properties:
+        line1:
+          type: string
+        line2:
+          type: string
+          nullable: true
+        city:
+          type: string
+        district:
+          type: string
+          description: Must be selected from the team's predefined district list; the list remains an open item in ADR 002.
+        postalCode:
+          type: string
+          nullable: true
+    CreateMerchantOrderRequest:
+      type: object
+      required: [externalReference, recipientName, recipientPhone, pickupAddress, dropoffAddress, size, weightKg]
+      properties:
+        externalReference:
+          type: string
+          maxLength: 128
+          description: Merchant-side reference to help reconcile the order.
+        recipientName:
+          type: string
+        recipientPhone:
+          type: string
+        pickupAddress:
+          $ref: '#/components/schemas/StructuredAddress'
+        dropoffAddress:
+          $ref: '#/components/schemas/StructuredAddress'
+        size:
+          type: string
+          enum: [SMALL, MEDIUM, LARGE]
+        weightKg:
+          type: number
+          format: double
+          exclusiveMinimum: true
+          minimum: 0
+    CancelMerchantOrderRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+    MerchantOrderResponse:
+      type: object
+      required: [orderId, parcelId, trackingNumber, status, createdAt]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        parcelId:
+          type: string
+          format: uuid
+        trackingNumber:
+          type: string
+        externalReference:
+          type: string
+        status:
+          type: string
+          description: Current parcel lifecycle state from parcel-service.
+        fee:
+          type: number
+          format: double
+          description: Fee returned through M5's quote integration and accepted by parcel-service.
+        createdAt:
+          type: string
+          format: date-time
+    BulkMerchantOrderResponse:
+      type: object
+      required: [totalRows, acceptedRows, rejectedRows, results]
+      properties:
+        totalRows:
+          type: integer
+        acceptedRows:
+          type: integer
+        rejectedRows:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkMerchantOrderRowResult'
+    BulkMerchantOrderRowResult:
+      type: object
+      required: [rowNumber, accepted]
+      properties:
+        rowNumber:
+          type: integer
+          minimum: 2
+          description: One-based CSV row including header.
+        accepted:
+          type: boolean
+        order:
+          allOf:
+            - $ref: '#/components/schemas/MerchantOrderResponse'
+          nullable: true
+        errors:
+          type: array
+          items:
+            type: string
+          description: Per-row validation or downstream error messages; proposed shape.
+    ErrorResponse:
+      type: object
+      required: [code, message, correlationId, timestamp]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        correlationId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
