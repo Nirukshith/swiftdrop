@@ -1,0 +1,924 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Integration Service - Merchant Webhooks & Orders API
+  version: 0.1.0-SNAPSHOT
+  description: |
+    OpenAPI specification for SwiftDrop Integration Service (Port 8084), covering
+    Merchant Webhook Settings, Delivery Logs, Webhook Test Event Triggers, and Merchant Order
+    Read APIs (owned by Member M7).
+    
+    All endpoints require a valid JWT with the `MERCHANT` role and are strictly isolated
+    and scoped by the `merchantId` claim present in the token.
+servers:
+  - url: http://localhost:8084
+    description: Local development integration-service
+paths:
+  /api/v1/merchant/webhooks/settings:
+    get:
+      summary: Get webhook settings
+      description: |
+        Retrieves the webhook configuration for the authenticated merchant, including the
+        destination URL, enabled event subscriptions, active status, and masked signing secret.
+        Scoped strictly by the caller's JWT `merchantId` claim.
+      operationId: getWebhookSettings
+      tags:
+        - Merchant Webhooks
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Webhook settings retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSettingsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    put:
+      summary: Update webhook settings
+      description: |
+        Configures or updates the merchant's webhook destination URL, subscribed event types,
+        and activation toggle. Can optionally request regeneration of the HMAC-SHA256 signing secret.
+        The URL must pass strict SSRF validation (publicly resolvable, non-private IP).
+      operationId: updateWebhookSettings
+      tags:
+        - Merchant Webhooks
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWebhookSettingsRequest'
+      responses:
+        '200':
+          description: Webhook settings updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSettingsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/merchant/webhooks/test:
+    post:
+      summary: Trigger a test webhook event
+      description: |
+        Dispatches a simulated test event payload to the merchant's configured webhook endpoint
+        using the active HMAC-SHA256 signing secret. Allows merchants to verify endpoint availability,
+        latency, and signature verification logic before handling production events.
+      operationId: triggerTestWebhook
+      tags:
+        - Merchant Webhooks
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestWebhookRequest'
+      responses:
+        '200':
+          description: Test webhook attempted. Returns HTTP execution metrics and merchant endpoint response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestWebhookResultResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '502':
+          description: Target merchant webhook endpoint failed to respond or returned an HTTP error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestWebhookResultResponse'
+
+  /api/v1/merchant/webhooks/deliveries:
+    get:
+      summary: List webhook delivery logs
+      description: |
+        Retrieves a paginated history of outbound webhook delivery attempts for the authenticated merchant.
+        Supports filtering by status (`SUCCESS`, `PENDING_RETRY`, `FAILED`, `CANCELLED`) and date range.
+      operationId: listWebhookDeliveries
+      tags:
+        - Merchant Webhooks
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [SUCCESS, PENDING_RETRY, FAILED, CANCELLED]
+          description: Filter deliveries by execution status.
+        - name: eventType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PARCEL_CREATED, PARCEL_STATUS_CHANGED, TEST_EVENT]
+          description: Filter deliveries by event type.
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Start of date filter range.
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: End of date filter range.
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Zero-based page index.
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          description: Page size.
+      responses:
+        '200':
+          description: Paginated delivery logs returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDeliveryLogPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/merchant/webhooks/deliveries/{deliveryId}:
+    get:
+      summary: Get delivery log details
+      description: |
+        Retrieves full diagnostic details for a specific webhook delivery attempt, including
+        the signed payload, request/response headers, response body, latency, and retry history.
+      operationId: getWebhookDeliveryDetail
+      tags:
+        - Merchant Webhooks
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: deliveryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Unique webhook delivery ID.
+      responses:
+        '200':
+          description: Delivery detail retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDeliveryDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/merchant/webhooks/deliveries/{deliveryId}/retry:
+    post:
+      summary: Manually retry webhook delivery
+      description: |
+        Manually re-enqueues or executes an immediate retry for a failed or dead-lettered
+        webhook delivery attempt. Resets attempt counters and logs the user-triggered retry.
+      operationId: retryWebhookDelivery
+      tags:
+        - Merchant Webhooks
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: deliveryId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Unique webhook delivery ID to retry.
+      responses:
+        '202':
+          description: Retry request accepted and queued for immediate delivery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDeliveryDetailResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/merchant/orders:
+    get:
+      summary: List merchant orders
+      description: |
+        Retrieves a paginated list of parcel orders created by or associated with the
+        authenticated merchant. Scoped strictly by the caller's JWT `merchantId` claim.
+      operationId: listMerchantOrders
+      tags:
+        - Merchant Orders
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [CREATED, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, FAILED, CANCELLED]
+          description: Filter orders by current parcel lifecycle status.
+        - name: trackingNumber
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter or search by public tracking number (SD-YYYYMMDD-XXXXXX).
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filter orders created on or after this timestamp.
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Filter orders created on or before this timestamp.
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Zero-based page index.
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          description: Page size.
+      responses:
+        '200':
+          description: Paginated orders retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantOrderListPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/merchant/orders/counts:
+    get:
+      summary: Get merchant order counts by status
+      description: |
+        Retrieves an aggregate summary of order counts partitioned by lifecycle status
+        (total orders, created, in transit, delivered, failed, cancelled) for the authenticated merchant.
+        Powers the top-level KPI metrics cards on the Merchant Orders Dashboard.
+      operationId: getMerchantOrderCounts
+      tags:
+        - Merchant Orders
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Aggregate status counts returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantOrderCountsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: RS256-signed JWT token containing user identity and merchantId claim.
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters or unresolvable/private webhook URL.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or invalid JWT access token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Access forbidden. Requires MERCHANT role and valid merchantId claim.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Requested resource was not found or does not belong to caller.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    WebhookSettingsResponse:
+      type: object
+      required:
+        - merchantId
+        - active
+        - subscribedEvents
+        - secretConfigured
+        - createdAt
+        - updatedAt
+      properties:
+        merchantId:
+          type: string
+          format: uuid
+          example: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+        url:
+          type: string
+          format: uri
+          nullable: true
+          example: https://api.partnerstore.com/webhooks/swiftdrop
+        active:
+          type: boolean
+          example: true
+        subscribedEvents:
+          type: array
+          items:
+            type: string
+            enum: [PARCEL_CREATED, PARCEL_STATUS_CHANGED, TEST_EVENT]
+          example: [PARCEL_CREATED, PARCEL_STATUS_CHANGED]
+        secretConfigured:
+          type: boolean
+          description: True if an HMAC signing secret has been generated.
+          example: true
+        secretPreview:
+          type: string
+          description: Masked secret preview (e.g. whsec_...4a2b). Full secret returned only upon generation/rotation.
+          example: whsec_••••••••••••••••3f8a
+        rawSecret:
+          type: string
+          nullable: true
+          description: Returned only in the response body immediately after creation or secret rotation.
+          example: whsec_93f8a02c3b88d44e71a065f42e5d9c22
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-22T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-10-24T18:30:00Z"
+
+    UpdateWebhookSettingsRequest:
+      type: object
+      required:
+        - url
+        - active
+      properties:
+        url:
+          type: string
+          format: uri
+          description: HTTPS destination URL for webhook delivery. Must be publicly accessible (RFC 1918 private IPs rejected).
+          example: https://api.partnerstore.com/webhooks/swiftdrop
+        active:
+          type: boolean
+          description: Toggle delivery on or off.
+          example: true
+        subscribedEvents:
+          type: array
+          items:
+            type: string
+            enum: [PARCEL_CREATED, PARCEL_STATUS_CHANGED, TEST_EVENT]
+          default: [PARCEL_CREATED, PARCEL_STATUS_CHANGED]
+          example: [PARCEL_STATUS_CHANGED]
+        regenerateSecret:
+          type: boolean
+          default: false
+          description: Set to true to revoke the previous HMAC secret and generate a new one.
+          example: false
+
+    TestWebhookRequest:
+      type: object
+      properties:
+        targetUrlOverride:
+          type: string
+          format: uri
+          nullable: true
+          description: Optional temporary URL to test without persisting to settings.
+          example: https://webhook.site/test-uuid
+        sampleEventType:
+          type: string
+          enum: [TEST_EVENT, PARCEL_STATUS_CHANGED]
+          default: TEST_EVENT
+          example: TEST_EVENT
+
+    TestWebhookResultResponse:
+      type: object
+      required:
+        - success
+        - statusCode
+        - latencyMs
+        - attemptedAt
+        - signatureSent
+        - timestampSent
+      properties:
+        success:
+          type: boolean
+          description: True if target returned 2xx HTTP response within timeout.
+          example: true
+        statusCode:
+          type: integer
+          description: HTTP status code received from target server.
+          example: 200
+        latencyMs:
+          type: integer
+          description: Round-trip duration in milliseconds.
+          example: 142
+        attemptedAt:
+          type: string
+          format: date-time
+          example: "2026-10-25T12:00:00Z"
+        targetUrl:
+          type: string
+          example: https://api.partnerstore.com/webhooks/swiftdrop
+        signatureSent:
+          type: string
+          description: The HMAC-SHA256 signature header value sent (t=...,v1=...).
+          example: t=1729857600,v1=4d7f508a54c...
+        timestampSent:
+          type: string
+          description: Timestamp header value included in signature.
+          example: "1729857600"
+        responseBodySummary:
+          type: string
+          nullable: true
+          description: Snippet of response body returned by the target server (truncated to 500 chars).
+          example: "{\"received\": true}"
+        errorMessage:
+          type: string
+          nullable: true
+          example: null
+
+    WebhookDeliveryLogItem:
+      type: object
+      required:
+        - deliveryId
+        - eventId
+        - eventType
+        - trackingNumber
+        - status
+        - attempts
+        - createdAt
+      properties:
+        deliveryId:
+          type: string
+          format: uuid
+          example: c1a8e9f2-2b3c-4d5e-8f9a-0b1c2d3e4f5a
+        eventId:
+          type: string
+          format: uuid
+          example: 7f8e3b21-4a5c-6d7e-8f9a-0b1c2d3e4f5a
+        eventType:
+          type: string
+          example: PARCEL_STATUS_CHANGED
+        trackingNumber:
+          type: string
+          example: SD-20261024-891023
+        targetUrl:
+          type: string
+          example: https://api.partnerstore.com/webhooks/swiftdrop
+        status:
+          type: string
+          enum: [SUCCESS, PENDING_RETRY, FAILED, CANCELLED]
+          example: SUCCESS
+        httpStatusCode:
+          type: integer
+          nullable: true
+          example: 200
+        attempts:
+          type: integer
+          description: Number of attempts executed so far (1 to 5).
+          example: 1
+        lastAttemptAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-10-24T18:45:02Z"
+        nextRetryAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        errorSummary:
+          type: string
+          nullable: true
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-24T18:45:00Z"
+
+    WebhookDeliveryLogPage:
+      type: object
+      required:
+        - content
+        - totalElements
+        - totalPages
+        - page
+        - size
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookDeliveryLogItem'
+        totalElements:
+          type: integer
+          example: 45
+        totalPages:
+          type: integer
+          example: 3
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+
+    WebhookDeliveryDetailResponse:
+      type: object
+      required:
+        - deliveryId
+        - eventId
+        - eventType
+        - status
+        - attempts
+        - payload
+        - createdAt
+      properties:
+        deliveryId:
+          type: string
+          format: uuid
+          example: c1a8e9f2-2b3c-4d5e-8f9a-0b1c2d3e4f5a
+        eventId:
+          type: string
+          format: uuid
+          example: 7f8e3b21-4a5c-6d7e-8f9a-0b1c2d3e4f5a
+        eventType:
+          type: string
+          example: PARCEL_STATUS_CHANGED
+        status:
+          type: string
+          enum: [SUCCESS, PENDING_RETRY, FAILED, CANCELLED]
+          example: FAILED
+        targetUrl:
+          type: string
+          example: https://api.partnerstore.com/webhooks/swiftdrop
+        attempts:
+          type: integer
+          example: 5
+        httpStatusCode:
+          type: integer
+          nullable: true
+          example: 504
+        requestHeaders:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            Content-Type: application/json
+            X-SwiftDrop-Signature: t=1729857600,v1=4d7f508a54c...
+            X-SwiftDrop-Timestamp: "1729857600"
+            X-SwiftDrop-Delivery-Id: c1a8e9f2-2b3c-4d5e-8f9a-0b1c2d3e4f5a
+        payload:
+          $ref: '#/components/schemas/WebhookPayload'
+        responseHeaders:
+          type: object
+          nullable: true
+          additionalProperties:
+            type: string
+          example:
+            Content-Type: text/plain
+        responseBody:
+          type: string
+          nullable: true
+          example: "Gateway Timeout: upstream service did not respond"
+        lastAttemptAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-10-24T18:45:31Z"
+        nextRetryAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        retryHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryAttemptRecord'
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-24T18:45:00Z"
+
+    DeliveryAttemptRecord:
+      type: object
+      required:
+        - attemptNumber
+        - attemptedAt
+        - success
+      properties:
+        attemptNumber:
+          type: integer
+          example: 1
+        attemptedAt:
+          type: string
+          format: date-time
+          example: "2026-10-24T18:45:00Z"
+        httpStatusCode:
+          type: integer
+          nullable: true
+          example: 500
+        latencyMs:
+          type: integer
+          example: 320
+        success:
+          type: boolean
+          example: false
+        errorMessage:
+          type: string
+          nullable: true
+          example: "Internal Server Error"
+
+    WebhookPayload:
+      type: object
+      required:
+        - deliveryId
+        - eventId
+        - eventType
+        - occurredAt
+        - sequence
+        - merchantId
+        - parcel
+      properties:
+        deliveryId:
+          type: string
+          format: uuid
+          example: c1a8e9f2-2b3c-4d5e-8f9a-0b1c2d3e4f5a
+        eventId:
+          type: string
+          format: uuid
+          example: 7f8e3b21-4a5c-6d7e-8f9a-0b1c2d3e4f5a
+        eventType:
+          type: string
+          enum: [PARCEL_CREATED, PARCEL_STATUS_CHANGED, TEST_EVENT]
+          example: PARCEL_STATUS_CHANGED
+        occurredAt:
+          type: string
+          format: date-time
+          example: "2026-10-24T18:45:00Z"
+        sequence:
+          type: integer
+          description: Monotonic sequence number per parcel for ordering.
+          example: 3
+        merchantId:
+          type: string
+          format: uuid
+          example: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+        parcel:
+          $ref: '#/components/schemas/WebhookParcelFields'
+
+    WebhookParcelFields:
+      type: object
+      required:
+        - parcelId
+        - trackingNumber
+        - status
+        - fromStatus
+        - toStatus
+      properties:
+        parcelId:
+          type: string
+          example: pcl-109283
+        trackingNumber:
+          type: string
+          example: SD-20261024-891023
+        status:
+          type: string
+          enum: [CREATED, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, FAILED, CANCELLED]
+          example: OUT_FOR_DELIVERY
+        fromStatus:
+          type: string
+          example: IN_TRANSIT
+        toStatus:
+          type: string
+          example: OUT_FOR_DELIVERY
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          example: 2.5
+        recipientName:
+          type: string
+          nullable: true
+          example: Alice Smith
+        recipientAddress:
+          type: string
+          nullable: true
+          example: "742 Evergreen Terrace, Springfield"
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-10-24T18:45:00Z"
+        reason:
+          type: string
+          nullable: true
+          example: null
+
+    MerchantOrderListItem:
+      type: object
+      required:
+        - orderId
+        - parcelId
+        - trackingNumber
+        - status
+        - createdAt
+      properties:
+        orderId:
+          type: string
+          format: uuid
+          example: ord-551029
+        parcelId:
+          type: string
+          example: pcl-109283
+        trackingNumber:
+          type: string
+          example: SD-20261024-891023
+        status:
+          type: string
+          enum: [CREATED, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, FAILED, CANCELLED]
+          example: IN_TRANSIT
+        recipientName:
+          type: string
+          nullable: true
+          example: Alice Smith
+        recipientAddress:
+          type: string
+          nullable: true
+          example: "742 Evergreen Terrace, Springfield"
+        fee:
+          type: number
+          format: double
+          nullable: true
+          example: 12.50
+        weightKg:
+          type: number
+          format: double
+          nullable: true
+          example: 1.8
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-24T14:20:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-10-24T16:00:00Z"
+
+    MerchantOrderListPage:
+      type: object
+      required:
+        - content
+        - totalElements
+        - totalPages
+        - page
+        - size
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/MerchantOrderListItem'
+        totalElements:
+          type: integer
+          example: 128
+        totalPages:
+          type: integer
+          example: 7
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+
+    MerchantOrderCountsResponse:
+      type: object
+      required:
+        - total
+        - created
+        - pickedUp
+        - inTransit
+        - outForDelivery
+        - delivered
+        - failed
+        - cancelled
+      properties:
+        total:
+          type: integer
+          example: 128
+        created:
+          type: integer
+          example: 12
+        pickedUp:
+          type: integer
+          example: 8
+        inTransit:
+          type: integer
+          example: 24
+        outForDelivery:
+          type: integer
+          example: 16
+        delivered:
+          type: integer
+          example: 62
+        failed:
+          type: integer
+          example: 4
+        cancelled:
+          type: integer
+          example: 2
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+        - correlationId
+        - timestamp
+      properties:
+        code:
+          type: string
+          example: WEBHOOK_NOT_CONFIGURED
+        message:
+          type: string
+          example: No active webhook URL is configured for this merchant.
+        correlationId:
+          type: string
+          example: 9a2b3c4d-5e6f-7081-92a3-b4c5d6e7f8a9
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-10-25T12:00:00Z"
