@@ -1,0 +1,20 @@
+@startuml assistant-sequence
+autonumber
+actor Customer as "Customer"
+participant Gateway as "Nginx Gateway\n(:80)"
+participant IS as "integration-service\n(:8084)"
+participant LLM as "Claude API\n(LLM Provider)"
+participant PS as "parcel-service\n(:8082)"
+
+Customer -> Gateway: POST /api/v1/assistant/chat\n{"message": "Where is my parcel SD-..."}\nAuthorization: Bearer <Customer-JWT>
+Gateway -> IS: Forward request
+IS -> IS: Validate JWT, check per-user rate limit & msg length <= 500
+IS -> LLM: Prompt + Tool Definitions\n(get_parcel_status, estimate_fee, list_my_recent_parcels)
+LLM --> IS: Request Tool Call: get_parcel_status(trackingNo: "SD-...")
+IS -> PS: GET /api/v1/parcels/{id} (Bearer <Customer-JWT>)
+note over IS, PS: Caller's own JWT token preserves permission isolation
+PS --> IS: 200 OK (Parcel status, history)
+IS -> LLM: Return Tool Output: { status: "OUT_FOR_DELIVERY", courier: "Nuwan" }
+LLM --> IS: Return natural language answer
+IS --> Customer: 200 OK {"reply": "Your parcel is currently Out for Delivery..."}
+@enduml

@@ -1,0 +1,198 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Auth Service API
+  version: 0.1.0-SNAPSHOT
+  description: OpenAPI specification for SwiftDrop Authentication and User Service (including Password Reset owned by M3)
+servers:
+  - url: http://localhost:8081
+    description: Local development server
+paths:
+  /api/v1/auth/password/forgot:
+    post:
+      summary: Request password reset email
+      description: |
+        Initiates the password reset workflow for the specified email address.
+        To prevent account enumeration attacks, this endpoint always returns HTTP 202 Accepted,
+        regardless of whether the email address exists in the system. If the account exists,
+        a single-use token valid for 30 minutes is generated, stored hashed, and dispatched
+        via email (using Mailpit mock SMTP).
+      operationId: forgotPassword
+      tags:
+        - Password Reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '202':
+          description: Password reset request accepted. Instructions sent if account exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForgotPasswordResponse'
+        '400':
+          description: Invalid request payload (e.g. malformed email address).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/password/reset:
+    post:
+      summary: Reset password with token
+      description: |
+        Completes the password reset by validating the single-use token, updating the user's
+        password hash with BCrypt, invalidating the reset token, and terminating all existing
+        active user sessions.
+      operationId: resetPassword
+      tags:
+        - Password Reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password successfully reset. All active sessions invalidated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetPasswordResponse'
+        '400':
+          description: Invalid request, weak password, or expired/already-used reset token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /internal/v1/users/{id}/contact:
+    get:
+      summary: Internal user contact lookup
+      description: |
+        Internal service-to-service endpoint used by integration-service (notification package)
+        to look up recipient name, email address, and phone number for dispatching notifications.
+        Blocked at gateway; accessible only within internal container network.
+      operationId: getUserContactInternal
+      tags:
+        - Internal User API
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The UUID or string identifier of the user.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User contact details retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserContactResponse'
+        '404':
+          description: User not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    ForgotPasswordRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: customer@example.com
+          description: Registered email address for the user account.
+
+    ForgotPasswordResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: If an account exists with this email, password reset instructions have been sent.
+
+    ResetPasswordRequest:
+      type: object
+      required:
+        - token
+        - newPassword
+      properties:
+        token:
+          type: string
+          example: 4a2b9f1e-87c3-4d62-9e11-d0b5f12e8731
+          description: Single-use reset token received via email.
+        newPassword:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: SecureP@ssw0rd!
+          description: New password to be hashed using BCrypt.
+
+    ResetPasswordResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Password has been successfully reset. Please log in with your new password.
+
+    UserContactResponse:
+      type: object
+      required:
+        - userId
+        - fullName
+        - email
+      properties:
+        userId:
+          type: string
+          example: usr-88412
+        fullName:
+          type: string
+          example: John Doe
+        email:
+          type: string
+          format: email
+          example: john.doe@example.com
+        phoneNumber:
+          type: string
+          nullable: true
+          example: "+94771234567"
+        role:
+          type: string
+          enum: [CUSTOMER, MERCHANT, COURIER, DISPATCHER, ADMIN]
+          example: CUSTOMER
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+        - correlationId
+        - timestamp
+      properties:
+        code:
+          type: string
+          example: INVALID_TOKEN
+        message:
+          type: string
+          example: The provided password reset token is invalid or has expired.
+        correlationId:
+          type: string
+          example: c1a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-10-24T22:00:00Z"

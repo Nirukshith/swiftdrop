@@ -1,0 +1,348 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Integration Service API
+  version: 0.1.0-SNAPSHOT
+  description: |
+    OpenAPI specification for SwiftDrop Integration Service, covering the AI Delivery Assistant,
+    MCP tools endpoint, and customer Notifications (owned by M3).
+servers:
+  - url: http://localhost:8084
+    description: Local development server
+paths:
+  /api/v1/assistant/chat:
+    post:
+      summary: Send message to AI Delivery Assistant
+      description: |
+        Processes conversational customer inquiries regarding delivery status, fee estimates,
+        and recent parcel history. Calls hosted LLM (Claude API) with tool use, executing backend
+        tools scoped strictly to the authenticated caller's JWT token. Enforces rate limits
+        and input length constraints.
+      operationId: chatWithAssistant
+      tags:
+        - AI Assistant
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatMessageRequest'
+      responses:
+        '200':
+          description: Assistant response generated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessageResponse'
+        '400':
+          description: Invalid request payload (e.g. empty message or message exceeding 500 characters).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized; valid customer JWT access token required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded for the current user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: LLM provider unavailable or upstream API quota exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/notifications:
+    get:
+      summary: List user notifications
+      description: |
+        Retrieves paginated notifications for the authenticated user (customer notification bell).
+        Notifications are generated from Kafka event consumers on parcel lifecycle events.
+      operationId: getNotifications
+      tags:
+        - Notifications
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Zero-based page index.
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Number of records per page.
+        - name: unreadOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: If true, filters only unread notifications.
+      responses:
+        '200':
+          description: Paginated notifications and unread count.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPageResponse'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/notifications/{id}/read:
+    post:
+      summary: Mark notification as read
+      description: Marks a specific notification belonging to the authenticated user as read.
+      operationId: markNotificationRead
+      tags:
+        - Notifications
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the notification.
+      responses:
+        '200':
+          description: Notification marked as read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDto'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Notification not found or belongs to another user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mcp:
+    post:
+      summary: Model Context Protocol (MCP) JSON-RPC endpoint
+      description: |
+        Exposes the assistant's three tools (`get_parcel_status`, `estimate_fee`, `list_my_recent_parcels`)
+        as standard Model Context Protocol (MCP) tool declarations over JSON-RPC 2.0.
+        Secured with Bearer token authentication to enforce customer isolation.
+      operationId: handleMcpRequest
+      tags:
+        - MCP Server
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpJsonRpcRequest'
+      responses:
+        '200':
+          description: JSON-RPC response containing tool definitions or execution results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpJsonRpcResponse'
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: RS256 signed JWT access token issued by auth-service.
+
+  schemas:
+    ChatMessageRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: Where is my parcel SD-20261024-817293?
+          description: Customer prompt or query text (max 500 characters).
+        conversationId:
+          type: string
+          nullable: true
+          example: conv-92a10b
+          description: Optional existing conversation identifier for context continuation.
+
+    ChatMessageResponse:
+      type: object
+      required:
+        - reply
+        - conversationId
+      properties:
+        reply:
+          type: string
+          example: Your parcel SD-20261024-817293 is currently OUT_FOR_DELIVERY in Colombo.
+          description: Formatted answer from the assistant after executing internal tools.
+        conversationId:
+          type: string
+          example: conv-92a10b
+          description: Unique conversation identifier.
+
+    NotificationDto:
+      type: object
+      required:
+        - id
+        - title
+        - message
+        - channel
+        - read
+        - createdAt
+      properties:
+        id:
+          type: string
+          example: notif-019283
+        title:
+          type: string
+          example: Parcel Out for Delivery
+        message:
+          type: string
+          example: Your package SD-20261024-817293 is out for delivery with courier Nuwan.
+        channel:
+          type: string
+          enum: [EMAIL, SMS, IN_APP]
+          example: IN_APP
+        parcelId:
+          type: string
+          nullable: true
+          example: pcl-39182
+        trackingNumber:
+          type: string
+          nullable: true
+          example: SD-20261024-817293
+        read:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-24T18:30:00Z"
+
+    NotificationPageResponse:
+      type: object
+      required:
+        - items
+        - totalElements
+        - unreadCount
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationDto'
+        totalElements:
+          type: integer
+          example: 12
+        unreadCount:
+          type: integer
+          example: 3
+
+    McpJsonRpcRequest:
+      type: object
+      required:
+        - jsonrpc
+        - method
+        - id
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+          example: "2.0"
+        method:
+          type: string
+          example: tools/list
+        params:
+          type: object
+          nullable: true
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+          example: 1
+
+    McpJsonRpcResponse:
+      type: object
+      required:
+        - jsonrpc
+        - id
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+          example: "2.0"
+        result:
+          type: object
+          nullable: true
+        error:
+          type: object
+          nullable: true
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+          example: 1
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+        - correlationId
+        - timestamp
+      properties:
+        code:
+          type: string
+          example: RATE_LIMIT_EXCEEDED
+        message:
+          type: string
+          example: You have sent too many messages in a short period. Please try again shortly.
+        correlationId:
+          type: string
+          example: b4a1c2d3-e4f5-6789-0abc-def123456789
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-10-24T22:00:00Z"
