@@ -38,6 +38,63 @@ jobs:
       - name: Run Maven verify
         run: mvn -B verify -DtrimStackTrace=false
 
+      - name: Generate merged backend JaCoCo report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn -B org.apache.maven.plugins:maven-dependency-plugin:3.8.1:get \
+            "-Dartifact=org.jacoco:org.jacoco.cli:0.8.12:jar:nodeps" \
+            -Dtransitive=false
+
+          jacoco_cli="$HOME/.m2/repository/org/jacoco/org.jacoco.cli/0.8.12/org.jacoco.cli-0.8.12-nodeps.jar"
+          test -f "$jacoco_cli"
+
+          exec_files=(
+            common/target/jacoco.exec
+            services/auth-service/target/jacoco.exec
+            services/parcel-service/target/jacoco.exec
+            services/operations-service/target/jacoco.exec
+            services/integration-service/target/jacoco.exec
+          )
+          class_files=(
+            common/target/classes
+            services/auth-service/target/classes
+            services/parcel-service/target/classes
+            services/operations-service/target/classes
+            services/integration-service/target/classes
+          )
+          source_files=(
+            common/src/main/java
+            services/auth-service/src/main/java
+            services/parcel-service/src/main/java
+            services/operations-service/src/main/java
+            services/integration-service/src/main/java
+          )
+
+          for file in "${exec_files[@]}"; do test -f "$file"; done
+          for directory in "${class_files[@]}" "${source_files[@]}"; do test -d "$directory"; done
+
+          mkdir -p target/site/jacoco-aggregate
+          java -jar "$jacoco_cli" merge "${exec_files[@]}" \
+            --destfile target/jacoco-merged.exec
+          java -jar "$jacoco_cli" report target/jacoco-merged.exec \
+            --classfiles "${class_files[0]}" \
+            --classfiles "${class_files[1]}" \
+            --classfiles "${class_files[2]}" \
+            --classfiles "${class_files[3]}" \
+            --classfiles "${class_files[4]}" \
+            --sourcefiles "${source_files[0]}" \
+            --sourcefiles "${source_files[1]}" \
+            --sourcefiles "${source_files[2]}" \
+            --sourcefiles "${source_files[3]}" \
+            --sourcefiles "${source_files[4]}" \
+            --html target/site/jacoco-aggregate \
+            --xml target/site/jacoco-aggregate/jacoco.xml \
+            --csv target/site/jacoco-aggregate/jacoco.csv
+
+          test -s target/site/jacoco-aggregate/index.html
+          test -s target/site/jacoco-aggregate/jacoco.xml
+
       - name: Dump Surefire test logs on failure
         if: failure()
         run: tail -n 100 services/*/target/surefire-reports/*.txt
@@ -49,7 +106,6 @@ jobs:
           name: backend-coverage
           path: |
             target/site/jacoco-aggregate
-            services/*/target/site/jacoco
           if-no-files-found: warn
 
   frontend:
