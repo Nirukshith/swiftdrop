@@ -1,0 +1,3 @@
+com.swiftdrop.common.security.SwiftdropSecurityConfig
+com.swiftdrop.common.security.dev.DevSecurityConfig
+com.swiftdrop.common.security.dev.DevJwtTokenMinter
