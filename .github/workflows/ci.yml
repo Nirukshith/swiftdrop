@@ -42,6 +42,16 @@ jobs:
         if: failure()
         run: tail -n 100 services/*/target/surefire-reports/*.txt
 
+      - name: Upload merged backend coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: |
+            target/site/jacoco-aggregate
+            services/*/target/site/jacoco
+          if-no-files-found: warn
+
   frontend:
     name: Frontend CI
     runs-on: ubuntu-latest
@@ -60,4 +70,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install, test, and build frontend
-        run: npm ci && npm test -- --ci && npm run build
+        run: npm ci && npm test -- --ci --coverage && npm run build
+
+      - name: Upload frontend coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          if-no-files-found: warn
