@@ -1,0 +1,240 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Operations Service - Courier Profile API
+  version: 0.1.0-SNAPSHOT
+  description: >-
+    Contract for courier profile, availability, failed-delivery reporting,
+    daily summary, and delivery proof retrieval. Parcel status remains owned by
+    parcel-service; operations-service requests status changes through the
+    internal contract.
+servers:
+  - url: http://localhost:8083
+    description: Local development operations-service
+paths:
+  /api/v1/courier/me:
+    get:
+      summary: Get the authenticated courier profile
+      operationId: getCourierProfile
+      security:
+        - BearerAuth: []
+      description: >-
+        Returns the profile for the COURIER identified by the JWT. The courier
+        identifier is never accepted from the request.
+      responses:
+        '200':
+          description: Courier profile retrieved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourierProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/courier/availability:
+    put:
+      summary: Set the authenticated courier availability
+      operationId: setCourierAvailability
+      security:
+        - BearerAuth: []
+      description: >-
+        Toggles availability for the COURIER identified by the JWT. The
+        dispatcher-facing override remains the M4 dispatch contract.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AvailabilityUpdate'
+      responses:
+        '200':
+          description: Availability updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourierProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/courier/deliveries/{parcelId}/fail:
+    post:
+      summary: Report a failed delivery attempt
+      operationId: reportFailedDelivery
+      security:
+        - BearerAuth: []
+      description: >-
+        Records a failure reason and optional note for a parcel assigned to the
+        authenticated courier, then requests the FAILED status transition from
+        parcel-service. The request must not directly write parcel status.
+      parameters:
+        - $ref: '#/components/parameters/ParcelId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FailedDeliveryRequest'
+      responses:
+        '202':
+          description: Failure accepted for the parcel status transition.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Parcel is not assigned to this courier or the transition is not allowed.
+
+  /api/v1/courier/summary:
+    get:
+      summary: Get the authenticated courier daily summary
+      operationId: getCourierDailySummary
+      security:
+        - BearerAuth: []
+      description: >-
+        Returns the courier's daily delivery summary. Counts and lists must be
+        derived from the current event-carried state: reassignment removes work
+        from the previous courier, FAILED removes active workload, and
+        re-queue clears the courier and returns the parcel to CREATED with an
+        incremented attempt count. Exact response fields remain an open
+        contract question.
+      parameters:
+        - name: date
+          in: query
+          required: false
+          description: Summary date; when omitted, the service uses the current local business date.
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Daily summary retrieved. Response shape is intentionally pending team agreement.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/courier/proofs/{id}:
+    get:
+      summary: Retrieve a delivery proof
+      operationId: getDeliveryProof
+      security:
+        - BearerAuth: []
+      description: >-
+        Retrieves a proof belonging to a delivery visible to the authenticated
+        courier or an authorized dispatcher. The proof may contain recipient
+        name, note, timestamp, and a stored photo reference. Exact response and
+        photo streaming shapes remain an open contract question.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Delivery proof identifier.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Delivery proof retrieved; representation is pending team agreement.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ParcelId:
+      name: parcelId
+      in: path
+      required: true
+      description: Parcel identifier.
+      schema:
+        type: string
+
+  schemas:
+    CourierProfile:
+      type: object
+      required:
+        - userId
+        - name
+        - availability
+      properties:
+        userId:
+          type: string
+          description: User identifier from the COURIER account.
+        name:
+          type: string
+          description: Display name copied from user.registered.v1.
+        phone:
+          type: string
+          nullable: true
+          description: Phone number copied from user.registered.v1 when supplied.
+        zone:
+          type: string
+          nullable: true
+          description: Courier operating zone; assignment of this value is not defined in the plan.
+        availability:
+          type: boolean
+          description: Whether the courier can receive new assignments.
+        vehicle:
+          type: string
+          nullable: true
+          description: Vehicle value; the final controlled vocabulary is an open question.
+
+    AvailabilityUpdate:
+      type: object
+      required:
+        - available
+      properties:
+        available:
+          type: boolean
+          description: Desired availability state.
+
+    FailedDeliveryRequest:
+      type: object
+      required:
+        - reasonCode
+      properties:
+        reasonCode:
+          $ref: '#/components/schemas/FailureReasonCode'
+        note:
+          type: string
+          description: Optional courier note explaining the failed attempt.
+
+    FailureReasonCode:
+      type: string
+      description: Fixed failed-delivery reason codes named by the week-one plan.
+      enum:
+        - RECIPIENT_ABSENT
+        - WRONG_ADDRESS
+        - RECIPIENT_REFUSED
+      x-open-question: Confirm whether the team requires an additional fixed reason code.
+
+  responses:
+    BadRequest:
+      description: Request validation failed.
+    Unauthorized:
+      description: Authentication required or invalid JWT.
+    Forbidden:
+      description: Authenticated principal is not allowed to perform this operation.
+    NotFound:
+      description: Courier, parcel, or proof was not found or is not visible to the caller.
