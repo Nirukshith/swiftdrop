@@ -1,0 +1,460 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Operations Pricing and Reports API
+  version: 0.1.0-SNAPSHOT
+  description: |
+    Contracts owned by operations-service for pricing, zones, and reports.
+    Internal pricing is consumed by parcel-service and merchant order flows.
+servers:
+  - url: http://localhost:8083
+    description: Local development server
+tags:
+  - name: Pricing
+  - name: Zones
+  - name: Reports
+paths:
+  /internal/v1/pricing/quote:
+    get:
+      tags: [Pricing]
+      summary: Calculate a delivery fee quote
+      operationId: getPricingQuote
+      parameters:
+        - $ref: '#/components/parameters/PickupDistrict'
+        - $ref: '#/components/parameters/DropoffDistrict'
+        - $ref: '#/components/parameters/WeightKg'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Calculated quote in Sri Lankan rupees
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: A district or pricing rule was not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Pickup district is not an active served area
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/admin/zones:
+    get:
+      tags: [Zones]
+      summary: List delivery zones
+      operationId: listZones
+      responses:
+        '200':
+          description: Delivery zones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Zone'
+    post:
+      tags: [Zones]
+      summary: Create a delivery zone
+      operationId: createZone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneRequest'
+      responses:
+        '201':
+          description: Zone created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/v1/admin/zones/{zoneId}:
+    parameters:
+      - $ref: '#/components/parameters/ZoneId'
+    get:
+      tags: [Zones]
+      summary: Get a delivery zone
+      operationId: getZone
+      responses:
+        '200':
+          description: Delivery zone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Zones]
+      summary: Replace a delivery zone
+      operationId: updateZone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneRequest'
+      responses:
+        '200':
+          description: Zone updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Zones]
+      summary: Delete a delivery zone
+      operationId: deleteZone
+      responses:
+        '204':
+          description: Zone deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/admin/pricing-rules:
+    get:
+      tags: [Pricing]
+      summary: List active pricing rules
+      operationId: listPricingRules
+      responses:
+        '200':
+          description: Pricing rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PricingRule'
+    post:
+      tags: [Pricing]
+      summary: Create a pricing rule
+      operationId: createPricingRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricingRuleRequest'
+      responses:
+        '201':
+          description: Pricing rule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/v1/admin/pricing-rules/{ruleId}:
+    parameters:
+      - $ref: '#/components/parameters/RuleId'
+    get:
+      tags: [Pricing]
+      summary: Get a pricing rule
+      operationId: getPricingRule
+      responses:
+        '200':
+          description: Pricing rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingRule'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Pricing]
+      summary: Replace a pricing rule
+      operationId: updatePricingRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricingRuleRequest'
+      responses:
+        '200':
+          description: Pricing rule updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Pricing]
+      summary: Delete a pricing rule
+      operationId: deletePricingRule
+      responses:
+        '204':
+          description: Pricing rule deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/admin/reports/daily:
+    get:
+      tags: [Reports]
+      summary: Get daily delivery report rows
+      operationId: getDailyReport
+      parameters:
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+      responses:
+        '200':
+          description: Daily report rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DailyReportRow'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/v1/admin/reports/daily.csv:
+    get:
+      tags: [Reports]
+      summary: Export daily delivery report as CSV
+      operationId: exportDailyReportCsv
+      parameters:
+        - $ref: '#/components/parameters/DateFrom'
+        - $ref: '#/components/parameters/DateTo'
+      responses:
+        '200':
+          description: CSV report
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="daily-report.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+components:
+  parameters:
+    PickupDistrict:
+      name: pickupDistrict
+      in: query
+      required: true
+      description: Required district for pickup serviceability validation.
+      schema:
+        type: string
+        minLength: 1
+      example: Colombo
+    DropoffDistrict:
+      name: dropoffDistrict
+      in: query
+      required: true
+      description: District used to select the drop-off zone base fee.
+      schema:
+        type: string
+        minLength: 1
+      example: Gampaha
+    WeightKg:
+      name: weightKg
+      in: query
+      required: true
+      description: Parcel weight in kilograms.
+      schema:
+        type: number
+        format: double
+        exclusiveMinimum: 0
+      example: 2.5
+    Size:
+      name: size
+      in: query
+      required: true
+      description: Size category used to select the size charge; taxonomy remains an open design item.
+      schema:
+        type: string
+        minLength: 1
+      example: MEDIUM
+    ZoneId:
+      name: zoneId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RuleId:
+      name: ruleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DateFrom:
+      name: from
+      in: query
+      required: true
+      description: Inclusive report date in Asia/Colombo.
+      schema:
+        type: string
+        format: date
+      example: 2026-10-01
+    DateTo:
+      name: to
+      in: query
+      required: true
+      description: Inclusive report date in Asia/Colombo.
+      schema:
+        type: string
+        format: date
+      example: 2026-10-31
+  schemas:
+    MoneyLkr:
+      type: number
+      format: double
+      minimum: 0
+      description: Amount in Sri Lankan rupees, rounded to two decimal places.
+      example: 850.00
+    QuoteResponse:
+      type: object
+      required: [currency, totalFee, breakdown]
+      properties:
+        currency:
+          type: string
+          enum: [LKR]
+        totalFee:
+          $ref: '#/components/schemas/MoneyLkr'
+        breakdown:
+          type: object
+          required: [dropoffZoneBaseFee, weightBandCharge, sizeCharge]
+          properties:
+            dropoffZoneBaseFee:
+              $ref: '#/components/schemas/MoneyLkr'
+            weightBandCharge:
+              $ref: '#/components/schemas/MoneyLkr'
+            sizeCharge:
+              $ref: '#/components/schemas/MoneyLkr'
+        pickupZone:
+          type: string
+        dropoffZone:
+          type: string
+    ZoneRequest:
+      type: object
+      required: [name, districts, served, baseFeeLkr]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        districts:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        served:
+          type: boolean
+        baseFeeLkr:
+          $ref: '#/components/schemas/MoneyLkr'
+    Zone:
+      allOf:
+        - $ref: '#/components/schemas/ZoneRequest'
+        - type: object
+          required: [id, createdAt, updatedAt]
+          properties:
+            id:
+              type: string
+              format: uuid
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+    PricingRuleRequest:
+      type: object
+      required: [kind, key, chargeLkr]
+      properties:
+        kind:
+          type: string
+          enum: [WEIGHT_BAND, SIZE]
+        key:
+          type: string
+          description: Band or size identifier.
+        minimumWeightKg:
+          type: number
+          format: double
+          minimum: 0
+        maximumWeightKg:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        chargeLkr:
+          $ref: '#/components/schemas/MoneyLkr'
+        active:
+          type: boolean
+          default: true
+    PricingRule:
+      allOf:
+        - $ref: '#/components/schemas/PricingRuleRequest'
+        - type: object
+          required: [id, createdAt, updatedAt]
+          properties:
+            id:
+              type: string
+              format: uuid
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+    DailyReportRow:
+      type: object
+      required: [reportDate, totalDeliveries, successfulDeliveries, failedDeliveries]
+      properties:
+        reportDate:
+          type: string
+          format: date
+          description: Calendar date in Asia/Colombo.
+        totalDeliveries:
+          type: integer
+          minimum: 0
+        successfulDeliveries:
+          type: integer
+          minimum: 0
+        failedDeliveries:
+          type: integer
+          minimum: 0
+        successRate:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        correlationId:
+          type: string
+  responses:
+    BadRequest:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
