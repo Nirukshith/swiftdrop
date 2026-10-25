@@ -1,0 +1,499 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Operations Service - Courier Execution API
+  version: 0.1.0-SNAPSHOT
+  description: |
+    OpenAPI contract for mobile-first Courier Delivery Execution (M8).
+    Includes today's assigned deliveries, delivery details, status progression with ownership checks,
+    and photo/signature delivery proof upload.
+servers:
+  - url: http://localhost:8083
+    description: Local development operations-service
+paths:
+  /api/v1/courier/deliveries:
+    get:
+      summary: List today's assigned deliveries for the authenticated courier
+      description: |
+        Returns the parcel delivery cards assigned to the authenticated courier for a given date (defaults to today).
+        Enforces ownership: extracts `courierId` from JWT claims and calls M1's `GET /internal/v1/parcels?courierId={id}&date={date}`.
+      operationId: getTodaysDeliveries
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date
+          in: query
+          required: false
+          description: Delivery date filter (ISO-8601 YYYY-MM-DD). Defaults to the current date.
+          schema:
+            type: string
+            format: date
+            example: "2026-10-25"
+        - name: status
+          in: query
+          required: false
+          description: Optional filter by parcel status.
+          schema:
+            type: string
+            enum: [CREATED, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, FAILED]
+            example: "OUT_FOR_DELIVERY"
+      responses:
+        '200':
+          description: Successfully retrieved assigned deliveries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourierDeliveriesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/courier/deliveries/{parcelId}:
+    get:
+      summary: Get delivery detail for a specific parcel
+      description: |
+        Returns complete delivery details, recipient contact, instructions, allowed next transitions, and proof requirements.
+        Enforces ownership: courier can only view their own assigned parcel.
+      operationId: getDeliveryDetail
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: parcelId
+          in: path
+          required: true
+          description: Unique parcel identifier (UUID)
+          schema:
+            type: string
+            format: uuid
+            example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+      responses:
+        '200':
+          description: Delivery detail retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourierDeliveryDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/courier/deliveries/{parcelId}/status:
+    patch:
+      summary: Update parcel delivery status
+      description: |
+        Advances delivery status step-by-step:
+        CREATED -> PICKED_UP -> IN_TRANSIT -> OUT_FOR_DELIVERY -> DELIVERED (or FAILED).
+        Enforces ownership check and state-machine transitions, then delegates to M1's `PATCH /internal/v1/parcels/{id}/status`.
+        Supports idempotent updates (repeating the same status update succeeds without double effects).
+      operationId: updateDeliveryStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: parcelId
+          in: path
+          required: true
+          description: Unique parcel identifier (UUID)
+          schema:
+            type: string
+            format: uuid
+            example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourierStatusUpdateRequest'
+      responses:
+        '200':
+          description: Status updated successfully (or idempotent match)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourierStatusUpdateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict due to illegal state transition leap
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/courier/deliveries/{parcelId}/proof:
+    post:
+      summary: Upload photo or signature delivery proof
+      description: |
+        Uploads proof of delivery image (JPEG/PNG/WEBP, max 5MB).
+        Validates content magic bytes and stores file to local volume `/data/proofs/{parcelId}-{timestamp}.{ext}`.
+        Links the uploaded proof to the delivery record.
+      operationId: uploadDeliveryProof
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: parcelId
+          in: path
+          required: true
+          description: Unique parcel identifier (UUID)
+          schema:
+            type: string
+            format: uuid
+            example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProofUploadRequest'
+      responses:
+        '201':
+          description: Proof uploaded and verified successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProofUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          description: File size exceeds 5MB limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Authenticated RS256 JWT containing role COURIER
+
+  responses:
+    BadRequest:
+      description: Invalid request payload or illegal parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or expired authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: User lacks COURIER role or does not own this parcel
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Delivery parcel not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    CourierDeliveriesResponse:
+      type: object
+      required:
+        - date
+        - totalDeliveries
+        - pendingCount
+        - completedCount
+        - deliveries
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-10-25"
+        totalDeliveries:
+          type: integer
+          example: 12
+        pendingCount:
+          type: integer
+          example: 8
+        completedCount:
+          type: integer
+          example: 4
+        deliveries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourierDeliveryCard'
+
+    CourierDeliveryCard:
+      type: object
+      required:
+        - parcelId
+        - trackingNumber
+        - status
+        - recipientName
+        - dropoffAddress
+        - googleMapsUrl
+        - attemptCount
+      properties:
+        parcelId:
+          type: string
+          format: uuid
+          example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+        trackingNumber:
+          type: string
+          example: "SD-20261025-A1B2C3"
+        status:
+          type: string
+          enum: [CREATED, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, FAILED]
+          example: "OUT_FOR_DELIVERY"
+        recipientName:
+          type: string
+          example: "Kamal Perera"
+        recipientPhone:
+          type: string
+          example: "+94771234567"
+        pickupAddress:
+          type: string
+          example: "No. 45 Galle Road, Colombo 03"
+        dropoffAddress:
+          type: string
+          example: "12 Kandy Road, Kiribathgoda"
+        googleMapsUrl:
+          type: string
+          example: "https://www.google.com/maps/search/?api=1&query=12+Kandy+Road+Kiribathgoda"
+        weightKg:
+          type: number
+          format: double
+          example: 2.5
+        attemptCount:
+          type: integer
+          example: 1
+        sequenceOrder:
+          type: integer
+          example: 1
+
+    CourierDeliveryDetail:
+      type: object
+      required:
+        - parcelId
+        - trackingNumber
+        - status
+        - recipientName
+        - recipientPhone
+        - dropoffAddress
+        - pickupAddress
+        - googleMapsUrl
+        - allowedNextStatuses
+        - attemptCount
+      properties:
+        parcelId:
+          type: string
+          format: uuid
+          example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+        trackingNumber:
+          type: string
+          example: "SD-20261025-A1B2C3"
+        status:
+          type: string
+          enum: [CREATED, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, FAILED]
+          example: "OUT_FOR_DELIVERY"
+        recipientName:
+          type: string
+          example: "Kamal Perera"
+        recipientPhone:
+          type: string
+          example: "+94771234567"
+        senderName:
+          type: string
+          example: "Colombo Tech Supplies"
+        senderPhone:
+          type: string
+          example: "+94112345678"
+        pickupAddress:
+          type: string
+          example: "No. 45 Galle Road, Colombo 03"
+        dropoffAddress:
+          type: string
+          example: "12 Kandy Road, Kiribathgoda"
+        googleMapsUrl:
+          type: string
+          example: "https://www.google.com/maps/search/?api=1&query=12+Kandy+Road+Kiribathgoda"
+        specialInstructions:
+          type: string
+          nullable: true
+          example: "Leave at front security desk if recipient unavailable."
+        weightKg:
+          type: number
+          format: double
+          example: 2.5
+        attemptCount:
+          type: integer
+          example: 1
+        allowedNextStatuses:
+          type: array
+          items:
+            type: string
+          example: ["DELIVERED", "FAILED"]
+        proofRequired:
+          type: boolean
+          example: true
+        proof:
+          $ref: '#/components/schemas/DeliveryProofInfo'
+        failureReason:
+          type: string
+          nullable: true
+          example: null
+
+    CourierStatusUpdateRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, FAILED]
+          example: "DELIVERED"
+        reason:
+          type: string
+          description: Required when status is FAILED (e.g. RECIPIENT_UNAVAILABLE, WRONG_ADDRESS, CUSTOMER_REJECTED)
+          example: "Recipient verified and package handed over"
+        recipientName:
+          type: string
+          description: Required when marking DELIVERED if signature/name proof is recorded
+          example: "Kamal Perera"
+        idempotencyKey:
+          type: string
+          description: Client-generated idempotency key preventing duplicate state emissions
+          example: "idem-987a-654b"
+
+    CourierStatusUpdateResponse:
+      type: object
+      required:
+        - parcelId
+        - trackingNumber
+        - previousStatus
+        - currentStatus
+        - updatedAt
+        - allowedNextStatuses
+      properties:
+        parcelId:
+          type: string
+          format: uuid
+        trackingNumber:
+          type: string
+        previousStatus:
+          type: string
+        currentStatus:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        allowedNextStatuses:
+          type: array
+          items:
+            type: string
+
+    ProofUploadRequest:
+      type: object
+      required:
+        - file
+      properties:
+        file:
+          type: string
+          format: binary
+          description: Image file (JPEG, PNG, or WEBP; maximum 5MB)
+        recipientName:
+          type: string
+          description: Name of the recipient signing or receiving the parcel
+          example: "Kamal Perera"
+        notes:
+          type: string
+          description: Optional courier delivery note
+          example: "Handed directly to recipient at front door"
+
+    ProofUploadResponse:
+      type: object
+      required:
+        - proofId
+        - parcelId
+        - proofUrl
+        - mimeType
+        - fileSizeBytes
+        - uploadedAt
+      properties:
+        proofId:
+          type: string
+          format: uuid
+          example: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+        parcelId:
+          type: string
+          format: uuid
+          example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+        proofUrl:
+          type: string
+          example: "/data/proofs/7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11-1729864200.jpg"
+        mimeType:
+          type: string
+          example: "image/jpeg"
+        fileSizeBytes:
+          type: integer
+          example: 1048576
+        uploadedAt:
+          type: string
+          format: date-time
+          example: "2026-10-25T14:30:00Z"
+
+    DeliveryProofInfo:
+      type: object
+      nullable: true
+      properties:
+        proofId:
+          type: string
+          format: uuid
+        proofType:
+          type: string
+          enum: [PHOTO, SIGNATURE_NAME, BOTH]
+          example: "PHOTO"
+        proofUrl:
+          type: string
+          example: "/data/proofs/7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11-1729864200.jpg"
+        recipientName:
+          type: string
+          example: "Kamal Perera"
+        uploadedAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+        - correlationId
+        - timestamp
+      properties:
+        code:
+          type: string
+          example: "COURIER_OWNERSHIP_MISMATCH"
+        message:
+          type: string
+          example: "Courier is not assigned to this delivery parcel."
+        correlationId:
+          type: string
+          example: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        timestamp:
+          type: string
+          format: date-time
