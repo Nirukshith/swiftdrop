@@ -6,7 +6,8 @@
     "start": "ng serve web",
     "build": "ng build web",
     "watch": "ng build --watch --configuration development",
-    "test": "jest"
+    "test": "jest",
+    "coverage": "jest --coverage"
   },
   "private": true,
   "packageManager": "npm@10.9.2",

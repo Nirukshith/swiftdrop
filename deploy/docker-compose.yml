@@ -96,6 +96,18 @@ services:
       retries: 5
       start_period: 3s
 
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: swiftdrop-gateway
+    profiles:
+      - full
+    ports:
+      - "8080:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
 volumes:
   postgres_data:
   kafka_data:

@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swiftdrop.com/schemas/webhook-payload.schema.json",
+  "title": "WebhookPayload",
+  "description": "JSON schema for outbound webhook events dispatched to merchant endpoints by integration-service.",
+  "type": "object",
+  "properties": {
+    "deliveryId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this specific delivery attempt for logging, deduplication, and retry tracking."
+    },
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Originating Kafka event identifier from the parcel lifecycle event."
+    },
+    "eventType": {
+      "type": "string",
+      "enum": ["PARCEL_CREATED", "PARCEL_STATUS_CHANGED", "TEST_EVENT"],
+      "description": "Type of event triggering this webhook delivery."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp when the domain event occurred."
+    },
+    "sequence": {
+      "type": "integer",
+      "description": "Monotonically increasing sequence number per parcel (ADR 005) enabling merchants to detect and discard out-of-order events."
+    },
+    "merchantId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identifier of the merchant subscribing to this webhook."
+    },
+    "parcel": {
+      "type": "object",
+      "description": "Snapshot of parcel attributes at the time of the event transition.",
+      "properties": {
+        "parcelId": {
+          "type": "string",
+          "description": "Internal identifier of the parcel."
+        },
+        "trackingNumber": {
+          "type": "string",
+          "description": "Public parcel tracking number (e.g. SD-20261024-891023)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["CREATED", "PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "FAILED", "CANCELLED"],
+          "description": "Current lifecycle status of the parcel."
+        },
+        "fromStatus": {
+          "type": "string",
+          "description": "Previous lifecycle status before this transition."
+        },
+        "toStatus": {
+          "type": "string",
+          "description": "Target lifecycle status of this transition."
+        },
+        "weightKg": {
+          "type": ["number", "null"],
+          "description": "Package weight in kilograms."
+        },
+        "recipientName": {
+          "type": ["string", "null"],
+          "description": "Recipient full name."
+        },
+        "recipientAddress": {
+          "type": ["string", "null"],
+          "description": "Recipient delivery address string."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the parcel was updated in the database."
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "Failure reason or cancellation note, if applicable."
+        }
+      },
+      "required": [
+        "parcelId",
+        "trackingNumber",
+        "status",
+        "fromStatus",
+        "toStatus"
+      ]
+    }
+  },
+  "required": [
+    "deliveryId",
+    "eventId",
+    "eventType",
+    "occurredAt",
+    "sequence",
+    "merchantId",
+    "parcel"
+  ]
+}
