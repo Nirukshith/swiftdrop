@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor Courier as Courier / Driver
+    participant PS as parcel-service (8082)
+    participant Kafka as Kafka Broker (parcel.status-changed.v1)
+    participant IS as integration-service (8084)
+    participant AS as auth-service (8081)
+    participant Mailpit as Mailpit (Mock SMTP :1025)
+    participant DB as integration_db (notification_log)
+    actor Customer as Customer
+
+    Courier->>PS: PATCH /internal/v1/parcels/{id}/status (e.g. DELIVERED)
+    PS->>PS: Commit status transition to DB
+    PS->>Kafka: Publish EventEnvelope (status-changed, sequence: N)
+    
+    Kafka->>IS: Consume parcel.status-changed.v1
+    IS->>DB: Check if eventId already processed
+    alt Already processed
+        IS-->>Kafka: Commit offset & skip
+    else New Event
+        IS->>AS: GET /internal/v1/users/{customerId}/contact
+        AS-->>IS: 200 OK (fullName, email, masked phone)
+        IS->>IS: Render Status Template (DELIVERED)
+        
+        par Dispatch Email
+            IS->>Mailpit: SMTP send (no-reply@swiftdrop.com -> customer)
+        and Dispatch SMS (Mock)
+            IS->>IS: Log masked SMS (+94 77 *** *567)
+        and In-App Notification
+            IS->>DB: INSERT INTO notification_log (eventId, channel, content)
+        end
+        
+        Customer->>Mailpit: View delivered email at localhost:8025
+        Customer->>IS: GET /api/v1/notifications (Bell badge updates)
+    end
