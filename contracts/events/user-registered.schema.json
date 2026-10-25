@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swiftdrop.com/schemas/user-registered.schema.json",
+  "title": "UserRegisteredEvent",
+  "description": "JSON schema for user.registered.v1 event emitted by auth-service upon user registration or staff account provisioning.",
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique event identifier for consumer deduplication and idempotency."
+    },
+    "eventType": {
+      "type": "string",
+      "const": "USER_REGISTERED",
+      "description": "Event type identifier."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp when the user was created."
+    },
+    "userId": {
+      "type": "string",
+      "description": "Unique identifier of the registered user (partition key for user.registered.v1)."
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "Primary email address of the registered user."
+    },
+    "fullName": {
+      "type": "string",
+      "description": "Full name of the user."
+    },
+    "phoneNumber": {
+      "type": ["string", "null"],
+      "description": "Contact phone number, if provided during registration."
+    },
+    "role": {
+      "type": "string",
+      "enum": ["CUSTOMER", "MERCHANT", "COURIER", "DISPATCHER", "ADMIN"],
+      "description": "System role assigned to the user."
+    },
+    "merchantId": {
+      "type": ["string", "null"],
+      "description": "Associated merchant ID if the user was provisioned for a merchant account."
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "Whether the user account is active immediately."
+    }
+  },
+  "required": [
+    "eventId",
+    "eventType",
+    "occurredAt",
+    "userId",
+    "email",
+    "fullName",
+    "role"
+  ],
+  "additionalProperties": false
+}
