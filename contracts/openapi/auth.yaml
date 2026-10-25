@@ -2,14 +2,225 @@ openapi: 3.0.3
 info:
   title: SwiftDrop Auth Service API
   version: 0.1.0-SNAPSHOT
-  description: OpenAPI specification for SwiftDrop Authentication and User Service (including Password Reset owned by M3)
+  description: |
+    OpenAPI specification for SwiftDrop Authentication and Identity Service (port 8081).
+    Owned by M10 (core authentication, JWT/JWKS, Google OAuth, client credentials),
+    with M3 (password reset), M4 (admin user management), M7 (security/lockout), and M8 (audit).
 servers:
   - url: http://localhost:8081
-    description: Local development server
+    description: Local development server (direct to auth-service)
+  - url: http://localhost/api/v1/auth
+    description: Gateway routed path (Nginx reverse proxy)
+
+tags:
+  - name: Authentication
+    description: Public authentication operations (login, register, refresh, OAuth)
+  - name: Password Reset
+    description: Self-service password recovery workflows (owned by M3)
+  - name: Internal User API
+    description: Service-to-service internal endpoints (BLOCKED at Gateway; not routed by Nginx)
+  - name: Internal Client API
+    description: Service-to-service OAuth2 client management (BLOCKED at Gateway; not routed by Nginx)
+
 paths:
+  /api/v1/auth/register:
+    post:
+      summary: Register a new customer user account
+      description: |
+        Self-service registration for new customers. Hashes password using BCrypt, creates the user
+        in auth_db, issues a short-lived access token, sets an httpOnly refresh token cookie,
+        and publishes a user.registered.v1 event to Kafka.
+      operationId: register
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: refresh_token=abc123def456; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict; Max-Age=604800
+              description: Secure httpOnly refresh token cookie valid for 7 days.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation failure (e.g. invalid email format, password under 8 characters).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email address already registered in the system.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/login:
+    post:
+      summary: User login with credentials
+      description: |
+        Authenticates a user via email and BCrypt password. Checks LoginGuard (M7) before validation;
+        records login success/failure in AuditService (M8). Returns an RS256-signed JWT access token
+        (valid for 15 minutes) in the JSON response and sets a secure httpOnly refresh token cookie
+        (valid for 7 days).
+      operationId: login
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication successful.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: refresh_token=abc123def456; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict; Max-Age=604800
+              description: Secure httpOnly refresh token cookie valid for 7 days.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid email or password credentials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Account is disabled or pending merchant approval.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '423':
+          description: Account temporarily locked due to repeated failed login attempts (enforced by M7 LoginGuard).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh access token
+      description: |
+        Rotates the refresh token and issues a new 15-minute RS256 access token.
+        Expects the refresh token in the httpOnly `refresh_token` cookie (or optional request body for non-browser clients).
+        If the account is disabled or the token has been revoked, returns 401.
+      operationId: refreshToken
+      tags:
+        - Authentication
+      parameters:
+        - in: cookie
+          name: refresh_token
+          required: false
+          schema:
+            type: string
+          description: The 7-day refresh token stored in an httpOnly cookie.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token successfully refreshed.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: refresh_token=newRotatedToken789; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict; Max-Age=604800
+              description: Rotated secure httpOnly refresh token cookie valid for 7 days.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefreshResponse'
+        '401':
+          description: Invalid, expired, or revoked refresh token, or account has been disabled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/oauth2/google:
+    get:
+      summary: Initiate Google OAuth 2.0 login
+      description: |
+        Starts the Google OAuth 2.0 Authorization Code flow. Generates a secure CSRF state/nonce,
+        persists it temporarily, and redirects the browser (HTTP 302) to Google's authentication endpoint.
+      operationId: initiateGoogleLogin
+      tags:
+        - Authentication
+      responses:
+        '302':
+          description: Redirects user browser to Google OAuth 2.0 consent page.
+          headers:
+            Location:
+              schema:
+                type: string
+                example: https://accounts.google.com/o/oauth2/v2/auth?client_id=...&response_type=code&scope=openid%20email%20profile&redirect_uri=...&state=...
+
+  /api/v1/auth/oauth2/callback/google:
+    get:
+      summary: Google OAuth 2.0 redirect callback
+      description: |
+        Receives authorization code and state from Google. Exchanges the code with Google for tokens,
+        retrieves user profile info, creates a user account if first-time login (with CUSTOMER role)
+        or matches existing account, sets the httpOnly refresh token cookie, and redirects the browser
+        back to the Angular SPA (`/auth/callback?token=<access_token>`).
+      operationId: handleGoogleCallback
+      tags:
+        - Authentication
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Single-use authorization code from Google.
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          description: CSRF verification state token generated during initiation.
+      responses:
+        '302':
+          description: Redirects browser back to Angular SPA with access token or temporary session code.
+          headers:
+            Location:
+              schema:
+                type: string
+                example: http://localhost:4200/auth/callback?token=eyJhbGciOiJSUzI1Ni...
+            Set-Cookie:
+              schema:
+                type: string
+                example: refresh_token=abc123def456; Path=/api/v1/auth; HttpOnly; Secure; SameSite=Strict; Max-Age=604800
+        '400':
+          description: Invalid or expired state parameter, or Google authorization denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/auth/password/forgot:
     post:
-      summary: Request password reset email
+      summary: Request password reset email (owned by M3)
       description: |
         Initiates the password reset workflow for the specified email address.
         To prevent account enumeration attacks, this endpoint always returns HTTP 202 Accepted,
@@ -41,7 +252,7 @@ paths:
 
   /api/v1/auth/password/reset:
     post:
-      summary: Reset password with token
+      summary: Reset password with token (owned by M3)
       description: |
         Completes the password reset by validating the single-use token, updating the user's
         password hash with BCrypt, invalidating the reset token, and terminating all existing
@@ -71,14 +282,16 @@ paths:
 
   /internal/v1/users/{id}/contact:
     get:
-      summary: Internal user contact lookup
+      summary: Internal user contact lookup (for M3)
       description: |
-        Internal service-to-service endpoint used by integration-service (notification package)
-        to look up recipient name, email address, and phone number for dispatching notifications.
-        Blocked at gateway; accessible only within internal container network.
+        [INTERNAL ENDPOINT - NOT ROUTED BY GATEWAY]
+        Returns 404 at the Nginx Gateway. Accessible strictly within the internal container network.
+        Used by integration-service (notification package) to look up recipient name, email address,
+        and phone number for dispatching notifications.
       operationId: getUserContactInternal
       tags:
         - Internal User API
+      x-internal: true
       parameters:
         - name: id
           in: path
@@ -100,8 +313,231 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /internal/v1/users:
+    post:
+      summary: Internal user provisioning (for M6 merchant onboarding)
+      description: |
+        [INTERNAL ENDPOINT - NOT ROUTED BY GATEWAY]
+        Returns 404 at the Nginx Gateway. Accessible strictly within the internal container network.
+        Used by integration-service during merchant registration to provision a new user with
+        role MERCHANT and initial active or pending status.
+      operationId: createUserInternal
+      tags:
+        - Internal User API
+      x-internal: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalCreateUserRequest'
+      responses:
+        '201':
+          description: User created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalUserResponse'
+        '400':
+          description: Invalid input parameters or unsupported role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: User with the specified email already exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /internal/v1/users/{id}/activate:
+    post:
+      summary: Internal user activation (for M6 merchant approval)
+      description: |
+        [INTERNAL ENDPOINT - NOT ROUTED BY GATEWAY]
+        Returns 404 at the Nginx Gateway. Accessible strictly within the internal container network.
+        Called when an admin approves a pending merchant to activate their corresponding auth user account.
+      operationId: activateUserInternal
+      tags:
+        - Internal User API
+      x-internal: true
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the user account to activate.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User account activated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalUserResponse'
+        '404':
+          description: User not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /internal/v1/clients:
+    post:
+      summary: Internal OAuth2 client credentials creation (for M6)
+      description: |
+        [INTERNAL ENDPOINT - NOT ROUTED BY GATEWAY]
+        Returns 404 at the Nginx Gateway. Accessible strictly within the internal container network.
+        Creates an OAuth 2.0 client credential pair (`clientId`, `clientSecret`) for an approved merchant
+        to authenticate server-to-server calls against the order API.
+      operationId: createClientCredentialsInternal
+      tags:
+        - Internal Client API
+      x-internal: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalCreateClientRequest'
+      responses:
+        '201':
+          description: Client credentials generated. Plaintext clientSecret is returned ONLY once upon creation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalClientCredentialsResponse'
+        '400':
+          description: Invalid merchant ID or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Associated merchant not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - fullName
+      properties:
+        email:
+          type: string
+          format: email
+          example: customer@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: P@ssw0rd123!
+        fullName:
+          type: string
+          example: Kasun Bandara
+        phoneNumber:
+          type: string
+          nullable: true
+          example: "+94771234567"
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: customer@example.com
+        password:
+          type: string
+          format: password
+          example: P@ssw0rd123!
+
+    RefreshTokenRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          description: Optional refresh token string for non-browser HTTP clients.
+          example: b47a256d-5561-4569-8e5c-0fa983196ab1
+
+    AuthResponse:
+      type: object
+      required:
+        - accessToken
+        - tokenType
+        - expiresIn
+        - user
+      properties:
+        accessToken:
+          type: string
+          description: RS256-signed JWT token valid for 15 minutes.
+          example: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+        tokenType:
+          type: string
+          example: Bearer
+        expiresIn:
+          type: integer
+          description: Lifetime in seconds (900 seconds = 15 minutes).
+          example: 900
+        user:
+          $ref: '#/components/schemas/UserSummary'
+
+    TokenRefreshResponse:
+      type: object
+      required:
+        - accessToken
+        - tokenType
+        - expiresIn
+      properties:
+        accessToken:
+          type: string
+          description: New RS256-signed JWT access token.
+          example: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+        tokenType:
+          type: string
+          example: Bearer
+        expiresIn:
+          type: integer
+          example: 900
+
+    UserSummary:
+      type: object
+      required:
+        - id
+        - email
+        - fullName
+        - role
+      properties:
+        id:
+          type: string
+          example: usr-88412
+        email:
+          type: string
+          format: email
+          example: customer@example.com
+        fullName:
+          type: string
+          example: Kasun Bandara
+        role:
+          type: string
+          enum: [CUSTOMER, MERCHANT, COURIER, DISPATCHER, ADMIN]
+          example: CUSTOMER
+        merchantId:
+          type: string
+          nullable: true
+          example: null
+
     ForgotPasswordRequest:
       type: object
       required:
@@ -175,6 +611,134 @@ components:
           enum: [CUSTOMER, MERCHANT, COURIER, DISPATCHER, ADMIN]
           example: CUSTOMER
 
+    InternalCreateUserRequest:
+      type: object
+      required:
+        - email
+        - fullName
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+          example: merchant@daraz.lk
+        password:
+          type: string
+          format: password
+          description: Initial password (if null, user sets password via invitation/activation).
+          nullable: true
+          example: P@ssw0rdMerchant!
+        fullName:
+          type: string
+          example: Daraz Operations
+        phoneNumber:
+          type: string
+          nullable: true
+          example: "+94112345678"
+        role:
+          type: string
+          enum: [CUSTOMER, MERCHANT, COURIER, DISPATCHER, ADMIN]
+          example: MERCHANT
+        merchantId:
+          type: string
+          nullable: true
+          example: mch-5501
+        enabled:
+          type: boolean
+          default: false
+          description: Whether the user account is active immediately or pending approval.
+
+    InternalUserResponse:
+      type: object
+      required:
+        - id
+        - email
+        - fullName
+        - role
+        - enabled
+      properties:
+        id:
+          type: string
+          example: usr-99120
+        email:
+          type: string
+          format: email
+          example: merchant@daraz.lk
+        fullName:
+          type: string
+          example: Daraz Operations
+        phoneNumber:
+          type: string
+          nullable: true
+          example: "+94112345678"
+        role:
+          type: string
+          enum: [CUSTOMER, MERCHANT, COURIER, DISPATCHER, ADMIN]
+          example: MERCHANT
+        merchantId:
+          type: string
+          nullable: true
+          example: mch-5501
+        enabled:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-25T14:30:00Z"
+
+    InternalCreateClientRequest:
+      type: object
+      required:
+        - merchantId
+        - clientName
+      properties:
+        merchantId:
+          type: string
+          example: mch-5501
+        clientName:
+          type: string
+          example: Daraz Production Store
+        scopes:
+          type: array
+          items:
+            type: string
+          default: ["parcels:create", "parcels:read", "webhooks:manage"]
+          example: ["parcels:create", "parcels:read"]
+
+    InternalClientCredentialsResponse:
+      type: object
+      required:
+        - clientId
+        - clientSecret
+        - merchantId
+        - clientName
+        - scopes
+        - createdAt
+      properties:
+        clientId:
+          type: string
+          example: sd_live_client_8f90ab12
+        clientSecret:
+          type: string
+          description: Plaintext secret shown only once at creation time; stored hashed in auth_db.
+          example: sd_sec_99182ab389efc10239102482
+        merchantId:
+          type: string
+          example: mch-5501
+        clientName:
+          type: string
+          example: Daraz Production Store
+        scopes:
+          type: array
+          items:
+            type: string
+          example: ["parcels:create", "parcels:read"]
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-25T14:30:00Z"
+
     ErrorResponse:
       type: object
       required:
@@ -185,14 +749,14 @@ components:
       properties:
         code:
           type: string
-          example: INVALID_TOKEN
+          example: INVALID_CREDENTIALS
         message:
           type: string
-          example: The provided password reset token is invalid or has expired.
+          example: The provided credentials are invalid.
         correlationId:
           type: string
           example: c1a2b3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d
         timestamp:
           type: string
           format: date-time
-          example: "2026-10-24T22:00:00Z"
+          example: "2026-10-25T14:30:00Z"
