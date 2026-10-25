@@ -1,0 +1,24 @@
+sequenceDiagram
+    autonumber
+    actor Customer as Logged-in Customer
+    participant Gateway as Nginx Gateway (:80)
+    participant IS as integration-service (8084)
+    participant LLM as Hosted LLM API (Claude / Anthropic)
+    participant PS as parcel-service (8082)
+    participant OS as operations-service (8083)
+
+    Customer->>Gateway: POST /api/v1/assistant/chat { "message": "Where is my parcel SD-20261024-817293?" }<br>Header: Authorization: Bearer <Customer-JWT>
+    Gateway->>IS: Forward with Authorization Header
+    IS->>IS: Validate JWT & check per-user rate limit
+    IS->>IS: Enforce message length <= 500 chars
+    
+    IS->>LLM: Call Claude API with user prompt + Tool Declarations<br>(get_parcel_status, estimate_fee, list_my_recent_parcels)
+    LLM-->>IS: Response: Tool Call `get_parcel_status(trackingNo: "SD-20261024-817293")`
+    
+    IS->>PS: GET /api/v1/parcels/{id} OR /api/v1/tracking/{trackingNo}<br>Header: Authorization: Bearer <Customer-JWT>
+    Note over IS,PS: parcel-service verifies caller ownership: customer can only query their own parcels
+    PS-->>IS: 200 OK { trackingNumber, status: "OUT_FOR_DELIVERY", courier: "Nuwan" }
+    
+    IS->>LLM: Return Tool Output: { status: "OUT_FOR_DELIVERY", courier: "Nuwan" }
+    LLM-->>IS: Final text: "Your parcel SD-20261024-817293 is currently Out for Delivery with courier Nuwan."
+    IS-->>Customer: 200 OK { "reply": "Your parcel SD-20261024-817293 is currently...", "conversationId": "..." }

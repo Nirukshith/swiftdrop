@@ -1,0 +1,291 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Auth Service - Admin Users API
+  version: 0.1.0-SNAPSHOT
+  description: OpenAPI contract for administrative user management (list, create courier/dispatcher, enable/disable) owned by M4.
+servers:
+  - url: http://localhost:8081
+    description: Local development auth-service
+paths:
+  /api/v1/admin/users:
+    get:
+      summary: List system users
+      description: Returns a paginated list of users with optional filtering by role and enabled status. Restricted to ADMIN role only.
+      operationId: listUsers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          required: false
+          description: Filter by user role (CUSTOMER, MERCHANT, COURIER, DISPATCHER, ADMIN)
+          schema:
+            type: string
+            enum: [CUSTOMER, MERCHANT, COURIER, DISPATCHER, ADMIN]
+        - name: enabled
+          in: query
+          required: false
+          description: Filter by account active status
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      summary: Create a COURIER or DISPATCHER user
+      description: Administrators use this endpoint to provision staff accounts (COURIER or DISPATCHER). Customer accounts are self-registered; Merchant accounts register via merchant onboarding. Publishing of user.registered.v1 event is triggered upon creation. Restricted to ADMIN role only.
+      operationId: createUser
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStaffUserRequest'
+      responses:
+        '201':
+          description: User created successfully and user.registered.v1 event published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSummary'
+        '400':
+          description: Invalid input or forbidden role (only COURIER and DISPATCHER allowed via this endpoint)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: A user with this email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/users/{id}:
+    patch:
+      summary: Enable or disable a user account
+      description: Updates the active/enabled status of a user. Disabling an account immediately revokes access. Restricted to ADMIN role only.
+      operationId: updateUserStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserStatusRequest'
+      responses:
+        '200':
+          description: User status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Invalid request payload or parameter
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication required or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Insufficient role permissions (ADMIN required)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    CreateStaffUserRequest:
+      type: object
+      required:
+        - email
+        - password
+        - fullName
+        - phoneNumber
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+          example: "courier.kamal@swiftdrop.lk"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: "SecurePass#2026"
+        fullName:
+          type: string
+          example: "Kamal Gunaratne"
+        phoneNumber:
+          type: string
+          pattern: "^\\+?[0-9]{10,14}$"
+          example: "+94771234567"
+        role:
+          type: string
+          enum: [COURIER, DISPATCHER]
+          description: Staff role per Decision 001 (ADMIN cannot provision CUSTOMER/MERCHANT through this endpoint)
+          example: "COURIER"
+
+    UpdateUserStatusRequest:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          description: Target account enabled status
+          example: false
+
+    UserSummary:
+      type: object
+      required:
+        - id
+        - email
+        - fullName
+        - phoneNumber
+        - role
+        - enabled
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-4a6c-b3a1-79b8a8e10d2a"
+        email:
+          type: string
+          format: email
+          example: "courier.kamal@swiftdrop.lk"
+        fullName:
+          type: string
+          example: "Kamal Gunaratne"
+        phoneNumber:
+          type: string
+          example: "+94771234567"
+        role:
+          type: string
+          enum: [CUSTOMER, MERCHANT, COURIER, DISPATCHER, ADMIN]
+          example: "COURIER"
+        enabled:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-25T13:20:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    UserListPage:
+      type: object
+      required:
+        - content
+        - totalElements
+        - totalPages
+        - page
+        - size
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSummary'
+        totalElements:
+          type: integer
+          example: 12
+        totalPages:
+          type: integer
+          example: 1
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+        - correlationId
+        - timestamp
+      properties:
+        code:
+          type: string
+          example: "EMAIL_ALREADY_EXISTS"
+        message:
+          type: string
+          example: "A user account with this email address already exists."
+        correlationId:
+          type: string
+          example: "b10a26e8-34bc-4482-8418-4a946b219e91"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-10-25T13:20:00Z"

@@ -1,0 +1,587 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Operations Service - Dispatch & Workload API
+  version: 0.1.0-SNAPSHOT
+  description: OpenAPI contract for package dispatching, queue management, courier workload, and re-queueing (M4).
+servers:
+  - url: http://localhost:8083
+    description: Local development operations-service
+paths:
+  /api/v1/dispatch/parcels:
+    get:
+      summary: List unassigned parcels in the dispatch queue
+      description: Returns parcels currently awaiting courier assignment. Can be filtered by zone and date. Restricted to DISPATCHER and ADMIN.
+      operationId: listUnassignedParcels
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: zone
+          in: query
+          required: false
+          description: Delivery zone code or identifier
+          schema:
+            type: string
+            example: "ZONE-COLOMBO-NORTH"
+        - name: date
+          in: query
+          required: false
+          description: Creation date filter (ISO-8601 date YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+            example: "2026-10-25"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Successfully retrieved unassigned parcels list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnassignedParcelsPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/dispatch/couriers:
+    get:
+      summary: Courier workload board
+      description: Returns list of couriers with their current active delivery counts and availability status. Restricted to DISPATCHER and ADMIN.
+      operationId: getCourierWorkloadBoard
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: zone
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: availableOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Workload board retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CourierWorkloadItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/dispatch/assignments:
+    post:
+      summary: Assign a parcel to a courier
+      description: Assigns an unassigned parcel to a specified courier. Rejects if courier is unavailable. Returns 409 if parcel is already assigned. Restricted to DISPATCHER and ADMIN.
+      operationId: assignParcel
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignParcelRequest'
+      responses:
+        '200':
+          description: Parcel assigned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentResult'
+        '400':
+          description: Invalid request or courier is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Parcel or Courier not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Parcel is already assigned to a courier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/dispatch/assignments/bulk:
+    post:
+      summary: Bulk assign parcels
+      description: Assign multiple parcels to couriers in batch. Restricted to DISPATCHER and ADMIN.
+      operationId: bulkAssignParcels
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkAssignRequest'
+      responses:
+        '200':
+          description: Batch assignment processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkAssignResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/dispatch/parcels/failed:
+    get:
+      summary: List failed delivery parcels
+      description: Returns parcels marked as FAILED that are eligible for re-queueing. Restricted to DISPATCHER and ADMIN.
+      operationId: listFailedParcels
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: zone
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Failed parcels list retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FailedParcelsPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/dispatch/parcels/{id}/requeue:
+    post:
+      summary: Re-queue a failed parcel
+      description: Returns a FAILED parcel to CREATED status with cleared courier and incremented delivery attempt count. Restricted to DISPATCHER and ADMIN.
+      operationId: requeueParcel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Parcel UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequeueRequest'
+      responses:
+        '200':
+          description: Parcel successfully re-queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequeueResponse'
+        '400':
+          description: Parcel is not in FAILED status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Parcel not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/dispatch/couriers/{id}/availability:
+    patch:
+      summary: Toggle courier availability
+      description: Dispatcher override to set courier availability status. Restricted to DISPATCHER and ADMIN.
+      operationId: updateCourierAvailability
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Courier user UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourierAvailabilityUpdateRequest'
+      responses:
+        '200':
+          description: Availability updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourierWorkloadItem'
+        '404':
+          description: Courier not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Authentication required or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Insufficient role permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    AssignParcelRequest:
+      type: object
+      required:
+        - parcelId
+        - courierId
+      properties:
+        parcelId:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+        courierId:
+          type: string
+          format: uuid
+          example: "f8e7d6c5-b4a3-2109-8765-43210fedcba9"
+
+    AssignmentResult:
+      type: object
+      required:
+        - parcelId
+        - courierId
+        - assignedAt
+        - status
+      properties:
+        parcelId:
+          type: string
+          format: uuid
+        courierId:
+          type: string
+          format: uuid
+        assignedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          example: "ASSIGNED"
+
+    BulkAssignRequest:
+      type: object
+      required:
+        - assignments
+      properties:
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssignParcelRequest'
+
+    BulkAssignResponse:
+      type: object
+      required:
+        - totalRequested
+        - successfulCount
+        - failedCount
+        - results
+      properties:
+        totalRequested:
+          type: integer
+          example: 5
+        successfulCount:
+          type: integer
+          example: 4
+        failedCount:
+          type: integer
+          example: 1
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkAssignItemResult'
+
+    BulkAssignItemResult:
+      type: object
+      required:
+        - parcelId
+        - courierId
+        - success
+      properties:
+        parcelId:
+          type: string
+          format: uuid
+        courierId:
+          type: string
+          format: uuid
+        success:
+          type: boolean
+        errorCode:
+          type: string
+          nullable: true
+          example: "PARCEL_ALREADY_ASSIGNED"
+        errorMessage:
+          type: string
+          nullable: true
+
+    CourierWorkloadItem:
+      type: object
+      required:
+        - courierId
+        - name
+        - activeCount
+        - available
+      properties:
+        courierId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Saman Perera"
+        phoneNumber:
+          type: string
+          example: "+94771234567"
+        zone:
+          type: string
+          example: "ZONE-COLOMBO-NORTH"
+        activeCount:
+          type: integer
+          description: Number of currently assigned active parcels
+          example: 3
+        available:
+          type: boolean
+          example: true
+        vehicleType:
+          type: string
+          example: "MOTORCYCLE"
+
+    CourierAvailabilityUpdateRequest:
+      type: object
+      required:
+        - available
+      properties:
+        available:
+          type: boolean
+          example: false
+
+    RequeueRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          example: "Customer requested redelivery tomorrow"
+
+    RequeueResponse:
+      type: object
+      required:
+        - parcelId
+        - status
+        - attemptCount
+        - requeuedAt
+      properties:
+        parcelId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: "CREATED"
+        attemptCount:
+          type: integer
+          example: 2
+        requeuedAt:
+          type: string
+          format: date-time
+
+    UnassignedParcelsPage:
+      type: object
+      required:
+        - content
+        - totalElements
+        - totalPages
+        - page
+        - size
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/DispatchParcelSummary'
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+
+    FailedParcelsPage:
+      type: object
+      required:
+        - content
+        - totalElements
+        - totalPages
+        - page
+        - size
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/DispatchParcelSummary'
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+
+    DispatchParcelSummary:
+      type: object
+      required:
+        - parcelId
+        - trackingNumber
+        - status
+        - pickupZone
+        - dropoffZone
+        - createdAt
+      properties:
+        parcelId:
+          type: string
+          format: uuid
+        trackingNumber:
+          type: string
+          example: "SD-20261025-A1B2C3"
+        status:
+          type: string
+          example: "CREATED"
+        pickupZone:
+          type: string
+          example: "ZONE-COLOMBO-NORTH"
+        dropoffZone:
+          type: string
+          example: "ZONE-COLOMBO-SOUTH"
+        pickupAddress:
+          type: string
+          example: "45 Galle Road, Colombo 03"
+        dropoffAddress:
+          type: string
+          example: "12 Kandy Road, Kiribathgoda"
+        weightKg:
+          type: number
+          format: double
+          example: 2.5
+        attemptCount:
+          type: integer
+          example: 1
+        failureReason:
+          type: string
+          nullable: true
+          example: "RECIPIENT_ABSENT"
+        createdAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+        - correlationId
+        - timestamp
+      properties:
+        code:
+          type: string
+          example: "PARCEL_ALREADY_ASSIGNED"
+        message:
+          type: string
+          example: "Parcel has already been assigned to another courier."
+        correlationId:
+          type: string
+          example: "c4b9d031-1e9a-4d4b-97e2-45e0a6d96e51"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-10-25T13:20:00Z"
