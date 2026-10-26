@@ -1,0 +1,1022 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Parcel Lifecycle Service API
+  version: 0.1.0-SNAPSHOT
+  description: |
+    OpenAPI contract for SwiftDrop Parcel Service (Port 8082).
+    Owned by Member M1. Covers core parcel lifecycle, state transitions, courier assignment,
+    internal dispatch and merchant endpoints, customer parcel management, and address book CRUD.
+servers:
+  - url: http://localhost:8082
+    description: Local development parcel-service
+paths:
+  # =========================================================================
+  # Internal Endpoints (Internal Service-to-Service, blocked by API Gateway)
+  # =========================================================================
+  /internal/v1/parcels/{id}/assignment:
+    put:
+      summary: Assign courier to parcel
+      description: |
+        Assigns or reassigns a courier to a parcel in CREATED status.
+        Called by operations-service (M4 dispatch).
+        Returns 409 Conflict if the parcel is not in CREATED status or already assigned without reassignment permission.
+      operationId: assignCourierToParcel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Parcel UUID
+          schema:
+            type: string
+            format: uuid
+            example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParcelAssignmentRequest'
+      responses:
+        '200':
+          description: Courier assigned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcelResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict - Parcel already assigned or invalid state for assignment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                alreadyAssigned:
+                  value:
+                    code: "PARCEL_ALREADY_ASSIGNED"
+                    message: "Parcel has already been assigned to courier usr-courier-42"
+                    correlationId: "c4b9d031-1e9a-4d4b-97e2-45e0a6d96e51"
+                    timestamp: "2026-10-26T12:00:00Z"
+                illegalState:
+                  value:
+                    code: "ILLEGAL_STATUS_TRANSITION"
+                    message: "Cannot assign courier to parcel in status PICKED_UP"
+                    correlationId: "c4b9d031-1e9a-4d4b-97e2-45e0a6d96e51"
+                    timestamp: "2026-10-26T12:00:00Z"
+
+  /internal/v1/parcels/{id}/status:
+    patch:
+      summary: Update parcel lifecycle status
+      description: |
+        Advances a parcel to its next lifecycle status.
+        Carries the expected current status to enforce optimistic concurrency control and ensure safe retries.
+        Returns 409 Conflict if expectedCurrentStatus does not match the parcel's current state or if the transition is illegal.
+        Called by operations-service courier execution (M8/M9) and dispatch re-queue (M4).
+      operationId: updateParcelStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Parcel UUID
+          schema:
+            type: string
+            format: uuid
+            example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParcelStatusUpdateRequest'
+      responses:
+        '200':
+          description: Parcel status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcelResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict - Status mismatch, concurrency collision, or illegal transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                statusMismatch:
+                  value:
+                    code: "STATUS_CONFLICT"
+                    message: "Expected parcel status IN_TRANSIT but current status is OUT_FOR_DELIVERY"
+                    correlationId: "e2b109c1-4b19-482a-a92c-12b489c7192a"
+                    timestamp: "2026-10-26T12:00:00Z"
+                illegalTransition:
+                  value:
+                    code: "ILLEGAL_STATUS_TRANSITION"
+                    message: "Cannot transition parcel directly from CREATED to DELIVERED"
+                    correlationId: "e2b109c1-4b19-482a-a92c-12b489c7192a"
+                    timestamp: "2026-10-26T12:00:00Z"
+
+  /internal/v1/parcels:
+    get:
+      summary: Query parcels for internal dispatch or courier execution
+      description: |
+        Internal search endpoint supporting:
+        - Unassigned parcels queue: ?unassigned=true&zone=
+        - Courier daily deliveries: ?courierId={courierId}&date={YYYY-MM-DD}
+      operationId: queryInternalParcels
+      parameters:
+        - name: unassigned
+          in: query
+          required: false
+          description: Filter for unassigned parcels awaiting courier allocation
+          schema:
+            type: boolean
+            example: true
+        - name: zone
+          in: query
+          required: false
+          description: Zone code filter (e.g. ZONE-COLOMBO-NORTH)
+          schema:
+            type: string
+            example: "ZONE-COLOMBO-NORTH"
+        - name: courierId
+          in: query
+          required: false
+          description: Courier UUID filter
+          schema:
+            type: string
+            format: uuid
+            example: "9a21b34c-d102-4c28-98e1-51829e4a012b"
+        - name: date
+          in: query
+          required: false
+          description: Delivery/assignment date filter (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+            example: "2026-10-26"
+        - name: status
+          in: query
+          required: false
+          description: Optional parcel status filter
+          schema:
+            $ref: '#/components/schemas/ParcelStatus'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Paginated parcels matching query criteria
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcelPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+    post:
+      summary: Create parcel via merchant integration or internal caller
+      description: |
+        Internal order creation endpoint called by integration-service (M6) after merchant token validation
+        and operations-service pricing quote calculation.
+      operationId: createInternalParcel
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Client-provided idempotency key for safe duplicate retry
+          schema:
+            type: string
+            example: "merchant-order-uuid-98124"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalCreateParcelRequest'
+      responses:
+        '201':
+          description: Parcel order created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcelResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # =========================================================================
+  # Customer Parcel Management APIs (/api/v1/parcels)
+  # =========================================================================
+  /api/v1/parcels:
+    post:
+      summary: Create customer delivery order
+      description: |
+        Initiates a new parcel delivery order for an authenticated customer.
+        Validates structured addresses according to ADR 002 (district must belong to fixed district list).
+        Calls operations-service quote API internally before persisting parcel and publishing parcel.created.v1.
+      operationId: createCustomerParcel
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerParcelRequest'
+      responses:
+        '201':
+          description: Parcel created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcelResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    get:
+      summary: List customer parcels
+      description: Returns paginated list of deliveries created by the calling customer.
+      operationId: listCustomerParcels
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ParcelStatus'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Customer parcel deliveries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcelPageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/parcels/{id}:
+    get:
+      summary: Get parcel details
+      description: Retrieves complete details of a parcel by UUID. Accessible by owner customer, assigned courier, dispatcher, or admin.
+      operationId: getParcelById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+      responses:
+        '200':
+          description: Parcel details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcelResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/parcels/{id}/cancel:
+    post:
+      summary: Cancel parcel before pickup
+      description: |
+        Cancels a parcel prior to courier pickup.
+        Allowed ONLY if the current status is CREATED.
+        Returns 409 Conflict if already PICKED_UP or beyond.
+      operationId: cancelParcel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelParcelRequest'
+      responses:
+        '200':
+          description: Parcel cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcelResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict - Parcel has already been picked up and cannot be cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "ILLEGAL_STATUS_TRANSITION"
+                message: "Cannot cancel parcel in status PICKED_UP. Cancellation only permitted before pickup."
+                correlationId: "c18a9012-7bf1-4820-9812-581902ba1290"
+                timestamp: "2026-10-26T12:00:00Z"
+
+  # =========================================================================
+  # Customer Address Book CRUD (/api/v1/addresses) - ADR 002
+  # =========================================================================
+  /api/v1/addresses:
+    get:
+      summary: List saved addresses
+      description: Returns all saved addresses in the authenticated customer's address book.
+      operationId: listSavedAddresses
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of saved customer addresses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SavedAddressResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Save a new address
+      description: Adds a new structured address to the authenticated customer's address book.
+      operationId: createSavedAddress
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSavedAddressRequest'
+      responses:
+        '201':
+          description: Address saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedAddressResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/addresses/{id}:
+    get:
+      summary: Get saved address
+      description: Retrieves a specific saved address by UUID.
+      operationId: getSavedAddressById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "3f829a1b-4c28-4981-8912-10a294819cde"
+      responses:
+        '200':
+          description: Saved address details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedAddressResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update saved address
+      description: Updates an existing saved address in the customer's address book.
+      operationId: updateSavedAddress
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSavedAddressRequest'
+      responses:
+        '200':
+          description: Address updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedAddressResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete saved address
+      description: Removes a saved address from the customer's address book.
+      operationId: deleteSavedAddress
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Address deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters or payload validation failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "VALIDATION_FAILED"
+            message: "Drop-off district is required and must match a supported district"
+            correlationId: "d19284fa-3891-49b2-a812-491029418290"
+            timestamp: "2026-10-26T12:00:00Z"
+
+    Unauthorized:
+      description: Missing, invalid, or expired JWT token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "UNAUTHORIZED"
+            message: "Full authentication is required to access this resource"
+            correlationId: "a1892041-5819-4821-9812-481928410928"
+            timestamp: "2026-10-26T12:00:00Z"
+
+    Forbidden:
+      description: Access denied for the authenticated role
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "ACCESS_DENIED"
+            message: "User does not hold the required permissions for this action"
+            correlationId: "b8912481-4912-4819-a128-481928419028"
+            timestamp: "2026-10-26T12:00:00Z"
+
+    NotFound:
+      description: Target resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "RESOURCE_NOT_FOUND"
+            message: "Parcel not found with ID 7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+            correlationId: "c8192841-4912-4819-b128-481928419028"
+            timestamp: "2026-10-26T12:00:00Z"
+
+    Conflict:
+      description: Business conflict or state transition violation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "ILLEGAL_STATUS_TRANSITION"
+            message: "Cannot transition parcel directly from CREATED to DELIVERED"
+            correlationId: "d8192841-4912-4819-c128-481928419028"
+            timestamp: "2026-10-26T12:00:00Z"
+
+  schemas:
+    # -----------------------------------------------------------------------
+    # Status & Enums
+    # -----------------------------------------------------------------------
+    ParcelStatus:
+      type: string
+      description: Canonical state machine status
+      enum:
+        - CREATED
+        - PICKED_UP
+        - IN_TRANSIT
+        - OUT_FOR_DELIVERY
+        - DELIVERED
+        - FAILED
+        - CANCELLED
+      example: "CREATED"
+
+    ParcelSize:
+      type: string
+      enum:
+        - SMALL
+        - MEDIUM
+        - LARGE
+      example: "MEDIUM"
+
+    District:
+      type: string
+      description: Predefined administrative districts of Sri Lanka per ADR 002
+      enum:
+        - Ampara
+        - Anuradhapura
+        - Badulla
+        - Batticaloa
+        - Colombo
+        - Galle
+        - Gampaha
+        - Hambantota
+        - Jaffna
+        - Kalutara
+        - Kandy
+        - Kegalle
+        - Kilinochchi
+        - Kurunegala
+        - Mannar
+        - Matale
+        - Matara
+        - Monaragala
+        - Mullaitivu
+        - Nuwara Eliya
+        - Polonnaruwa
+        - Puttalam
+        - Ratnapura
+        - Trincomalee
+        - Vavuniya
+      example: "Colombo"
+
+    # -----------------------------------------------------------------------
+    # Address Models (ADR 002)
+    # -----------------------------------------------------------------------
+    AddressDto:
+      type: object
+      required:
+        - line1
+        - city
+        - district
+        - postalCode
+      properties:
+        line1:
+          type: string
+          example: "45 Galle Road"
+        line2:
+          type: string
+          nullable: true
+          example: "Floor 3, Apt 3B"
+        city:
+          type: string
+          example: "Colombo 03"
+        district:
+          $ref: '#/components/schemas/District'
+        postalCode:
+          type: string
+          example: "00300"
+
+    CreateSavedAddressRequest:
+      type: object
+      required:
+        - label
+        - line1
+        - city
+        - district
+        - postalCode
+      properties:
+        label:
+          type: string
+          example: "Home"
+        line1:
+          type: string
+          example: "12 Flower Road"
+        line2:
+          type: string
+          nullable: true
+          example: "Suite 4"
+        city:
+          type: string
+          example: "Colombo 07"
+        district:
+          $ref: '#/components/schemas/District'
+        postalCode:
+          type: string
+          example: "00700"
+        isDefault:
+          type: boolean
+          default: false
+
+    SavedAddressResponse:
+      type: object
+      required:
+        - id
+        - customerId
+        - label
+        - line1
+        - city
+        - district
+        - postalCode
+        - isDefault
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "3f829a1b-4c28-4981-8912-10a294819cde"
+        customerId:
+          type: string
+          format: uuid
+          example: "usr-cust-901"
+        label:
+          type: string
+          example: "Home"
+        line1:
+          type: string
+          example: "12 Flower Road"
+        line2:
+          type: string
+          nullable: true
+          example: "Suite 4"
+        city:
+          type: string
+          example: "Colombo 07"
+        district:
+          $ref: '#/components/schemas/District'
+        postalCode:
+          type: string
+          example: "00700"
+        isDefault:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    # -----------------------------------------------------------------------
+    # Requests
+    # -----------------------------------------------------------------------
+    ParcelAssignmentRequest:
+      type: object
+      required:
+        - courierId
+      properties:
+        courierId:
+          type: string
+          format: uuid
+          description: Courier UUID to assign to this parcel
+          example: "9a21b34c-d102-4c28-98e1-51829e4a012b"
+        assignedBy:
+          type: string
+          nullable: true
+          description: Dispatcher identifier who performed assignment
+          example: "usr-dispatch-101"
+
+    ParcelStatusUpdateRequest:
+      type: object
+      required:
+        - status
+        - expectedCurrentStatus
+      properties:
+        status:
+          $ref: '#/components/schemas/ParcelStatus'
+        expectedCurrentStatus:
+          $ref: '#/components/schemas/ParcelStatus'
+          description: The expected current status prior to transition. Enforces optimistic concurrency and safe retries.
+        courierId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identifier of the courier executing the status update
+          example: "9a21b34c-d102-4c28-98e1-51829e4a012b"
+        reason:
+          type: string
+          nullable: true
+          description: Mandatory explanation when status is FAILED or CANCELLED
+          example: "RECIPIENT_UNAVAILABLE"
+        proof:
+          $ref: '#/components/schemas/DeliveryProof'
+        idempotencyKey:
+          type: string
+          nullable: true
+          example: "retry-token-step-3"
+
+    DeliveryProof:
+      type: object
+      properties:
+        recipientName:
+          type: string
+          example: "Kavindu Perera"
+        proofPhotoPath:
+          type: string
+          nullable: true
+          example: "/data/proofs/7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11-1729864200.jpg"
+
+    CreateCustomerParcelRequest:
+      type: object
+      required:
+        - pickupAddress
+        - dropoffAddress
+        - weightKg
+        - size
+        - recipientName
+        - recipientPhone
+      properties:
+        pickupAddress:
+          $ref: '#/components/schemas/AddressDto'
+        dropoffAddress:
+          $ref: '#/components/schemas/AddressDto'
+        weightKg:
+          type: number
+          format: double
+          minimum: 0.1
+          maximum: 50.0
+          example: 2.5
+        size:
+          $ref: '#/components/schemas/ParcelSize'
+        recipientName:
+          type: string
+          example: "Sunil Silva"
+        recipientPhone:
+          type: string
+          example: "+94771234567"
+        notes:
+          type: string
+          nullable: true
+          example: "Ring bell twice, deliver to security if absent"
+
+    InternalCreateParcelRequest:
+      type: object
+      required:
+        - merchantId
+        - pickupAddress
+        - dropoffAddress
+        - weightKg
+        - size
+        - fee
+        - recipientName
+        - recipientPhone
+      properties:
+        merchantId:
+          type: string
+          format: uuid
+          example: "mch-5819-4912-9812-48192841"
+        externalReference:
+          type: string
+          nullable: true
+          example: "ORD-SHOPIFY-89214"
+        pickupAddress:
+          $ref: '#/components/schemas/AddressDto'
+        dropoffAddress:
+          $ref: '#/components/schemas/AddressDto'
+        weightKg:
+          type: number
+          format: double
+          minimum: 0.1
+          example: 1.2
+        size:
+          $ref: '#/components/schemas/ParcelSize'
+        fee:
+          type: number
+          format: double
+          example: 650.00
+        recipientName:
+          type: string
+          example: "Nimal Perera"
+        recipientPhone:
+          type: string
+          example: "+94719876543"
+
+    CancelParcelRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          nullable: true
+          example: "Customer placed duplicate order by mistake"
+
+    # -----------------------------------------------------------------------
+    # Responses
+    # -----------------------------------------------------------------------
+    ParcelResponse:
+      type: object
+      required:
+        - id
+        - trackingNumber
+        - status
+        - pickupAddress
+        - dropoffAddress
+        - weightKg
+        - size
+        - fee
+        - attemptCount
+        - recipientName
+        - recipientPhone
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+        trackingNumber:
+          type: string
+          example: "SD-20261026-A1B2C3"
+        status:
+          $ref: '#/components/schemas/ParcelStatus'
+        customerId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "usr-cust-901"
+        merchantId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "mch-5819-4912-9812-48192841"
+        courierId:
+          type: string
+          format: uuid
+          nullable: true
+          example: "9a21b34c-d102-4c28-98e1-51829e4a012b"
+        pickupAddress:
+          $ref: '#/components/schemas/AddressDto'
+        dropoffAddress:
+          $ref: '#/components/schemas/AddressDto'
+        weightKg:
+          type: number
+          format: double
+          example: 2.5
+        size:
+          $ref: '#/components/schemas/ParcelSize'
+        fee:
+          type: number
+          format: double
+          example: 750.00
+        attemptCount:
+          type: integer
+          example: 0
+        failureReason:
+          type: string
+          nullable: true
+          example: null
+        recipientName:
+          type: string
+          example: "Sunil Silva"
+        recipientPhone:
+          type: string
+          example: "+94771234567"
+        notes:
+          type: string
+          nullable: true
+          example: "Leave at front desk"
+        proof:
+          $ref: '#/components/schemas/DeliveryProof'
+          nullable: true
+        sequence:
+          type: integer
+          format: int64
+          description: Current monotonic event sequence number per ADR 005
+          example: 1
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-10-26T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-10-26T10:00:00Z"
+
+    ParcelPageResponse:
+      type: object
+      required:
+        - content
+        - totalElements
+        - totalPages
+        - page
+        - size
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParcelResponse'
+        totalElements:
+          type: integer
+          example: 42
+        totalPages:
+          type: integer
+          example: 3
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+
+    # -----------------------------------------------------------------------
+    # Shared Error Response (from common module)
+    # -----------------------------------------------------------------------
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+        - correlationId
+        - timestamp
+      properties:
+        code:
+          type: string
+          description: Standard application error code
+          example: "ILLEGAL_STATUS_TRANSITION"
+        message:
+          type: string
+          description: Human-readable error details
+          example: "Cannot transition parcel directly from CREATED to DELIVERED"
+        correlationId:
+          type: string
+          description: Tracing correlation ID propagated via X-Correlation-Id header
+          example: "c4b9d031-1e9a-4d4b-97e2-45e0a6d96e51"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-10-26T12:00:00Z"
