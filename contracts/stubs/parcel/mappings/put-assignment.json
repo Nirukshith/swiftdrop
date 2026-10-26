@@ -1,0 +1,51 @@
+{
+  "request": {
+    "method": "PUT",
+    "urlPathPattern": "/internal/v1/parcels/[a-f0-9-]+/assignment",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.courierId"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11",
+      "trackingNumber": "SD-20261026-A1B2C3",
+      "status": "CREATED",
+      "customerId": "usr-cust-901",
+      "merchantId": null,
+      "courierId": "9a21b34c-d102-4c28-98e1-51829e4a012b",
+      "pickupAddress": {
+        "line1": "45 Galle Road",
+        "line2": "Floor 3, Apt 3B",
+        "city": "Colombo 03",
+        "district": "Colombo",
+        "postalCode": "00300"
+      },
+      "dropoffAddress": {
+        "line1": "12 Kandy Road",
+        "line2": null,
+        "city": "Kiribathgoda",
+        "district": "Gampaha",
+        "postalCode": "11600"
+      },
+      "weightKg": 2.5,
+      "size": "MEDIUM",
+      "fee": 750.0,
+      "attemptCount": 0,
+      "failureReason": null,
+      "recipientName": "Sunil Silva",
+      "recipientPhone": "+94771234567",
+      "notes": "Call before arrival",
+      "proof": null,
+      "sequence": 2,
+      "createdAt": "2026-10-26T10:00:00Z",
+      "updatedAt": "2026-10-26T10:15:00Z"
+    }
+  }
+}

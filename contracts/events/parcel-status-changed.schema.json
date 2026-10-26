@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swiftdrop.com/schemas/parcel-status-changed.schema.json",
+  "title": "ParcelStatusChangedEvent",
+  "description": "Event emitted when a parcel transitions between lifecycle statuses",
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventType": {
+      "type": "string",
+      "const": "PARCEL_STATUS_CHANGED"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "parcelId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "trackingNumber": {
+      "type": "string"
+    },
+    "fromStatus": {
+      "type": "string",
+      "enum": ["CREATED", "PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "FAILED"]
+    },
+    "toStatus": {
+      "type": "string",
+      "enum": ["PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "FAILED", "CANCELLED", "CREATED"]
+    },
+    "courierId": {
+      "type": ["string", "null"]
+    },
+    "previousCourierId": {
+      "type": ["string", "null"]
+    },
+    "merchantId": {
+      "type": ["string", "null"]
+    },
+    "customerId": {
+      "type": ["string", "null"]
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "description": "Failure reason or cancellation reason"
+    }
+  },
+  "required": [
+    "eventId",
+    "eventType",
+    "occurredAt",
+    "sequence",
+    "parcelId",
+    "trackingNumber",
+    "fromStatus",
+    "toStatus"
+  ]
+}

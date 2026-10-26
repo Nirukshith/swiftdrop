@@ -1,0 +1,93 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/internal/v1/parcels",
+    "queryParameters": {
+      "unassigned": {
+        "equalTo": "true"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "content": [
+        {
+          "id": "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11",
+          "trackingNumber": "SD-20261026-A1B2C3",
+          "status": "CREATED",
+          "customerId": "usr-cust-901",
+          "merchantId": null,
+          "courierId": null,
+          "pickupAddress": {
+            "line1": "45 Galle Road",
+            "line2": "Floor 3, Apt 3B",
+            "city": "Colombo 03",
+            "district": "Colombo",
+            "postalCode": "00300"
+          },
+          "dropoffAddress": {
+            "line1": "12 Kandy Road",
+            "line2": null,
+            "city": "Kiribathgoda",
+            "district": "Gampaha",
+            "postalCode": "11600"
+          },
+          "weightKg": 2.5,
+          "size": "MEDIUM",
+          "fee": 750.0,
+          "attemptCount": 0,
+          "failureReason": null,
+          "recipientName": "Sunil Silva",
+          "recipientPhone": "+94771234567",
+          "notes": "Ring bell twice",
+          "proof": null,
+          "sequence": 1,
+          "createdAt": "2026-10-26T10:00:00Z",
+          "updatedAt": "2026-10-26T10:00:00Z"
+        },
+        {
+          "id": "8f0c4b35-d29a-4c79-c8d2-gb0f7b1e3f22",
+          "trackingNumber": "SD-20261026-X9Y8Z7",
+          "status": "CREATED",
+          "customerId": null,
+          "merchantId": "mch-5819-4912-9812-48192841",
+          "courierId": null,
+          "pickupAddress": {
+            "line1": "100 High Level Road",
+            "line2": null,
+            "city": "Nugegoda",
+            "district": "Colombo",
+            "postalCode": "10250"
+          },
+          "dropoffAddress": {
+            "line1": "55 Main Street",
+            "line2": null,
+            "city": "Negombo",
+            "district": "Gampaha",
+            "postalCode": "11500"
+          },
+          "weightKg": 1.1,
+          "size": "SMALL",
+          "fee": 550.0,
+          "attemptCount": 0,
+          "failureReason": null,
+          "recipientName": "Anura Kumara",
+          "recipientPhone": "+94712348901",
+          "notes": null,
+          "proof": null,
+          "sequence": 1,
+          "createdAt": "2026-10-26T10:30:00Z",
+          "updatedAt": "2026-10-26T10:30:00Z"
+        }
+      ],
+      "totalElements": 2,
+      "totalPages": 1,
+      "page": 0,
+      "size": 20
+    }
+  }
+}

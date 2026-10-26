@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swiftdrop.com/schemas/parcel-created.schema.json",
+  "title": "ParcelCreatedEvent",
+  "description": "Event emitted when a customer or merchant creates a new parcel delivery order",
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventType": {
+      "type": "string",
+      "const": "PARCEL_CREATED"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "parcelId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "trackingNumber": {
+      "type": "string",
+      "pattern": "^SD-[0-9]{8}-[A-Za-z0-9]+$"
+    },
+    "fromStatus": {
+      "type": "string",
+      "const": "NONE"
+    },
+    "toStatus": {
+      "type": "string",
+      "const": "CREATED"
+    },
+    "courierId": {
+      "type": "null"
+    },
+    "previousCourierId": {
+      "type": "null"
+    },
+    "merchantId": {
+      "type": ["string", "null"]
+    },
+    "customerId": {
+      "type": ["string", "null"]
+    },
+    "reason": {
+      "type": "null"
+    }
+  },
+  "required": [
+    "eventId",
+    "eventType",
+    "occurredAt",
+    "sequence",
+    "parcelId",
+    "trackingNumber",
+    "fromStatus",
+    "toStatus"
+  ]
+}
