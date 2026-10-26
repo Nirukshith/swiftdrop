@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swiftdrop.com/schemas/parcel-assigned.schema.json",
+  "title": "ParcelAssignedEvent",
+  "description": "Event emitted when a parcel is assigned or reassigned to a courier by dispatcher",
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventType": {
+      "type": "string",
+      "const": "PARCEL_ASSIGNED"
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "parcelId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "trackingNumber": {
+      "type": "string"
+    },
+    "fromStatus": {
+      "type": "string",
+      "const": "CREATED"
+    },
+    "toStatus": {
+      "type": "string",
+      "const": "CREATED"
+    },
+    "courierId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "previousCourierId": {
+      "type": ["string", "null"],
+      "description": "Populated during courier reassignment so operations-service decrements the previous courier's active count"
+    },
+    "merchantId": {
+      "type": ["string", "null"]
+    },
+    "customerId": {
+      "type": ["string", "null"]
+    },
+    "reason": {
+      "type": ["string", "null"]
+    }
+  },
+  "required": [
+    "eventId",
+    "eventType",
+    "occurredAt",
+    "sequence",
+    "parcelId",
+    "trackingNumber",
+    "fromStatus",
+    "toStatus",
+    "courierId"
+  ]
+}

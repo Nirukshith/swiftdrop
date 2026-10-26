@@ -1,0 +1,57 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/internal/v1/parcels",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.merchantId"
+      },
+      {
+        "matchesJsonPath": "$.pickupAddress.district"
+      },
+      {
+        "matchesJsonPath": "$.dropoffAddress.district"
+      }
+    ]
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "6a8b1c23-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+      "trackingNumber": "SD-20261026-M5K8L2",
+      "status": "CREATED",
+      "customerId": null,
+      "merchantId": "mch-5819-4912-9812-48192841",
+      "courierId": null,
+      "pickupAddress": {
+        "line1": "77 Storefront Road",
+        "line2": "Warehouse B",
+        "city": "Colombo 05",
+        "district": "Colombo",
+        "postalCode": "00500"
+      },
+      "dropoffAddress": {
+        "line1": "22 Temple Lane",
+        "line2": null,
+        "city": "Moratuwa",
+        "district": "Colombo",
+        "postalCode": "10400"
+      },
+      "weightKg": 1.5,
+      "size": "SMALL",
+      "fee": 650.0,
+      "attemptCount": 0,
+      "failureReason": null,
+      "recipientName": "Devinda Fernando",
+      "recipientPhone": "+94775551234",
+      "notes": "Deliver during office hours",
+      "proof": null,
+      "sequence": 1,
+      "createdAt": "2026-10-26T12:00:00Z",
+      "updatedAt": "2026-10-26T12:00:00Z"
+    }
+  }
+}
