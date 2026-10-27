@@ -28,10 +28,9 @@ class SecurityConfigIntegrationTest {
 
     @Test
     void merchantRegistrationPostIsPublic() throws Exception {
-        // The controller is added in the dependent M6 onboarding PR. A 404 here confirms
-        // the request passed the security filter instead of being rejected as unauthenticated.
+        // An empty payload reaches the public endpoint and fails request validation.
         mockMvc.perform(post("/api/v1/merchants/register"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isBadRequest());
     }
 
     @Test
