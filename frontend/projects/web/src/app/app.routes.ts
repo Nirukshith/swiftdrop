@@ -18,6 +18,11 @@ export const routes: Routes = [
       import('shared-auth').then((m) => m.RegisterComponent),
   },
   {
+    path: 'merchant-registration',
+    loadComponent: () =>
+      import('./pages/merchant/merchant-registration.component').then((m) => m.MerchantRegistrationComponent),
+  },
+  {
     path: 'customer',
     canActivate: [roleGuard(['CUSTOMER'])],
     loadComponent: () =>

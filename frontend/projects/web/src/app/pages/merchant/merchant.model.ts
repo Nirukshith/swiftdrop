@@ -15,6 +15,7 @@ export type WebhookDeliveryStatus =
   | 'PENDING';
 
 export interface MerchantOrder {
+  merchantId: string;
   orderId: string;
   parcelId: string;
   trackingNumber: string;
@@ -24,6 +25,14 @@ export interface MerchantOrder {
   recipientAddress: string;
   weightKg?: number;
   createdAt: string;
+}
+
+export interface MerchantApiCredentials {
+  merchantId: string;
+  status: 'PENDING' | 'APPROVED';
+  clientId: string | null;
+  clientSecret: string | null;
+  secretAvailableOnce: boolean;
 }
 
 export interface OrderCounts {
