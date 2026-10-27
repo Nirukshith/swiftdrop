@@ -5,6 +5,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
@@ -18,18 +20,21 @@ import org.springframework.security.web.SecurityFilterChain;
  *   <li>{@code /api/v1/auth/refresh}         – Refresh token rotation</li>
  *   <li>{@code /api/v1/auth/oauth2/**}       – Google OAuth flow (initiate + callback)</li>
  *   <li>{@code /api/v1/auth/password/**}     – Password reset (M3)</li>
+ *   <li>{@code /internal/v1/**}              – Service-to-service internal APIs (blocked at Gateway)</li>
  *   <li>{@code /actuator/health/**}          – Health probe</li>
  * </ul>
  *
  * <p>All other paths require a valid bearer token.
  * LoginGuard (M7) and AuditService (M8) are wired in as in-process interfaces.
- *
- * <p>Owner: M7 owns the security policy extensions;
- * M10 provides the base permitAll list for auth and JWKS paths.
  */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -44,9 +49,10 @@ public class SecurityConfig {
                     "/api/v1/auth/login",
                     "/api/v1/auth/refresh",
                     "/api/v1/auth/oauth2/**",
-                    "/api/v1/auth/password/**"
+                    "/api/v1/auth/password/**",
+                    "/internal/v1/**"
                 ).permitAll()
-                // Everything else (admin, internal, etc.) requires authentication
+                // Everything else (admin, etc.) requires authentication
                 .anyRequest().authenticated()
             );
         return http.build();
