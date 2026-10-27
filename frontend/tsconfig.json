@@ -15,8 +15,14 @@
     "target": "ES2022",
     "module": "preserve",
     "paths": {
-      "shared-auth": ["./dist/shared-auth"],
-      "ui": ["./dist/ui"]
+      "shared-auth": [
+        "./projects/shared-auth/src/public-api.ts",
+        "./dist/shared-auth"
+      ],
+      "ui": [
+        "./projects/ui/src/public-api.ts",
+        "./dist/ui"
+      ]
     }
   },
   "angularCompilerOptions": {
