@@ -3,6 +3,7 @@ import { Observable, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
 import {
   MerchantOrder,
+  MerchantApiCredentials,
   OrderCounts,
   TestWebhookResult,
   WebhookDeliveryItem,
@@ -14,10 +15,12 @@ import {
 })
 export class MerchantService {
   private readonly defaultMerchantId = '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d';
+  private mockClientSecretAvailable = true;
 
   private orders = signal<MerchantOrder[]>([
     {
       orderId: 'ord-802101',
+      merchantId: this.defaultMerchantId,
       parcelId: 'pcl-55102',
       trackingNumber: 'SD-20261027-802101',
       externalReference: 'PO-2026-904',
@@ -29,6 +32,7 @@ export class MerchantService {
     },
     {
       orderId: 'ord-802102',
+      merchantId: this.defaultMerchantId,
       parcelId: 'pcl-55103',
       trackingNumber: 'SD-20261027-802102',
       externalReference: 'PO-2026-905',
@@ -40,6 +44,7 @@ export class MerchantService {
     },
     {
       orderId: 'ord-802103',
+      merchantId: this.defaultMerchantId,
       parcelId: 'pcl-55104',
       trackingNumber: 'SD-20261027-802103',
       externalReference: 'PO-2026-906',
@@ -51,6 +56,7 @@ export class MerchantService {
     },
     {
       orderId: 'ord-802104',
+      merchantId: this.defaultMerchantId,
       parcelId: 'pcl-55105',
       trackingNumber: 'SD-20261026-802104',
       externalReference: 'PO-2026-907',
@@ -62,6 +68,7 @@ export class MerchantService {
     },
     {
       orderId: 'ord-802105',
+      merchantId: this.defaultMerchantId,
       parcelId: 'pcl-55106',
       trackingNumber: 'SD-20261025-802105',
       externalReference: 'PO-2026-908',
@@ -73,6 +80,7 @@ export class MerchantService {
     },
     {
       orderId: 'ord-802106',
+      merchantId: this.defaultMerchantId,
       parcelId: 'pcl-55107',
       trackingNumber: 'SD-20261025-802106',
       externalReference: 'PO-2026-909',
@@ -81,6 +89,18 @@ export class MerchantService {
       recipientAddress: '104 High Level Road, Nugegoda',
       weightKg: 1.0,
       createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+    },
+    {
+      orderId: 'ord-other-merchant-1',
+      merchantId: 'a2fd0a58-24fc-4e93-9862-02a20dd7b461',
+      parcelId: 'pcl-other-merchant-1',
+      trackingNumber: 'SD-20261027-OTHER1',
+      externalReference: 'OTHER-STORE-01',
+      status: 'CREATED',
+      recipientName: 'Private sample recipient',
+      recipientAddress: '1 Other Road, Colombo',
+      weightKg: 0.5,
+      createdAt: new Date(Date.now() - 3600000).toISOString(),
     },
   ]);
 
@@ -216,7 +236,7 @@ export class MerchantService {
   ]);
 
   getOrders(statusFilter?: string, search?: string): Observable<MerchantOrder[]> {
-    let list = this.orders();
+    let list = this.orders().filter((order) => order.merchantId === this.defaultMerchantId);
     if (statusFilter && statusFilter !== 'ALL') {
       list = list.filter((o) => o.status === statusFilter);
     }
@@ -233,7 +253,7 @@ export class MerchantService {
   }
 
   getOrderCounts(): Observable<OrderCounts> {
-    const list = this.orders();
+    const list = this.orders().filter((order) => order.merchantId === this.defaultMerchantId);
     const counts: OrderCounts = {
       total: list.length,
       created: list.filter((o) => o.status === 'CREATED').length,
@@ -248,6 +268,18 @@ export class MerchantService {
       cancelled: list.filter((o) => o.status === 'CANCELLED').length,
     };
     return of(counts);
+  }
+
+  getApiCredentials(): Observable<MerchantApiCredentials> {
+    const clientSecret = this.mockClientSecretAvailable ? 'swd_test_secret_once_7f3a9c2e' : null;
+    this.mockClientSecretAvailable = false;
+    return of({
+      merchantId: this.defaultMerchantId,
+      status: 'APPROVED',
+      clientId: 'swd_test_client_merchant_01',
+      clientSecret,
+      secretAvailableOnce: clientSecret !== null,
+    });
   }
 
   getWebhookSettings(): Observable<WebhookSettings> {
