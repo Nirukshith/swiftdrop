@@ -1,0 +1,139 @@
+<div class="space-y-6">
+  <header class="rounded-xl bg-slate-900 p-6 text-white shadow-sm">
+    <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+      <div>
+        <p class="text-sm font-medium text-indigo-300">SwiftDrop operations</p>
+        <h1 class="mt-1 text-3xl font-bold">Admin shell</h1>
+        <p class="mt-2 text-slate-300">Configure zones and pricing for delivery operations.</p>
+      </div>
+      <label class="text-sm">
+        <span class="mb-1 block text-slate-300">Preview role</span>
+        <select
+          class="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white"
+          [value]="activeRole()"
+          (change)="setRole($any($event.target).value)"
+        >
+          <option value="DISPATCHER">Dispatcher</option>
+          <option value="ADMIN">Admin</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <nav class="flex flex-wrap gap-2" aria-label="Admin navigation">
+    <a class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white" href="/admin">Overview</a>
+    @if (activeRole() === 'DISPATCHER') {
+      <a class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700" href="#zones">Zones</a>
+      <a class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700" href="#pricing">Pricing rules</a>
+    }
+    @if (activeRole() === 'ADMIN') {
+      <span class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">Merchant approval</span>
+      <span class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">Audit log</span>
+    }
+  </nav>
+
+  @if (activeRole() === 'DISPATCHER') {
+    <div class="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
+      <lib-ui title="Delivery zones" id="zones">
+        <div class="space-y-3">
+          @for (zone of zones(); track zone.name) {
+            <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-4">
+              <div>
+                <p class="font-semibold text-slate-800">{{ zone.name }}</p>
+                <p class="text-sm text-slate-500">{{ zone.districts.join(', ') }}</p>
+              </div>
+              <div class="text-right">
+                <p class="font-medium text-slate-800">LKR {{ zone.baseFeeLkr | number: '1.2-2' }}</p>
+                <span class="text-xs" [class]="zone.served ? 'text-emerald-600' : 'text-slate-500'">
+                  {{ zone.served ? 'Served' : 'Paused' }}
+                </span>
+              </div>
+            </div>
+          }
+        </div>
+      </lib-ui>
+
+      <lib-ui title="Add zone">
+        <form class="space-y-4" [formGroup]="zoneForm" (ngSubmit)="addZone()">
+          <label class="block text-sm font-medium text-slate-700">
+            Zone name
+            <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" formControlName="name" />
+          </label>
+          <label class="block text-sm font-medium text-slate-700">
+            Districts
+            <select class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" multiple formControlName="districts">
+              @for (district of districts; track district) {
+                <option [value]="district">{{ district }}</option>
+              }
+            </select>
+          </label>
+          <label class="block text-sm font-medium text-slate-700">
+            Base fee (LKR)
+            <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="number" formControlName="baseFeeLkr" />
+          </label>
+          <label class="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" formControlName="served" /> Active served zone
+          </label>
+          <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" type="submit" [disabled]="zoneForm.invalid">
+            Add zone
+          </button>
+        </form>
+      </lib-ui>
+    </div>
+
+    <div id="pricing" class="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
+      <lib-ui title="Pricing rules">
+        <div class="space-y-3">
+          @for (rule of pricingRules(); track rule.key) {
+            <div class="rounded-lg bg-slate-50 p-4">
+              <div class="flex items-center justify-between gap-3">
+                <p class="font-semibold text-slate-800">{{ rule.key }}</p>
+                <span class="text-sm font-medium text-slate-700">LKR {{ rule.chargeLkr | number: '1.2-2' }}</span>
+              </div>
+              <p class="mt-1 text-sm text-slate-500">
+                {{ rule.kind === 'SIZE' ? 'Size charge' : (rule.minimumWeightKg + '–' + rule.maximumWeightKg + ' kg weight band') }}
+              </p>
+            </div>
+          }
+        </div>
+      </lib-ui>
+
+      <lib-ui title="Add pricing rule">
+        <form class="space-y-4" [formGroup]="pricingForm" (ngSubmit)="addPricingRule()">
+          <label class="block text-sm font-medium text-slate-700">
+            Rule type
+            <select class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" formControlName="kind">
+              <option value="SIZE">Size</option>
+              <option value="WEIGHT_BAND">Weight band</option>
+            </select>
+          </label>
+          <label class="block text-sm font-medium text-slate-700">
+            Key
+            <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" formControlName="key" placeholder="LARGE or UP_TO_5KG" />
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block text-sm font-medium text-slate-700">
+              Minimum kg
+              <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="number" formControlName="minimumWeightKg" />
+            </label>
+            <label class="block text-sm font-medium text-slate-700">
+              Maximum kg
+              <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="number" formControlName="maximumWeightKg" />
+            </label>
+          </div>
+          <label class="block text-sm font-medium text-slate-700">
+            Charge (LKR)
+            <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="number" formControlName="chargeLkr" />
+          </label>
+          <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" type="submit" [disabled]="pricingForm.invalid">
+            Add pricing rule
+          </button>
+        </form>
+      </lib-ui>
+    </div>
+  } @else {
+    <lib-ui title="Administrator navigation">
+      <p class="text-slate-600">Merchant approval and audit log pages will be added in their planned week.</p>
+    </lib-ui>
+  }
+</div>
