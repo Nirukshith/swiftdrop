@@ -7,6 +7,7 @@ import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,17 +26,20 @@ public class ParcelService {
     private final StatusHistoryRepository statusHistoryRepository;
     private final TrackingNumberGenerator trackingNumberGenerator;
     private final PricingQuoteClient pricingQuoteClient;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ParcelService(
             ParcelRepository parcelRepository,
             StatusHistoryRepository statusHistoryRepository,
             TrackingNumberGenerator trackingNumberGenerator,
-            PricingQuoteClient pricingQuoteClient
+            PricingQuoteClient pricingQuoteClient,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.parcelRepository = parcelRepository;
         this.statusHistoryRepository = statusHistoryRepository;
         this.trackingNumberGenerator = trackingNumberGenerator;
         this.pricingQuoteClient = pricingQuoteClient;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -75,6 +79,8 @@ public class ParcelService {
         );
         statusHistoryRepository.save(initialHistory);
 
+        eventPublisher.publishEvent(ParcelDomainEvent.created(saved));
+
         return ParcelResponse.from(saved);
     }
 
@@ -107,6 +113,8 @@ public class ParcelService {
                 "Merchant order created"
         );
         statusHistoryRepository.save(initialHistory);
+
+        eventPublisher.publishEvent(ParcelDomainEvent.created(saved));
 
         return ParcelResponse.from(saved);
     }
@@ -164,11 +172,18 @@ public class ParcelService {
         );
         statusHistoryRepository.save(history);
 
+        eventPublisher.publishEvent(ParcelDomainEvent.statusChanged(saved, oldStatus, ParcelStatus.CANCELLED, reason, null));
+
         return ParcelResponse.from(saved);
     }
 
     @Transactional
     public ParcelResponse assignCourier(String id, String courierId, String assignedBy) {
+        return assignCourier(id, courierId, assignedBy, false);
+    }
+
+    @Transactional
+    public ParcelResponse assignCourier(String id, String courierId, String assignedBy, boolean allowReassignment) {
         Parcel parcel = parcelRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Parcel not found with id: " + id));
 
@@ -177,9 +192,12 @@ public class ParcelService {
                     "Cannot assign courier to parcel in status " + parcel.getStatus() + ". Parcel must be in CREATED status.");
         }
 
-        if (parcel.getCourierId() != null && !parcel.getCourierId().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Parcel has already been assigned to courier " + parcel.getCourierId());
+        String previousCourier = parcel.getCourierId();
+        if (previousCourier != null && !previousCourier.isBlank()) {
+            if (!allowReassignment) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Parcel has already been assigned to courier " + previousCourier);
+            }
         }
 
         parcel.setCourierId(courierId);
@@ -192,9 +210,11 @@ public class ParcelService {
                 ParcelStatus.CREATED,
                 ParcelStatus.CREATED,
                 assignedBy,
-                "Assigned to courier " + courierId
+                previousCourier != null ? "Reassigned to courier " + courierId + " from " + previousCourier : "Assigned to courier " + courierId
         );
         statusHistoryRepository.save(history);
+
+        eventPublisher.publishEvent(ParcelDomainEvent.assigned(saved, previousCourier));
 
         return ParcelResponse.from(saved);
     }
@@ -223,7 +243,9 @@ public class ParcelService {
         }
 
         // Re-queue rule per Decision 005: FAILED -> CREATED clears courier and increments attemptCount
+        String previousCourier = null;
         if (ParcelStateMachine.isRequeue(oldStatus, request.status())) {
+            previousCourier = parcel.getCourierId();
             parcel.setCourierId(null);
             parcel.setAttemptCount(parcel.getAttemptCount() + 1);
             parcel.setFailureReason(null);
@@ -253,6 +275,8 @@ public class ParcelService {
                 request.reason()
         );
         statusHistoryRepository.save(history);
+
+        eventPublisher.publishEvent(ParcelDomainEvent.statusChanged(saved, oldStatus, request.status(), request.reason(), previousCourier));
 
         return ParcelResponse.from(saved);
     }
