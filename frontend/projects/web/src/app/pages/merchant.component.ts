@@ -11,13 +11,14 @@ import {
   WebhookSettings,
 } from './merchant/merchant.model';
 import { MerchantService } from './merchant/merchant.service';
+import { MerchantCredentialsComponent } from './merchant/merchant-credentials.component';
 
-type ActiveTab = 'orders' | 'settings' | 'deliveries';
+type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
 
 @Component({
   selector: 'app-merchant',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MerchantCredentialsComponent],
   template: `
     <div class="max-w-7xl mx-auto space-y-6">
       <!-- Portal Header -->
@@ -35,7 +36,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries';
         </div>
 
         <!-- Navigation Tabs -->
-        <div class="inline-flex rounded-lg bg-slate-100 p-1 border border-slate-200 text-sm font-medium">
+        <div class="inline-flex flex-wrap rounded-lg bg-slate-100 p-1 border border-slate-200 text-sm font-medium">
           <button
             type="button"
             (click)="activeTab.set('orders')"
@@ -68,6 +69,17 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries';
             class="px-4 py-2 rounded-md transition-colors"
           >
             📜 Delivery Logs
+          </button>
+          <button
+            type="button"
+            (click)="activeTab.set('credentials')"
+            [class.bg-white]="activeTab() === 'credentials'"
+            [class.shadow-sm]="activeTab() === 'credentials'"
+            [class.text-indigo-600]="activeTab() === 'credentials'"
+            [class.text-slate-600]="activeTab() !== 'credentials'"
+            class="px-4 py-2 rounded-md transition-colors"
+          >
+            🔑 API Credentials
           </button>
         </div>
       </div>
@@ -501,6 +513,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries';
           </div>
         </div>
       </div>
+      <app-merchant-credentials *ngIf="activeTab() === 'credentials'"></app-merchant-credentials>
     </div>
   `,
 })
