@@ -2,6 +2,8 @@ package com.swiftdrop.operations.dispatch;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.common.EventEnvelope;
+import com.swiftdrop.operations.courier.profile.CourierProfileEntity;
+import com.swiftdrop.operations.courier.profile.CourierProfileRepository;
 import com.swiftdrop.operations.dispatch.client.*;
 import com.swiftdrop.operations.dispatch.dto.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,7 +48,7 @@ class DispatchIntegrationTest {
     private ProcessedEventRepository processedEventRepository;
 
     @Autowired
-    private FakeCourierDirectory fakeCourierDirectory;
+    private CourierProfileRepository courierProfileRepository;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -61,7 +63,15 @@ class DispatchIntegrationTest {
     void cleanUp() {
         processedEventRepository.deleteAll();
         courierWorkloadRepository.deleteAll();
-        fakeCourierDirectory.updateAvailability(COURIER_ID, true);
+        courierProfileRepository.deleteAll();
+        courierProfileRepository.save(CourierProfileEntity.builder()
+            .userId(COURIER_ID)
+            .name("Saman Perera")
+            .phone("+94771234567")
+            .zone("ZONE-COLOMBO-NORTH")
+            .availability(true)
+            .vehicleType("MOTORCYCLE")
+            .build());
     }
 
     @Test
