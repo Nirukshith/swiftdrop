@@ -43,6 +43,16 @@ export const routes: Routes = [
       import('./pages/courier.component').then((m) => m.CourierComponent),
   },
   {
+    path: 'courier/profile',
+    canActivate: [roleGuard(['COURIER'])],
+    loadComponent: () => import('./pages/courier-profile.component').then((m) => m.CourierProfileComponent),
+  },
+  {
+    path: 'courier/summary',
+    canActivate: [roleGuard(['COURIER'])],
+    loadComponent: () => import('./pages/courier-summary.component').then((m) => m.CourierSummaryComponent),
+  },
+  {
     path: 'admin',
     canActivate: [roleGuard(['ADMIN'])],
     loadComponent: () =>

@@ -93,4 +93,24 @@ describe('CourierService', () => {
         done();
       });
   });
+
+  it('should produce a contract-shaped daily summary', () => {
+    const summary = service.getDailySummary('2026-10-28');
+    expect(summary.date).toBe('2026-10-28');
+    expect(summary.totalDeliveries).toBe(summary.deliveries.length);
+    expect(summary.pendingCount + summary.completedCount).toBe(summary.totalDeliveries);
+    expect(summary.deliveries[0]).toEqual(expect.objectContaining({
+      parcelId: expect.any(String),
+      trackingNumber: expect.any(String),
+      dropoffAddress: expect.any(String),
+      attemptCount: expect.any(Number),
+      sequenceOrder: expect.any(Number),
+    }));
+  });
+
+  it('should toggle courier availability', () => {
+    const initial = service.profile().availability;
+    service.toggleAvailability();
+    expect(service.profile().availability).toBe(!initial);
+  });
 });
