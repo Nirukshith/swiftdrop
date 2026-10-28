@@ -108,6 +108,17 @@ jobs:
             target/site/jacoco-aggregate
           if-no-files-found: warn
 
+  docker-images:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    needs: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build core Docker images without pushing
+        run: docker compose -f deploy/docker-compose.yml --profile core build
+
   frontend:
     name: Frontend CI
     runs-on: ubuntu-latest
