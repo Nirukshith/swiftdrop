@@ -108,19 +108,25 @@ paths:
         derived from the current event-carried state: reassignment removes work
         from the previous courier, FAILED removes active workload, and
         re-queue clears the courier and returns the parcel to CREATED with an
-        incremented attempt count. Exact response fields remain an open
-        contract question.
+        incremented attempt count. Reassigned and re-queued parcels therefore
+        do not appear in the courier's active daily list.
       parameters:
         - name: date
           in: query
           required: false
-          description: Summary date; when omitted, the service uses the current local business date.
+          description: >-
+            Summary business date in Asia/Colombo; when omitted, the service
+            uses LocalDate.now(ZoneId.of('Asia/Colombo')).
           schema:
             type: string
             format: date
       responses:
         '200':
-          description: Daily summary retrieved. Response shape is intentionally pending team agreement.
+          description: Daily summary retrieved. Timestamp properties are UTC ISO-8601 instants.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailySummaryResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -146,7 +152,26 @@ paths:
             type: string
       responses:
         '200':
-          description: Delivery proof retrieved; representation is pending team agreement.
+          description: Binary delivery proof image retrieved.
+          headers:
+            Content-Disposition:
+              description: Inline content disposition for embedding in an image element.
+              schema:
+                type: string
+                example: inline
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -210,24 +235,125 @@ components:
           description: Desired availability state.
 
     FailedDeliveryRequest:
+      oneOf:
+        - $ref: '#/components/schemas/StandardFailedDeliveryRequest'
+        - $ref: '#/components/schemas/OtherFailedDeliveryRequest'
+      discriminator:
+        propertyName: reasonCode
+
+    StandardFailedDeliveryRequest:
       type: object
       required:
         - reasonCode
       properties:
         reasonCode:
-          $ref: '#/components/schemas/FailureReasonCode'
+          allOf:
+            - $ref: '#/components/schemas/FailureReasonCode'
+            - not:
+                enum:
+                  - OTHER
         note:
           type: string
           description: Optional courier note explaining the failed attempt.
 
+    OtherFailedDeliveryRequest:
+      type: object
+      required:
+        - reasonCode
+        - note
+      properties:
+        reasonCode:
+          type: string
+          enum:
+            - OTHER
+        note:
+          type: string
+          minLength: 1
+          description: Required explanation when reasonCode is OTHER.
+
     FailureReasonCode:
       type: string
-      description: Fixed failed-delivery reason codes named by the week-one plan.
+      description: Agreed fixed failed-delivery reason codes.
       enum:
-        - RECIPIENT_ABSENT
-        - WRONG_ADDRESS
-        - RECIPIENT_REFUSED
-      x-open-question: Confirm whether the team requires an additional fixed reason code.
+        - RECIPIENT_UNAVAILABLE
+        - INCORRECT_ADDRESS
+        - CUSTOMER_REJECTED
+        - ACCESS_RESTRICTED
+        - OTHER
+
+    DailySummaryResponse:
+      type: object
+      required:
+        - date
+        - totalDeliveries
+        - pendingCount
+        - completedCount
+        - deliveries
+      properties:
+        date:
+          type: string
+          format: date
+          description: Business date in Asia/Colombo.
+          example: '2026-10-28'
+        totalDeliveries:
+          type: integer
+          minimum: 0
+        pendingCount:
+          type: integer
+          minimum: 0
+          description: Count in CREATED, PICKED_UP, IN_TRANSIT, or OUT_FOR_DELIVERY.
+        completedCount:
+          type: integer
+          minimum: 0
+          description: Count in DELIVERED, FAILED, or CANCELLED.
+        deliveries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CourierDeliveryCard'
+
+    CourierDeliveryCard:
+      type: object
+      required:
+        - parcelId
+        - trackingNumber
+        - status
+        - dropoffAddress
+        - attemptCount
+        - sequenceOrder
+      properties:
+        parcelId:
+          type: string
+          format: uuid
+        trackingNumber:
+          type: string
+        status:
+          type: string
+        recipientName:
+          type: string
+        recipientPhone:
+          type: string
+          nullable: true
+        dropoffAddress:
+          type: string
+        googleMapsUrl:
+          type: string
+          format: uri
+          nullable: true
+        weightKg:
+          type: number
+          format: double
+          minimum: 0
+        attemptCount:
+          type: integer
+          minimum: 0
+        sequenceOrder:
+          type: integer
+          minimum: 0
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Completion timestamp represented as a UTC ISO-8601 instant.
 
   responses:
     BadRequest:
