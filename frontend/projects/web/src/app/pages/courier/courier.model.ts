@@ -5,6 +5,44 @@ export type DeliveryStatus =
   | 'DELIVERED'
   | 'FAILED_DELIVERY';
 
+export type FailureReasonCode =
+  | 'RECIPIENT_UNAVAILABLE'
+  | 'INCORRECT_ADDRESS'
+  | 'CUSTOMER_REJECTED'
+  | 'ACCESS_RESTRICTED'
+  | 'OTHER';
+
+export interface CourierProfile {
+  userId: string;
+  name: string;
+  phone: string | null;
+  zone: string | null;
+  availability: boolean;
+  vehicle: string | null;
+}
+
+export interface CourierDeliveryCard {
+  parcelId: string;
+  trackingNumber: string;
+  status: string;
+  recipientName: string;
+  recipientPhone: string | null;
+  dropoffAddress: string;
+  googleMapsUrl?: string | null;
+  weightKg: number;
+  attemptCount: number;
+  sequenceOrder: number;
+  completedAt?: string | null;
+}
+
+export interface CourierDailySummary {
+  date: string;
+  totalDeliveries: number;
+  pendingCount: number;
+  completedCount: number;
+  deliveries: CourierDeliveryCard[];
+}
+
 export interface CourierAddress {
   line1: string;
   line2?: string | null;

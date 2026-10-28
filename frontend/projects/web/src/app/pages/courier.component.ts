@@ -531,19 +531,17 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                 [(ngModel)]="failureReasonCategory"
                 class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
               >
-                <option value="Recipient unavailable / phone unreachable">
-                  Recipient unavailable / phone unreachable
-                </option>
-                <option value="Premises closed / gate locked">Premises closed / gate locked</option>
-                <option value="Incorrect or incomplete address">Incorrect or incomplete address</option>
-                <option value="Customer refused delivery">Customer refused delivery</option>
-                <option value="Other">Other</option>
+                <option value="RECIPIENT_UNAVAILABLE">Recipient unavailable</option>
+                <option value="INCORRECT_ADDRESS">Incorrect address</option>
+                <option value="CUSTOMER_REJECTED">Customer rejected</option>
+                <option value="ACCESS_RESTRICTED">Access restricted</option>
+                <option value="OTHER">Other</option>
               </select>
             </div>
 
             <div>
               <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
-                Additional Notes
+                Additional Notes {{ failureReasonCategory === 'OTHER' ? '*' : '' }}
               </label>
               <textarea
                 id="failure-notes"
@@ -568,6 +566,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               type="button"
               id="submit-fail-btn"
               (click)="submitFailure()"
+              [disabled]="failureReasonCategory === 'OTHER' && !failureNotes.trim()"
               class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm shadow-rose-200 transition-all"
             >
               Save Failed Attempt
@@ -596,7 +595,7 @@ export class CourierComponent {
   isSubmittingProof = false;
 
   selectedDeliveryForFailure = signal<CourierDelivery | null>(null);
-  failureReasonCategory = 'Recipient unavailable / phone unreachable';
+  failureReasonCategory = 'RECIPIENT_UNAVAILABLE';
   failureNotes = '';
 
   // Filtered list
@@ -768,6 +767,11 @@ export class CourierComponent {
   submitFailure(): void {
     const delivery = this.selectedDeliveryForFailure();
     if (!delivery) return;
+
+    if (this.failureReasonCategory === 'OTHER' && !this.failureNotes.trim()) {
+      this.showToast('Notes are required when the reason is Other.');
+      return;
+    }
 
     const fullReason = this.failureNotes.trim()
       ? `${this.failureReasonCategory}: ${this.failureNotes.trim()}`

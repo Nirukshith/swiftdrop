@@ -7,6 +7,8 @@ import {
   DeliveryStatus,
   ProofUploadPayload,
   StatusUpdateRequest,
+  CourierDailySummary,
+  CourierProfile,
 } from './courier.model';
 
 @Injectable({
@@ -178,6 +180,17 @@ export class CourierService {
     },
   ]);
 
+  private readonly profileSignal = signal<CourierProfile>({
+    userId: this.defaultCourierId,
+    name: 'Harsha Kumarasamy',
+    phone: '+94 77 123 4567',
+    zone: 'Colombo Central Zone',
+    availability: true,
+    vehicle: 'MOTORBIKE',
+  });
+
+  readonly profile = this.profileSignal.asReadonly();
+
   // Readonly signal for public view
   readonly deliveries = this.deliveriesSignal.asReadonly();
 
@@ -200,6 +213,36 @@ export class CourierService {
 
   getDeliveryById(parcelId: string): CourierDelivery | undefined {
     return this.deliveriesSignal().find((d) => d.parcelId === parcelId);
+  }
+
+  getDailySummary(date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date())): CourierDailySummary {
+    const deliveries = this.deliveriesSignal().map((delivery, index) => ({
+      parcelId: delivery.parcelId,
+      trackingNumber: delivery.trackingNumber,
+      status: delivery.status,
+      recipientName: delivery.recipientName,
+      recipientPhone: delivery.recipientPhone,
+      dropoffAddress: [delivery.recipientAddress.line1, delivery.recipientAddress.city].join(', '),
+      googleMapsUrl: null,
+      weightKg: delivery.weightKg,
+      attemptCount: 1,
+      sequenceOrder: index + 1,
+      completedAt: delivery.status === 'DELIVERED' ? delivery.updatedAt : null,
+    }));
+    const pendingStatuses = new Set(['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT']);
+    const completedStatuses = new Set(['DELIVERED', 'FAILED_DELIVERY']);
+    return {
+      date,
+      totalDeliveries: deliveries.length,
+      pendingCount: deliveries.filter((d) => pendingStatuses.has(d.status)).length,
+      completedCount: deliveries.filter((d) => completedStatuses.has(d.status)).length,
+      deliveries,
+    };
+  }
+
+  toggleAvailability(): CourierProfile {
+    this.profileSignal.update((profile) => ({ ...profile, availability: !profile.availability }));
+    return this.profileSignal();
   }
 
   updateStatus(parcelId: string, req: StatusUpdateRequest): Observable<CourierDelivery> {
