@@ -130,9 +130,12 @@ paths:
       tags: [Customer]
       summary: Parcel status history (timeline)
       description: |
-        Full status timeline of one parcel, oldest first, built from
-        `parcel.status-changed.v1` events plus the creation time. Used by the
+        Full status timeline of one parcel, oldest first, read from M1's
+        `status_history` table through `ParcelQueryService`. Used by the
         parcel detail page before it opens the live stream.
+
+        Until M1's event publishing stores the ADR 005 `sequence` per status
+        change (week 3), `entries[].sequence` is `null`; order by `occurredAt`.
 
         Access follows the same rule as M1's `GET /api/v1/parcels/{id}`:
         owner customer, assigned courier, DISPATCHER or ADMIN.
@@ -478,13 +481,19 @@ components:
 
     ParcelHistoryEntry:
       type: object
-      description: One status change, taken from the `parcel.status-changed.v1` envelope.
+      description: One status change from M1's `status_history`.
       required: [sequence, toStatus, occurredAt]
       properties:
         sequence:
           type: integer
           format: int64
-          example: 4
+          nullable: true
+          description: |
+            ADR 005 per-parcel sequence of this change. Temporarily `null` because
+            `status_history` has no sequence column yet; it becomes non-null again
+            when M1's outbox fills it (week 3). The key stays required, so clients
+            always receive it (as a number or null).
+          example: null
         fromStatus:
           allOf:
             - $ref: '#/components/schemas/ParcelStatus'
