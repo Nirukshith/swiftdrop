@@ -98,26 +98,43 @@ their own repositories. The directory must return profile data and
 availability without exposing persistence entities or allowing dispatch code to
 change parcel status.
 
-## Open questions for M4, M8, and M10
+## Final agreed coordination contract
 
-These details are not specified by the SRS or project plan and remain
-deliberately unresolved for team coordination:
+M4 and M8 confirmed the following implementation boundary for M9:
 
-- Final Java method signatures, filter/pagination rules, DTO names, and error
-  semantics for `CourierDirectory`.
-- The complete controlled vocabulary for failure reason codes beyond the three
-  named in the plan.
-- Exact request/response representation for the daily summary, including date
-  timezone and whether it returns delivery IDs or expanded delivery records.
-- Exact proof response shape, photo streaming/download behavior, and storage
-  authorization rules.
-- Whether availability is represented as `available` or a richer state in the
-  final shared DTO.
-- The post-commit event publication mechanism:
-  `@TransactionalEventListener(phase = AFTER_COMMIT)` versus a transactional
-  outbox. This is owned by M1/the team and is not selected or implemented by
-  this PR.
+- `CourierDirectory` is the in-process Spring bean contract in
+  `com.swiftdrop.operations.courier.profile`:
 
-M4, M8, and M10 should resolve the relevant questions before implementation
-depends on the contract. This PR intentionally avoids adding undocumented
-fields or behavior.
+  ```java
+  public interface CourierDirectory {
+      Optional<CourierSummary> findCourierById(String courierId);
+      List<CourierSummary> listCouriersByZone(String zone, boolean availableOnly);
+      List<CourierSummary> listAllCouriers();
+      boolean isCourierAvailable(String courierId);
+      void updateAvailability(String courierId, boolean available);
+  }
+
+  public record CourierSummary(
+      String courierId,
+      String name,
+      String phoneNumber,
+      String zone,
+      boolean available,
+      String vehicleType
+  ) {}
+  ```
+
+- The daily summary uses the Asia/Colombo business date. An omitted `date`
+  query parameter defaults to `LocalDate.now(ZoneId.of("Asia/Colombo"))`.
+  Timestamp properties are UTC ISO-8601 `Instant` values. Its response fields
+  and delivery-card contents are defined in the OpenAPI contract. Reassigned
+  and re-queued parcels have no current courier assignment and are excluded
+  from the active daily list.
+- Failure reasons are `RECIPIENT_UNAVAILABLE`, `INCORRECT_ADDRESS`,
+  `CUSTOMER_REJECTED`, `ACCESS_RESTRICTED`, and `OTHER`. `OTHER` requires a
+  non-empty courier note.
+- Delivery proof retrieval returns an inline binary image stream with one of
+  the supported media types: `image/jpeg`, `image/png`, or `image/webp`.
+- M8 owns V2 and M4 owns V3. M9 reserves V4 for courier-profile tables and
+  reuses M4's V3 `processed_event` table for `user.registered.v1` idempotency;
+  M9 must not recreate that table.
