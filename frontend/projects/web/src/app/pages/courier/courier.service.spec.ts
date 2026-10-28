@@ -1,20 +1,10 @@
-import { TestBed } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { CourierService } from './courier.service';
 
 describe('CourierService', () => {
   let service: CourierService;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [
-        CourierService,
-        provideHttpClient(),
-        provideHttpClientTesting(),
-      ],
-    });
-    service = TestBed.inject(CourierService);
+    service = new CourierService();
   });
 
   it('should be created and have initial deliveries', () => {

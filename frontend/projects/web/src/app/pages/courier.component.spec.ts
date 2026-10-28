@@ -1,6 +1,4 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { CourierComponent } from './courier.component';
 import { CourierService } from './courier/courier.service';
 
@@ -12,11 +10,7 @@ describe('CourierComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [CourierComponent],
-      providers: [
-        CourierService,
-        provideHttpClient(),
-        provideHttpClientTesting(),
-      ],
+      providers: [CourierService],
     }).compileComponents();
 
     fixture = TestBed.createComponent(CourierComponent);

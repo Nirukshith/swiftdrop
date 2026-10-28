@@ -1,7 +1,5 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Injectable, computed, signal } from '@angular/core';
 import { Observable, of } from 'rxjs';
-import { catchError, map, tap } from 'rxjs/operators';
 import {
   CourierDelivery,
   CourierStats,
@@ -15,7 +13,6 @@ import {
   providedIn: 'root',
 })
 export class CourierService {
-  private http = inject(HttpClient);
   private readonly defaultCourierId = 'courier-harsha-01';
 
   // State
