@@ -47,6 +47,17 @@ export const routes: Routes = [
       import('./pages/admin.component').then((m) => m.AdminComponent),
   },
   {
+    path: 'dispatch',
+    canActivate: [roleGuard(['DISPATCHER', 'ADMIN'])],
+    loadComponent: () =>
+      import('./pages/dispatch/dispatch.component').then((m) => m.DispatchComponent),
+  },
+  {
+    path: 'dispatcher',
+    redirectTo: 'dispatch',
+    pathMatch: 'full',
+  },
+  {
     path: 'track/:trackingNo',
     loadComponent: () =>
       import('./pages/track.component').then((m) => m.TrackComponent),

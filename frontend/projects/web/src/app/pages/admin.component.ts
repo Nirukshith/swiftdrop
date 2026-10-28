@@ -1,13 +1,12 @@
 import { Component } from '@angular/core';
+import { DispatchComponent } from './dispatch/dispatch.component';
 
 @Component({
   selector: 'app-admin',
   standalone: true,
+  imports: [DispatchComponent],
   template: `
-    <div class="p-8">
-      <h1 class="text-2xl font-bold">Admin Portal</h1>
-      <p class="text-slate-600 mt-2">Welcome to the Admin Portal.</p>
-    </div>
+    <app-dispatch></app-dispatch>
   `,
 })
 export class AdminComponent {}
