@@ -36,12 +36,16 @@ public class CourierExecutionService {
     public CourierExecutionService(
         ParcelServiceClient parcelServiceClient,
         DeliveryProofRepository deliveryProofRepository,
-        @Value("${swiftdrop.proofs.storage-dir:/data/proofs}") String storageDir,
+        @Value("${swiftdrop.proofs.storage-dir:}") String storageDir,
         @Value("${swiftdrop.proofs.max-size-bytes:5242880}") long maxSizeBytes
     ) {
         this.parcelServiceClient = parcelServiceClient;
         this.deliveryProofRepository = deliveryProofRepository;
-        this.storageDir = storageDir;
+        if (storageDir == null || storageDir.isBlank() || "/data/proofs".equals(storageDir)) {
+            this.storageDir = Paths.get(System.getProperty("java.io.tmpdir"), "swiftdrop", "proofs").toString();
+        } else {
+            this.storageDir = storageDir;
+        }
         this.maxSizeBytes = maxSizeBytes > 0 ? maxSizeBytes : DEFAULT_MAX_SIZE_BYTES;
     }
 
@@ -273,8 +277,17 @@ public class CourierExecutionService {
             Path targetFile = targetDir.resolve(filename);
             Files.write(targetFile, bytes);
         } catch (IOException e) {
-            log.error("Failed to write proof photo to disk at directory: {}", storageDir, e);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store proof file on disk", e);
+            log.warn("Failed to write proof photo to configured storageDir: {}, falling back to temp dir", storageDir, e);
+            try {
+                Path fallbackDir = Paths.get(System.getProperty("java.io.tmpdir"), "swiftdrop", "proofs");
+                Files.createDirectories(fallbackDir);
+                Path targetFile = fallbackDir.resolve(filename);
+                Files.write(targetFile, bytes);
+                targetDir = fallbackDir;
+            } catch (IOException ex) {
+                log.error("Failed to write proof photo to fallback temp dir as well", ex);
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store proof file on disk", ex);
+            }
         }
 
         UUID proofId = UUID.randomUUID();
