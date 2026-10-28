@@ -28,6 +28,8 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/customer.component').then((m) => m.CustomerComponent),
   },
+  { path: 'customer/dashboard', canActivate: [roleGuard(['CUSTOMER'])], loadComponent: () => import('./pages/customer-history/customer-dashboard.component').then((m) => m.CustomerDashboardComponent) },
+  { path: 'customer/parcels', canActivate: [roleGuard(['CUSTOMER'])], loadComponent: () => import('./pages/customer-history/customer-parcels.component').then((m) => m.CustomerParcelsComponent) },
   {
     path: 'merchant',
     canActivate: [roleGuard(['MERCHANT'])],
