@@ -34,7 +34,7 @@
 
   @if (activeRole() === 'DISPATCHER') {
     <div class="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
-      <lib-ui title="Delivery zones" id="zones">
+      <ui-card title="Delivery zones" id="zones">
         <div class="space-y-3">
           @for (zone of zones(); track zone.name) {
             <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-4">
@@ -51,9 +51,9 @@
             </div>
           }
         </div>
-      </lib-ui>
+      </ui-card>
 
-      <lib-ui title="Add zone">
+      <ui-card title="Add zone">
         <form class="space-y-4" [formGroup]="zoneForm" (ngSubmit)="addZone()">
           <label class="block text-sm font-medium text-slate-700">
             Zone name
@@ -78,11 +78,11 @@
             Add zone
           </button>
         </form>
-      </lib-ui>
+      </ui-card>
     </div>
 
     <div id="pricing" class="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
-      <lib-ui title="Pricing rules">
+      <ui-card title="Pricing rules">
         <div class="space-y-3">
           @for (rule of pricingRules(); track rule.key) {
             <div class="rounded-lg bg-slate-50 p-4">
@@ -96,9 +96,9 @@
             </div>
           }
         </div>
-      </lib-ui>
+      </ui-card>
 
-      <lib-ui title="Add pricing rule">
+      <ui-card title="Add pricing rule">
         <form class="space-y-4" [formGroup]="pricingForm" (ngSubmit)="addPricingRule()">
           <label class="block text-sm font-medium text-slate-700">
             Rule type
@@ -129,11 +129,11 @@
             Add pricing rule
           </button>
         </form>
-      </lib-ui>
+      </ui-card>
     </div>
   } @else {
-    <lib-ui title="Administrator navigation">
+    <ui-card title="Administrator navigation">
       <p class="text-slate-600">Merchant approval and audit log pages will be added in their planned week.</p>
-    </lib-ui>
+    </ui-card>
   }
 </div>

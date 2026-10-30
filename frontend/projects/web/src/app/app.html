@@ -1,10 +1,22 @@
 <main class="min-h-screen bg-slate-50 text-slate-900 p-6">
   <header class="mb-6 pb-4 border-b border-slate-200">
-    <h1 class="text-2xl font-bold text-slate-800">Hello, web</h1>
+    <div class="flex items-center justify-between">
+      <h1 class="text-2xl font-bold text-slate-800">Hello, web</h1>
+      <div class="flex items-center gap-4">
+        <app-notification-bell></app-notification-bell>
+        <nav class="flex gap-4 text-sm font-medium text-slate-600">
+          <a routerLink="/login" class="hover:text-indigo-600">Sign In</a>
+          <a routerLink="/register" class="hover:text-indigo-600">Register</a>
+          <a routerLink="/merchant-registration" class="hover:text-indigo-600">Merchant registration</a>
+        </nav>
+      </div>
+    </div>
     <nav class="flex gap-4 mt-3 text-sm font-medium text-indigo-600">
       <a routerLink="/customer" class="hover:underline">Customer</a>
       <a routerLink="/merchant" class="hover:underline">Merchant</a>
       <a routerLink="/courier" class="hover:underline">Courier</a>
+      <a routerLink="/courier/profile" class="hover:underline">Courier profile</a>
+      <a routerLink="/courier/summary" class="hover:underline">Daily summary</a>
       <a routerLink="/admin" class="hover:underline">Admin</a>
       <a routerLink="/track/SWIFT-12345" class="hover:underline">Track Sample</a>
     </nav>

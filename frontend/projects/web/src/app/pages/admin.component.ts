@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, signal } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Ui } from '../../../../ui/src/lib/ui';
+import { CardComponent } from '../../../../ui/src/lib/card/card.component';
 
 type AdminRole = 'ADMIN' | 'DISPATCHER';
 
@@ -20,11 +20,10 @@ interface PricingRule {
   chargeLkr: number;
   active: boolean;
 }
-
 @Component({
   selector: 'app-admin',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, Ui],
+  imports: [CommonModule, ReactiveFormsModule, CardComponent],
   templateUrl: './admin.component.html',
 })
 export class AdminComponent {

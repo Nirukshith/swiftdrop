@@ -2,7 +2,8 @@
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
   "cli": {
-    "packageManager": "npm"
+    "packageManager": "npm",
+    "analytics": false
   },
   "newProjectRoot": "projects",
   "projects": {
@@ -46,6 +47,31 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "mock": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "fileReplacements": [
+                {
+                  "replace": "projects/web/src/environments/environment.ts",
+                  "with": "projects/web/src/environments/environment.mock.ts"
+                },
+                {
+                  "replace": "projects/web/src/mocks/start-mocks.ts",
+                  "with": "projects/web/src/mocks/start-mocks.mock.ts"
+                }
+              ],
+              "assets": [
+                {
+                  "glob": "**/*",
+                  "input": "projects/web/public"
+                },
+                {
+                  "glob": "mockServiceWorker.js",
+                  "input": "projects/web/src/mocks/public"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -61,6 +87,9 @@
             },
             "development": {
               "buildTarget": "web:build:development"
+            },
+            "mock": {
+              "buildTarget": "web:build:mock"
             }
           },
           "defaultConfiguration": "development"
