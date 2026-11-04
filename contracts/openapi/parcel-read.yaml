@@ -121,6 +121,20 @@ paths:
           $ref: '#/components/responses/TrackingNotFound'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: |
+            This parcel-service instance already holds its maximum number of open
+            streams (500, docs/tracking-design.md section 3.4). Retry later; the
+            public lookup keeps working.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "SERVICE_UNAVAILABLE"
+                message: "Live tracking is busy, please retry later"
+                correlationId: "3b8f2c1d-7e4a-4b9c-a1d2-6f5e4c3b2a10"
+                timestamp: "2026-10-26T12:00:00Z"
 
   # =========================================================================
   # Authenticated parcel views (M2 sub-resources of M1's /api/v1/parcels/{id})

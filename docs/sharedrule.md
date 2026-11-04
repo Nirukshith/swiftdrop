@@ -17,7 +17,7 @@
   * `integration-service` (Port `8084`, Database: `integration_db`): Notification bell & transactional email/SMS, merchant onboarding & orders API, webhooks, and AI delivery assistant / MCP tools.
 * **Shared Library:**
   * `common` (`common/`): Shared JAR containing domain roles, standard error responses, Kafka event envelopes, correlation ID filters, and security context utilities.
-* **Frontend Workspace (Angular 19, Node 22):**
+* **Frontend Workspace (Angular 21, Node 22):**
   * `frontend/projects/web`: Main web application containing customer, merchant, courier, dispatcher, and admin portals.
   * `frontend/projects/ui`: Shared design system and reusable UI kit (Tailwind tokens, inputs, buttons, cards, status badges, dialogs, pagination).
   * `frontend/projects/shared-auth`: Reusable authentication components, auth guards, interceptors, and JWT session service.
@@ -82,7 +82,7 @@ Feature ownership is partitioned across 10 members (M1–M10) per [`docs/srs.md`
 | Member | Backend Service & Packages | Frontend Folders & Shared Slices | Primary Feature Focus |
 |---|---|---|---|
 | **M1** | `parcel-service`: `parcel`, `address`, `internal` | `frontend/projects/web/.../customer/` | Parcel creation wizard, addresses, fee preview, core domain |
-| **M2** | `parcel-service`: `tracking`, `receipt` | `frontend/projects/web/.../customer-history/` | Live parcel tracking (SSE), delivery history, PDF receipts |
+| **M2** | `parcel-service`: `tracking`, `receipt` | `frontend/projects/web/.../customer-history/`<br>`tracking/`<br>`track.component.ts` (public track page) | Live parcel tracking (SSE), delivery history, PDF receipts |
 | **M3** | `integration-service`: `notification`, `assistant`<br>`auth-service`: `reset` | `frontend/projects/web/.../notification/` | In-app notification bell, transactional alerts, AI chat, password reset |
 | **M4** | `operations-service`: `dispatch`<br>`auth-service`: `admin` | `frontend/projects/web/.../dispatch/` (queue, workload)<br>`admin/` (users) | Dispatch unassigned queue, courier assignment, admin staff management |
 | **M5** | `operations-service`: `zones`, `pricing`, `reports` | `frontend/projects/web/.../dispatch/` (zones, pricing)<br>`admin/` (reports) | Delivery zones, dynamic pricing formula, reporting dashboards |
@@ -103,7 +103,7 @@ Feature ownership is partitioned across 10 members (M1–M10) per [`docs/srs.md`
 
 1. **Language & Framework Versions:**
    * **Backend:** Java 21 LTS with Spring Boot 3.4.3 (managed via Maven parent POM).
-   * **Frontend:** TypeScript with Angular 19 (managed via `.nvmrc` Node 22).
+   * **Frontend:** TypeScript with Angular 21 (managed via `.nvmrc` Node 22).
 2. **Architecture:** Maintain layered separation: `Controller` $\rightarrow$ `Service` $\rightarrow$ `Repository` $\rightarrow$ `Entity`/`DTO`.
 3. **Public API Exports:** Always import UI components from the public `'ui'` library entry point (`import { ButtonComponent } from 'ui'`). Never deep-import from `projects/ui/src/lib/...`.
 4. **Clean Code & SOLID:**
