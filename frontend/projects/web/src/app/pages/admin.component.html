@@ -27,6 +27,7 @@
       <a class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700" href="#pricing">Pricing rules</a>
     }
     @if (activeRole() === 'ADMIN') {
+      <a routerLink="/admin/users" id="admin-staff-management-link" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:text-indigo-600">Staff management</a>
       <span class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">Merchant approval</span>
       <span class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">Audit log</span>
     }
@@ -133,7 +134,14 @@
     </div>
   } @else {
     <ui-card title="Administrator navigation">
-      <p class="text-slate-600">Merchant approval and audit log pages will be added in their planned week.</p>
+      <div class="space-y-3">
+        <p class="text-slate-600">Merchant approval and audit log pages will be added in their planned week.</p>
+        <div>
+          <a routerLink="/admin/users" id="admin-card-staff-link" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition-colors">
+            <span>Manage Staff Accounts →</span>
+          </a>
+        </div>
+      </div>
     </ui-card>
   }
 </div>

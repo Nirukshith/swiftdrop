@@ -59,8 +59,14 @@ export const routes: Routes = [
       import('./pages/admin.component').then((m) => m.AdminComponent),
   },
   {
+    path: 'admin/users',
+    canActivate: [roleGuard(['ADMIN'])],
+    loadComponent: () =>
+      import('./pages/admin/admin-users.component').then((m) => m.AdminUsersComponent),
+  },
+  {
     path: 'dispatch',
-    canActivate: [roleGuard(['DISPATCHER', 'ADMIN'])],
+    canActivate: [roleGuard(['DISPATCHER'])],
     loadComponent: () =>
       import('./pages/dispatch/dispatch.component').then((m) => m.DispatchComponent),
   },

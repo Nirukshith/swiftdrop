@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { AuthService } from 'shared-auth';
 import { CardComponent } from '../../../../ui/src/lib/card/card.component';
 
 type AdminRole = 'ADMIN' | 'DISPATCHER';
@@ -23,11 +25,16 @@ interface PricingRule {
 @Component({
   selector: 'app-admin',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, CardComponent],
+  imports: [CommonModule, ReactiveFormsModule, CardComponent, RouterLink],
   templateUrl: './admin.component.html',
 })
 export class AdminComponent {
-  readonly activeRole = signal<AdminRole>('DISPATCHER');
+  private readonly authService = inject(AuthService, { optional: true });
+  readonly activeRole = signal<AdminRole>(
+    (this.authService?.userRole() === 'ADMIN' || this.authService?.userRole() === 'DISPATCHER')
+      ? (this.authService.userRole() as AdminRole)
+      : 'DISPATCHER'
+  );
   readonly districts = [
     'Colombo',
     'Gampaha',

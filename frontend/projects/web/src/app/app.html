@@ -4,7 +4,19 @@
       <h1 class="text-2xl font-bold text-slate-800">Hello, web</h1>
       <div class="flex items-center gap-4">
         <app-notification-bell></app-notification-bell>
-        <nav class="flex gap-4 text-sm font-medium text-slate-600">
+        <div *ngIf="authService.isAuthenticated()" class="flex items-center gap-2 text-xs">
+          <span class="px-2.5 py-1 rounded-full bg-slate-200 text-slate-800 font-bold">
+            Role: {{ authService.userRole() }}
+          </span>
+          <button
+            type="button"
+            (click)="authService.logout().subscribe()"
+            class="text-slate-500 hover:text-slate-800 underline"
+          >
+            Sign Out
+          </button>
+        </div>
+        <nav *ngIf="!authService.isAuthenticated()" class="flex gap-4 text-sm font-medium text-slate-600">
           <a routerLink="/login" class="hover:text-indigo-600">Sign In</a>
           <a routerLink="/register" class="hover:text-indigo-600">Register</a>
           <a routerLink="/merchant-registration" class="hover:text-indigo-600">Merchant registration</a>
@@ -18,6 +30,8 @@
       <a routerLink="/courier/profile" class="hover:underline">Courier profile</a>
       <a routerLink="/courier/summary" class="hover:underline">Daily summary</a>
       <a routerLink="/admin" class="hover:underline">Admin</a>
+      <a routerLink="/admin/users" class="hover:underline">Staff Management</a>
+      <a routerLink="/dispatch" class="hover:underline">Dispatch</a>
       <a routerLink="/track/SWIFT-12345" class="hover:underline">Track Sample</a>
     </nav>
   </header>

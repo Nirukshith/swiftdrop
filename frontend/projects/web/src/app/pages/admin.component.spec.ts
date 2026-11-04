@@ -1,4 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { provideHttpClient } from '@angular/common/http';
 import { AdminComponent } from './admin.component';
 
 describe('AdminComponent', () => {
@@ -8,6 +10,10 @@ describe('AdminComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AdminComponent],
+      providers: [
+        provideRouter([]),
+        provideHttpClient(),
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AdminComponent);
@@ -29,6 +35,7 @@ describe('AdminComponent', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.textContent).toContain('Merchant approval');
+    expect(element.querySelector('#admin-staff-management-link')).toBeTruthy();
     expect(element.textContent).not.toContain('Add zone');
   });
 });
