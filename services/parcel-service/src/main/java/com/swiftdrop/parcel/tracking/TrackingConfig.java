@@ -19,7 +19,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * and the per-IP rate limit filter. Kept here so the parcel package's SecurityConfig is untouched.
  */
 @Configuration
-@EnableConfigurationProperties(TrackingRateLimitProperties.class)
+@EnableConfigurationProperties({TrackingRateLimitProperties.class, TrackingStreamProperties.class})
 class TrackingConfig {
 
     static final String PUBLIC_TRACKING = "/api/v1/tracking/**";
