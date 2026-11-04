@@ -1,5 +1,6 @@
 import {
   Component,
+  OnInit,
   computed,
   inject,
   signal,
@@ -13,14 +14,11 @@ import { NotificationItem } from '../notification.model';
 /**
  * NotificationBellComponent
  *
- * Displays a bell icon with an unread-count badge. Clicking the bell
- * opens a dropdown listing the most recent notifications. Individual
- * notifications can be marked as read; there is also a "Mark all read"
- * action.
- *
- * Data source: NotificationService (mock signals for Week 2).
- * Swap-in: when the backend is reachable, NotificationService methods
- * will call the integration-service API transparently.
+ * Displays a bell icon with a real-time unread-count badge. Clicking the bell
+ * opens an authenticated dropdown listing notifications from the backend API.
+ * Supports marking individual items as read, marking all as read, server-side
+ * pagination (load more), loading indicators, error retry, and keyboard/click-outside
+ * dismissals.
  */
 @Component({
   selector: 'app-notification-bell',
@@ -104,61 +102,85 @@ import { NotificationItem } from '../notification.model';
             }
           </div>
 
-          <!-- Notification list -->
-          <ul
-            class="overflow-y-auto max-h-[360px] divide-y divide-slate-100"
-            role="list"
-          >
-            @for (item of visibleItems(); track item.id) {
-              <li
-                [id]="'notification-item-' + item.id"
-                [class.bg-indigo-50]="!item.read"
-                class="flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer"
-                (click)="onMarkRead(item)"
-                role="listitem"
-                [attr.aria-label]="item.title + (item.read ? '' : ' (unread)')"
-              >
-                <!-- Status dot -->
-                <span
-                  class="mt-1.5 flex-shrink-0 w-2 h-2 rounded-full"
-                  [class.bg-indigo-500]="!item.read"
-                  [class.bg-transparent]="item.read"
-                  aria-hidden="true"
-                ></span>
-
-                <!-- Content -->
-                <div class="flex-1 min-w-0">
-                  <p
-                    class="text-sm font-medium text-slate-800 truncate"
-                    [class.font-semibold]="!item.read"
-                  >{{ item.title }}</p>
-                  <p class="text-xs text-slate-500 mt-0.5 line-clamp-2">{{ item.message }}</p>
-                  <p class="text-[11px] text-slate-400 mt-1">
-                    {{ item.createdAt | date:'d MMM y, h:mm a' }}
-                  </p>
-                </div>
-              </li>
-            } @empty {
-              <li class="flex flex-col items-center justify-center py-12 text-center px-4">
-                <span class="text-3xl mb-2" aria-hidden="true">🔔</span>
-                <p class="text-sm font-medium text-slate-500">You're all caught up!</p>
-                <p class="text-xs text-slate-400 mt-1">No notifications yet.</p>
-              </li>
-            }
-          </ul>
-
-          <!-- Footer -->
-          @if (hasMore()) {
-            <div class="border-t border-slate-100 px-4 py-2 text-center">
+          <!-- Loading state on initial fetch -->
+          @if (isLoading() && allItems().length === 0) {
+            <div id="notification-loading" class="flex flex-col items-center justify-center py-10 text-center px-4" role="status">
+              <span class="inline-block w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
+              <p class="mt-2 text-xs text-slate-500">Loading notifications…</p>
+            </div>
+          } @else if (error() && allItems().length === 0) {
+            <!-- Error state -->
+            <div id="notification-error" class="flex flex-col items-center justify-center py-8 text-center px-4" role="alert">
+              <span class="text-2xl mb-1 text-rose-500">⚠️</span>
+              <p class="text-sm font-medium text-slate-700">Failed to load notifications</p>
+              <p class="text-xs text-slate-500 mt-1">{{ error() }}</p>
               <button
                 type="button"
-                id="notification-load-more-btn"
-                (click)="loadMore()"
-                class="text-xs font-medium text-indigo-600 hover:underline focus:outline-none"
+                id="notification-retry-btn"
+                (click)="retry()"
+                class="mt-3 px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors focus:outline-none"
               >
-                Load more
+                Retry
               </button>
             </div>
+          } @else {
+            <!-- Notification list -->
+            <ul
+              class="overflow-y-auto max-h-[360px] divide-y divide-slate-100"
+              role="list"
+            >
+              @for (item of allItems(); track item.id) {
+                <li
+                  [id]="'notification-item-' + item.id"
+                  [class.bg-indigo-50]="!item.read"
+                  class="flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer"
+                  (click)="onMarkRead(item)"
+                  role="listitem"
+                  [attr.aria-label]="item.title + (item.read ? '' : ' (unread)')"
+                >
+                  <!-- Status dot -->
+                  <span
+                    class="mt-1.5 flex-shrink-0 w-2 h-2 rounded-full"
+                    [class.bg-indigo-500]="!item.read"
+                    [class.bg-transparent]="item.read"
+                    aria-hidden="true"
+                  ></span>
+
+                  <!-- Content -->
+                  <div class="flex-1 min-w-0">
+                    <p
+                      class="text-sm font-medium text-slate-800 truncate"
+                      [class.font-semibold]="!item.read"
+                    >{{ item.title }}</p>
+                    <p class="text-xs text-slate-500 mt-0.5 line-clamp-2">{{ item.message }}</p>
+                    <p class="text-[11px] text-slate-400 mt-1">
+                      {{ item.createdAt | date:'d MMM y, h:mm a' }}
+                    </p>
+                  </div>
+                </li>
+              } @empty {
+                <li id="notification-empty" class="flex flex-col items-center justify-center py-12 text-center px-4">
+                  <span class="text-3xl mb-2" aria-hidden="true">🔔</span>
+                  <p class="text-sm font-medium text-slate-500">You're all caught up!</p>
+                  <p class="text-xs text-slate-400 mt-1">No notifications yet.</p>
+                </li>
+              }
+            </ul>
+
+            <!-- Footer / Load more -->
+            @if (hasMore()) {
+              <div class="border-t border-slate-100 px-4 py-2 text-center">
+                <button
+                  type="button"
+                  id="notification-load-more-btn"
+                  (click)="loadMore()"
+                  [disabled]="isLoadingMore()"
+                  class="text-xs font-medium text-indigo-600 hover:underline focus:outline-none disabled:opacity-50"
+                >
+                  {{ isLoadingMore() ? 'Loading…' : 'Load more' }}
+                </button>
+              </div>
+            }
           }
         </div>
       }
@@ -174,15 +196,20 @@ import { NotificationItem } from '../notification.model';
     }
   `],
 })
-export class NotificationBellComponent {
+export class NotificationBellComponent implements OnInit {
   private readonly notificationService = inject(NotificationService);
   private readonly el = inject(ElementRef);
 
   protected readonly isOpen = signal(false);
   protected readonly pageSize = 5;
-  protected readonly visibleCount = signal(this.pageSize);
+  protected readonly currentPage = signal(0);
+  protected readonly isLoadingMore = signal(false);
 
   readonly unreadCount = this.notificationService.unreadCount;
+  readonly allItems = this.notificationService.notifications;
+  readonly totalElements = this.notificationService.totalElements;
+  readonly isLoading = this.notificationService.isLoading;
+  readonly error = this.notificationService.error;
 
   protected readonly ariaLabel = computed(() => {
     const count = this.unreadCount();
@@ -191,35 +218,48 @@ export class NotificationBellComponent {
       : 'Notifications — no unread messages';
   });
 
-  protected readonly allItems = this.notificationService.notifications;
-
-  protected readonly visibleItems = computed(() =>
-    this.allItems().slice(0, this.visibleCount())
-  );
-
   protected readonly hasMore = computed(
-    () => this.allItems().length > this.visibleCount()
+    () => this.allItems().length < this.totalElements()
   );
+
+  ngOnInit(): void {
+    this.notificationService.refreshUnreadCount().subscribe({ error: () => {} });
+  }
 
   toggleDropdown(): void {
-    this.isOpen.update((v) => !v);
-    if (this.isOpen()) {
-      this.visibleCount.set(this.pageSize); // reset paging on open
+    const nextState = !this.isOpen();
+    this.isOpen.set(nextState);
+    if (nextState) {
+      this.currentPage.set(0);
+      this.notificationService.loadNotifications(0, this.pageSize, false, false).subscribe({ error: () => {} });
     }
+  }
+
+  retry(): void {
+    this.notificationService.loadNotifications(this.currentPage(), this.pageSize, false, this.currentPage() > 0).subscribe({ error: () => {} });
+  }
+
+  loadMore(): void {
+    if (this.isLoadingMore()) return;
+    const nextPage = this.currentPage() + 1;
+    this.isLoadingMore.set(true);
+    this.notificationService.loadNotifications(nextPage, this.pageSize, false, true).subscribe({
+      next: () => {
+        this.currentPage.set(nextPage);
+        this.isLoadingMore.set(false);
+      },
+      error: () => this.isLoadingMore.set(false),
+    });
   }
 
   onMarkRead(item: NotificationItem): void {
     if (!item.read) {
-      this.notificationService.markAsRead(item.id).subscribe();
+      this.notificationService.markAsRead(item.id).subscribe({ error: () => {} });
     }
   }
 
   onMarkAllRead(): void {
-    this.notificationService.markAllAsRead().subscribe();
-  }
-
-  loadMore(): void {
-    this.visibleCount.update((c) => c + this.pageSize);
+    this.notificationService.markAllAsRead().subscribe({ error: () => {} });
   }
 
   /** Close dropdown when clicking outside the bell wrapper */
@@ -236,4 +276,3 @@ export class NotificationBellComponent {
     this.isOpen.set(false);
   }
 }
-
