@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { DispatchComponent } from './dispatch.component';
 import { DispatchService } from './dispatch.service';
@@ -11,7 +12,7 @@ describe('DispatchComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DispatchComponent, FormsModule],
-      providers: [DispatchService],
+      providers: [DispatchService, provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DispatchComponent);
@@ -20,11 +21,13 @@ describe('DispatchComponent', () => {
     fixture.detectChanges();
   });
 
-  it('should create and render navigation tabs', () => {
+  it('should create and render navigation tabs and links', () => {
     expect(component).toBeTruthy();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('#tab-queue-btn')).toBeTruthy();
     expect(compiled.querySelector('#tab-workload-btn')).toBeTruthy();
+    expect(compiled.querySelector('#tab-zones-link')).toBeTruthy();
+    expect(compiled.querySelector('#tab-pricing-link')).toBeTruthy();
   });
 
   it('should switch tabs when clicking tab buttons', () => {

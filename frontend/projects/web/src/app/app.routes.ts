@@ -71,6 +71,18 @@ export const routes: Routes = [
       import('./pages/dispatch/dispatch.component').then((m) => m.DispatchComponent),
   },
   {
+    path: 'dispatch/zones',
+    canActivate: [roleGuard(['DISPATCHER'])],
+    loadComponent: () =>
+      import('./pages/dispatch/dispatch-zones.component').then((m) => m.DispatchZonesComponent),
+  },
+  {
+    path: 'dispatch/pricing',
+    canActivate: [roleGuard(['DISPATCHER'])],
+    loadComponent: () =>
+      import('./pages/dispatch/dispatch-pricing.component').then((m) => m.DispatchPricingComponent),
+  },
+  {
     path: 'dispatcher',
     redirectTo: 'dispatch',
     pathMatch: 'full',

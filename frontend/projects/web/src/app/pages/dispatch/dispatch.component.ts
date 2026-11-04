@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import {
   CourierWorkload,
   UnassignedParcel,
@@ -12,7 +13,7 @@ type DispatchTab = 'queue' | 'workload';
 @Component({
   selector: 'app-dispatch',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="max-w-7xl mx-auto space-y-6 pb-16 px-4 sm:px-6">
       <!-- Portal Top Header -->
@@ -106,6 +107,24 @@ type DispatchTab = 'queue' | 'workload';
             <span>📊</span>
             <span>Workload Board</span>
           </button>
+
+          <a
+            routerLink="/dispatch/zones"
+            id="tab-zones-link"
+            class="px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-slate-600 hover:text-indigo-600"
+          >
+            <span>🗺️</span>
+            <span>Delivery Zones</span>
+          </a>
+
+          <a
+            routerLink="/dispatch/pricing"
+            id="tab-pricing-link"
+            class="px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-slate-600 hover:text-indigo-600"
+          >
+            <span>🏷️</span>
+            <span>Pricing Rules</span>
+          </a>
         </div>
       </div>
 

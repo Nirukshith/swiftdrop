@@ -21,21 +21,20 @@ describe('AdminComponent', () => {
     fixture.detectChanges();
   });
 
-  it('creates and shows dispatcher navigation with mock zones', () => {
+  it('creates and renders admin shell and navigation', () => {
     expect(component).toBeTruthy();
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.textContent).toContain('Delivery zones');
-    expect(element.textContent).toContain('COLOMBO');
-    expect(element.textContent).toContain('Pricing rules');
+    expect(element.textContent).toContain('Admin shell');
+    expect(element.textContent).toContain('Merchant approval');
+    expect(element.textContent).toContain('Audit log');
+    expect(element.querySelector('#admin-staff-management-link')).toBeTruthy();
+    expect(element.querySelector('#admin-card-staff-link')).toBeTruthy();
   });
 
-  it('switches to administrator navigation', () => {
-    component.setRole('ADMIN');
-    fixture.detectChanges();
-
+  it('does not contain the preview role dropdown or embedded dispatcher forms', () => {
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.textContent).toContain('Merchant approval');
-    expect(element.querySelector('#admin-staff-management-link')).toBeTruthy();
+    expect(element.textContent).not.toContain('Preview role');
     expect(element.textContent).not.toContain('Add zone');
+    expect(element.textContent).not.toContain('Add pricing rule');
   });
 });
