@@ -1,120 +1,46 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { Observable, catchError, finalize, tap, throwError } from 'rxjs';
 import {
-  CourierWorkload,
+  AssignParcelRequest,
+  AssignmentResult,
+  CourierAvailabilityUpdateRequest,
+  CourierWorkloadItem,
   CreateStaffPayload,
+  DispatchParcelSummary,
   StaffUser,
-  UnassignedParcel,
+  UnassignedParcelsPage,
 } from './dispatch.model';
 
 @Injectable({
   providedIn: 'root',
 })
 export class DispatchService {
+  private readonly http = inject(HttpClient);
+  public static readonly BASE_URL = '/api/v1/dispatch';
+
   // -------------------------------------------------------------------------
   // Signals State
   // -------------------------------------------------------------------------
-  private parcelsSignal = signal<UnassignedParcel[]>([
-    {
-      parcelId: 'pcl-101',
-      trackingNumber: 'SD-20261028-001',
-      status: 'CREATED',
-      pickupZone: 'ZONE-COLOMBO-NORTH',
-      dropoffZone: 'ZONE-COLOMBO-SOUTH',
-      pickupAddress: '45 Galle Road, Colombo 03',
-      dropoffAddress: '12 Havelock Road, Colombo 05',
-      weightKg: 2.5,
-      attemptCount: 0,
-      failureReason: null,
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-      recipientName: 'Sunil Weerasinghe',
-      recipientPhone: '+94 77 123 4567',
-    },
-    {
-      parcelId: 'pcl-102',
-      trackingNumber: 'SD-20261028-002',
-      status: 'CREATED',
-      pickupZone: 'ZONE-COLOMBO-NORTH',
-      dropoffZone: 'ZONE-COLOMBO-NORTH',
-      pickupAddress: '100 Union Place, Colombo 02',
-      dropoffAddress: '88 Kandy Road, Kiribathgoda',
-      weightKg: 1.2,
-      attemptCount: 0,
-      failureReason: null,
-      createdAt: new Date(Date.now() - 5400000).toISOString(),
-      recipientName: 'Dr. Anoma Jayawardena',
-      recipientPhone: '+94 71 987 6543',
-    },
-    {
-      parcelId: 'pcl-103',
-      trackingNumber: 'SD-20261028-003',
-      status: 'CREATED',
-      pickupZone: 'ZONE-COLOMBO-SOUTH',
-      dropoffZone: 'ZONE-KANDY',
-      pickupAddress: '18 De Saram Place, Colombo 10',
-      dropoffAddress: '55 Peradeniya Road, Kandy',
-      weightKg: 4.8,
-      attemptCount: 0,
-      failureReason: null,
-      createdAt: new Date(Date.now() - 7200000).toISOString(),
-      recipientName: 'Kavinda Perera',
-      recipientPhone: '+94 75 444 8888',
-    },
-    {
-      parcelId: 'pcl-104',
-      trackingNumber: 'SD-20261028-004',
-      status: 'CREATED',
-      pickupZone: 'ZONE-COLOMBO-NORTH',
-      dropoffZone: 'ZONE-COLOMBO-NORTH',
-      pickupAddress: '15 High Level Road, Nugegoda',
-      dropoffAddress: '23 Rajagiriya Road, Rajagiriya',
-      weightKg: 0.8,
-      attemptCount: 0,
-      failureReason: null,
-      createdAt: new Date(Date.now() - 1800000).toISOString(),
-      recipientName: 'Malini Fonseka',
-      recipientPhone: '+94 76 222 3333',
-    },
-  ]);
+  private parcelsSignal = signal<DispatchParcelSummary[]>([]);
+  private couriersSignal = signal<CourierWorkloadItem[]>([]);
+  private totalParcelsCount = signal<number>(0);
+  private currentPageSignal = signal<number>(0);
+  private totalPagesSignal = signal<number>(0);
+  private pageSizeSignal = signal<number>(20);
 
-  private couriersSignal = signal<CourierWorkload[]>([
-    {
-      courierId: 'f8e7d6c5-b4a3-2109-8765-43210fedcba9',
-      name: 'Saman Perera',
-      phoneNumber: '+94 77 123 4567',
-      zone: 'ZONE-COLOMBO-NORTH',
-      activeCount: 2,
-      available: true,
-      vehicleType: 'MOTORCYCLE',
-    },
-    {
-      courierId: 'a2b3c4d5-e6f7-4819-9012-34567890abcd',
-      name: 'Kamal Silva',
-      phoneNumber: '+94 77 234 5678',
-      zone: 'ZONE-COLOMBO-SOUTH',
-      activeCount: 1,
-      available: true,
-      vehicleType: 'VAN',
-    },
-    {
-      courierId: 'b3c4d5e6-f7a8-4920-0123-45678901bcde',
-      name: 'Nimal Fernando',
-      phoneNumber: '+94 77 345 6789',
-      zone: 'ZONE-COLOMBO-NORTH',
-      activeCount: 0,
-      available: false,
-      vehicleType: 'MOTORCYCLE',
-    },
-    {
-      courierId: 'c4d5e6f7-a8b9-4031-1234-56789012cdef',
-      name: 'Dinesh Bandara',
-      phoneNumber: '+94 71 888 9999',
-      zone: 'ZONE-KANDY',
-      activeCount: 4,
-      available: true,
-      vehicleType: 'THREE_WHEELER',
-    },
-  ]);
+  public isLoadingParcels = signal<boolean>(false);
+  public isLoadingCouriers = signal<boolean>(false);
+  public parcelsError = signal<string | null>(null);
+  public couriersError = signal<string | null>(null);
 
+  // Stored active filters for refresh
+  private lastParcelsZone?: string;
+  private lastParcelsDate?: string;
+  private lastCouriersZone?: string;
+  private lastCouriersAvailableOnly?: boolean;
+
+  // Staff users state for admin user management
   private usersSignal = signal<StaffUser[]>([
     {
       id: 'usr-admin-1',
@@ -143,38 +69,22 @@ export class DispatchService {
       enabled: true,
       createdAt: '2026-10-23T10:15:00Z',
     },
-    {
-      id: 'a2b3c4d5-e6f7-4819-9012-34567890abcd',
-      email: 'courier.kamal@swiftdrop.lk',
-      fullName: 'Kamal Silva',
-      phoneNumber: '+94 77 234 5678',
-      role: 'COURIER',
-      enabled: true,
-      createdAt: '2026-10-24T11:00:00Z',
-    },
-    {
-      id: 'b3c4d5e6-f7a8-4920-0123-45678901bcde',
-      email: 'courier.nimal@swiftdrop.lk',
-      fullName: 'Nimal Fernando',
-      phoneNumber: '+94 77 345 6789',
-      role: 'COURIER',
-      enabled: false,
-      createdAt: '2026-10-24T14:20:00Z',
-    },
   ]);
 
   // -------------------------------------------------------------------------
   // Public Readonly Signals & Computeds
   // -------------------------------------------------------------------------
   public parcels = this.parcelsSignal.asReadonly();
+  public unassignedParcels = this.parcelsSignal.asReadonly();
   public couriers = this.couriersSignal.asReadonly();
   public users = this.usersSignal.asReadonly();
 
-  public unassignedParcels = computed(() =>
-    this.parcelsSignal().filter((p) => p.status === 'CREATED')
-  );
+  public totalElements = this.totalParcelsCount.asReadonly();
+  public currentPage = this.currentPageSignal.asReadonly();
+  public totalPages = this.totalPagesSignal.asReadonly();
+  public pageSize = this.pageSizeSignal.asReadonly();
 
-  public unassignedCount = computed(() => this.unassignedParcels().length);
+  public unassignedCount = computed(() => this.totalParcelsCount());
 
   public availableCouriers = computed(() =>
     this.couriersSignal().filter((c) => c.available)
@@ -185,76 +95,183 @@ export class DispatchService {
   );
 
   public totalWorkloadActive = computed(() =>
-    this.couriersSignal().reduce((acc, c) => acc + c.activeCount, 0)
+    this.couriersSignal().reduce((acc, c) => acc + (c.activeCount || 0), 0)
   );
 
   // -------------------------------------------------------------------------
-  // Actions
+  // API Methods
   // -------------------------------------------------------------------------
 
   /**
-   * Assigns an unassigned parcel to an available courier.
-   * Updates parcel status to 'ASSIGNED' and increments courier activeCount.
+   * Load unassigned parcels queue from GET /api/v1/dispatch/parcels
    */
-  public assignParcel(parcelId: string, courierId: string): void {
-    const parcel = this.parcelsSignal().find((p) => p.parcelId === parcelId);
-    if (!parcel) {
-      throw new Error(`Parcel not found: ${parcelId}`);
+  public loadUnassignedParcels(
+    zone?: string,
+    date?: string,
+    page = 0,
+    size = 20
+  ): Observable<UnassignedParcelsPage> {
+    this.lastParcelsZone = zone;
+    this.lastParcelsDate = date;
+    this.isLoadingParcels.set(true);
+    this.parcelsError.set(null);
+
+    let params = new HttpParams()
+      .set('page', page.toString())
+      .set('size', size.toString());
+
+    if (zone && zone.trim().length > 0) {
+      params = params.set('zone', zone.trim());
     }
-    if (parcel.status !== 'CREATED') {
-      throw new Error(
-        `Parcel ${parcel.trackingNumber} is already assigned or in transit.`
+    if (date && date.trim().length > 0) {
+      params = params.set('date', date.trim());
+    }
+
+    return this.http
+      .get<UnassignedParcelsPage>(`${DispatchService.BASE_URL}/parcels`, {
+        params,
+      })
+      .pipe(
+        tap((pageData) => {
+          this.parcelsSignal.set(pageData?.content || []);
+          this.totalParcelsCount.set(pageData?.totalElements ?? pageData?.content?.length ?? 0);
+          this.currentPageSignal.set(pageData?.page ?? page);
+          this.totalPagesSignal.set(pageData?.totalPages ?? 1);
+          this.pageSizeSignal.set(pageData?.size ?? size);
+        }),
+        catchError((err) => {
+          const msg =
+            err?.error?.message ||
+            err?.message ||
+            'Failed to load dispatch queue from server.';
+          this.parcelsError.set(msg);
+          return throwError(() => err);
+        }),
+        finalize(() => {
+          this.isLoadingParcels.set(false);
+        })
       );
-    }
-
-    const courier = this.couriersSignal().find(
-      (c) => c.courierId === courierId
-    );
-    if (!courier) {
-      throw new Error(`Courier not found: ${courierId}`);
-    }
-    if (!courier.available) {
-      throw new Error(
-        `Courier ${courier.name} is currently offline and unavailable for assignment.`
-      );
-    }
-
-    // 1. Update parcel state
-    this.parcelsSignal.update((parcels) =>
-      parcels.map((p) =>
-        p.parcelId === parcelId
-          ? { ...p, status: 'ASSIGNED', assignedCourierId: courierId }
-          : p
-      )
-    );
-
-    // 2. Increment courier workload count (simulating domain event consumption)
-    this.couriersSignal.update((couriers) =>
-      couriers.map((c) =>
-        c.courierId === courierId
-          ? { ...c, activeCount: c.activeCount + 1 }
-          : c
-      )
-    );
   }
 
   /**
-   * Toggles courier availability status.
+   * Load courier workload board from GET /api/v1/dispatch/couriers
+   */
+  public loadCourierWorkload(
+    zone?: string,
+    availableOnly = false
+  ): Observable<CourierWorkloadItem[]> {
+    this.lastCouriersZone = zone;
+    this.lastCouriersAvailableOnly = availableOnly;
+    this.isLoadingCouriers.set(true);
+    this.couriersError.set(null);
+
+    let params = new HttpParams();
+    if (zone && zone.trim().length > 0) {
+      params = params.set('zone', zone.trim());
+    }
+    if (availableOnly) {
+      params = params.set('availableOnly', 'true');
+    }
+
+    return this.http
+      .get<CourierWorkloadItem[]>(`${DispatchService.BASE_URL}/couriers`, {
+        params,
+      })
+      .pipe(
+        tap((items) => {
+          this.couriersSignal.set(items || []);
+        }),
+        catchError((err) => {
+          const msg =
+            err?.error?.message ||
+            err?.message ||
+            'Failed to load courier workload from server.';
+          this.couriersError.set(msg);
+          return throwError(() => err);
+        }),
+        finalize(() => {
+          this.isLoadingCouriers.set(false);
+        })
+      );
+  }
+
+  /**
+   * Assign parcel to courier via POST /api/v1/dispatch/assignments
+   */
+  public assignParcel(
+    parcelId: string,
+    courierId: string
+  ): Observable<AssignmentResult> {
+    const payload: AssignParcelRequest = { parcelId, courierId };
+
+    return this.http
+      .post<AssignmentResult>(
+        `${DispatchService.BASE_URL}/assignments`,
+        payload
+      )
+      .pipe(
+        tap(() => {
+          // Immediately refresh unassigned queue and workload board to reflect persisted assignment
+          this.refreshQueue();
+          this.refreshWorkload();
+        })
+      );
+  }
+
+  /**
+   * Toggle courier availability via PATCH /api/v1/dispatch/couriers/{id}/availability
    */
   public updateCourierAvailability(
     courierId: string,
     available: boolean
-  ): void {
-    this.couriersSignal.update((couriers) =>
-      couriers.map((c) =>
-        c.courierId === courierId ? { ...c, available } : c
+  ): Observable<CourierWorkloadItem> {
+    const payload: CourierAvailabilityUpdateRequest = { available };
+
+    return this.http
+      .patch<CourierWorkloadItem>(
+        `${DispatchService.BASE_URL}/couriers/${encodeURIComponent(courierId)}/availability`,
+        payload
       )
-    );
+      .pipe(
+        tap((updated) => {
+          this.couriersSignal.update((couriers) =>
+            couriers.map((c) =>
+              c.courierId === courierId ? { ...c, available: updated.available } : c
+            )
+          );
+        })
+      );
   }
 
   /**
-   * Provisions a new staff account (COURIER or DISPATCHER).
+   * Helper to re-fetch queue with last known filters and pagination
    */
+  public refreshQueue(): void {
+    this.loadUnassignedParcels(
+      this.lastParcelsZone,
+      this.lastParcelsDate,
+      this.currentPageSignal(),
+      this.pageSizeSignal()
+    ).subscribe({
+      error: () => {}, // Handled by loadUnassignedParcels error signal
+    });
+  }
+
+  /**
+   * Helper to re-fetch workload board with last known filters
+   */
+  public refreshWorkload(): void {
+    this.loadCourierWorkload(
+      this.lastCouriersZone,
+      this.lastCouriersAvailableOnly
+    ).subscribe({
+      error: () => {}, // Handled by loadCourierWorkload error signal
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Staff User Management Methods (Admin Users Governance)
+  // -------------------------------------------------------------------------
   public createStaffUser(payload: CreateStaffPayload): StaffUser {
     if (payload.role !== 'COURIER' && payload.role !== 'DISPATCHER') {
       throw new Error('Only COURIER or DISPATCHER accounts can be provisioned.');
@@ -264,9 +281,7 @@ export class DispatchService {
       (u) => u.email.toLowerCase() === payload.email.trim().toLowerCase()
     );
     if (existing) {
-      throw new Error(
-        `User account with email ${payload.email} already exists.`
-      );
+      throw new Error(`User account with email ${payload.email} already exists.`);
     }
 
     const newId = `usr-${Date.now().toString(36)}`;
@@ -281,46 +296,17 @@ export class DispatchService {
     };
 
     this.usersSignal.update((users) => [newUser, ...users]);
-
-    // If a courier was provisioned, register them on the workload board
-    if (payload.role === 'COURIER') {
-      const newCourier: CourierWorkload = {
-        courierId: newId,
-        name: payload.fullName.trim(),
-        phoneNumber: payload.phoneNumber.trim(),
-        zone: 'ZONE-COLOMBO-NORTH',
-        activeCount: 0,
-        available: true,
-        vehicleType: 'MOTORCYCLE',
-      };
-      this.couriersSignal.update((couriers) => [...couriers, newCourier]);
-    }
-
     return newUser;
   }
 
-  /**
-   * Toggles enabled/disabled status for a user.
-   */
   public toggleUserStatus(userId: string): void {
-    let targetRole: string | undefined;
-
     this.usersSignal.update((users) =>
       users.map((u) => {
         if (u.id === userId) {
-          targetRole = u.role;
           return { ...u, enabled: !u.enabled };
         }
         return u;
       })
     );
-
-    // If disabled courier, set offline
-    if (targetRole === 'COURIER') {
-      const user = this.usersSignal().find((u) => u.id === userId);
-      if (user && !user.enabled) {
-        this.updateCourierAvailability(userId, false);
-      }
-    }
   }
 }
