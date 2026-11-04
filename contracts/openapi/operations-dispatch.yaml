@@ -10,7 +10,7 @@ paths:
   /api/v1/dispatch/parcels:
     get:
       summary: List unassigned parcels in the dispatch queue
-      description: Returns parcels currently awaiting courier assignment. Can be filtered by zone and date. Restricted to DISPATCHER and ADMIN.
+      description: Returns parcels currently awaiting courier assignment. Can be filtered by zone and date. Restricted to DISPATCHER.
       operationId: listUnassignedParcels
       security:
         - BearerAuth: []
@@ -60,7 +60,7 @@ paths:
   /api/v1/dispatch/couriers:
     get:
       summary: Courier workload board
-      description: Returns list of couriers with their current active delivery counts and availability status. Restricted to DISPATCHER and ADMIN.
+      description: Returns list of couriers with their current active delivery counts and availability status. Restricted to DISPATCHER.
       operationId: getCourierWorkloadBoard
       security:
         - BearerAuth: []
@@ -93,7 +93,7 @@ paths:
   /api/v1/dispatch/assignments:
     post:
       summary: Assign a parcel to a courier
-      description: Assigns an unassigned parcel to a specified courier. Rejects if courier is unavailable. Returns 409 if parcel is already assigned. Restricted to DISPATCHER and ADMIN.
+      description: Assigns an unassigned parcel to a specified courier. Rejects if courier is unavailable. Returns 409 if parcel is already assigned. Restricted to DISPATCHER.
       operationId: assignParcel
       security:
         - BearerAuth: []
@@ -136,7 +136,7 @@ paths:
   /api/v1/dispatch/assignments/bulk:
     post:
       summary: Bulk assign parcels
-      description: Assign multiple parcels to couriers in batch. Restricted to DISPATCHER and ADMIN.
+      description: Assign multiple parcels to couriers in batch. Restricted to DISPATCHER.
       operationId: bulkAssignParcels
       security:
         - BearerAuth: []
@@ -163,7 +163,7 @@ paths:
   /api/v1/dispatch/parcels/failed:
     get:
       summary: List failed delivery parcels
-      description: Returns parcels marked as FAILED that are eligible for re-queueing. Restricted to DISPATCHER and ADMIN.
+      description: Returns parcels marked as FAILED that are eligible for re-queueing. Restricted to DISPATCHER.
       operationId: listFailedParcels
       security:
         - BearerAuth: []
@@ -206,7 +206,7 @@ paths:
   /api/v1/dispatch/parcels/{id}/requeue:
     post:
       summary: Re-queue a failed parcel
-      description: Returns a FAILED parcel to CREATED status with cleared courier and incremented delivery attempt count. Restricted to DISPATCHER and ADMIN.
+      description: Returns a FAILED parcel to CREATED status with cleared courier and incremented delivery attempt count. Restricted to DISPATCHER.
       operationId: requeueParcel
       security:
         - BearerAuth: []
@@ -251,7 +251,7 @@ paths:
   /api/v1/dispatch/couriers/{id}/availability:
     patch:
       summary: Toggle courier availability
-      description: Dispatcher override to set courier availability status. Restricted to DISPATCHER and ADMIN.
+      description: Dispatcher override to set courier availability status. Restricted to DISPATCHER.
       operationId: updateCourierAvailability
       security:
         - BearerAuth: []
