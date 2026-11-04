@@ -52,6 +52,36 @@ describe('App Route Role Separation', () => {
     expect(router.url).toBe('/admin');
   });
 
+  it('allows DISPATCHER to access /dispatch/zones', async () => {
+    (authServiceMock as any).setMockRole('DISPATCHER');
+
+    const canNavigate = await router.navigateByUrl('/dispatch/zones');
+    expect(canNavigate).toBe(true);
+    expect(router.url).toBe('/dispatch/zones');
+  });
+
+  it('redirects ADMIN away from /dispatch/zones to /admin', async () => {
+    (authServiceMock as any).setMockRole('ADMIN');
+
+    await router.navigateByUrl('/dispatch/zones');
+    expect(router.url).toBe('/admin');
+  });
+
+  it('allows DISPATCHER to access /dispatch/pricing', async () => {
+    (authServiceMock as any).setMockRole('DISPATCHER');
+
+    const canNavigate = await router.navigateByUrl('/dispatch/pricing');
+    expect(canNavigate).toBe(true);
+    expect(router.url).toBe('/dispatch/pricing');
+  });
+
+  it('redirects ADMIN away from /dispatch/pricing to /admin', async () => {
+    (authServiceMock as any).setMockRole('ADMIN');
+
+    await router.navigateByUrl('/dispatch/pricing');
+    expect(router.url).toBe('/admin');
+  });
+
   it('allows ADMIN to access /admin/users', async () => {
     (authServiceMock as any).setMockRole('ADMIN');
 

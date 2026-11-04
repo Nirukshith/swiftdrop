@@ -4,144 +4,61 @@
       <div>
         <p class="text-sm font-medium text-indigo-300">SwiftDrop operations</p>
         <h1 class="mt-1 text-3xl font-bold">Admin shell</h1>
-        <p class="mt-2 text-slate-300">Configure zones and pricing for delivery operations.</p>
+        <p class="mt-2 text-slate-300">Administration, staff user management, and system governance.</p>
       </div>
-      <label class="text-sm">
-        <span class="mb-1 block text-slate-300">Preview role</span>
-        <select
-          class="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-white"
-          [value]="activeRole()"
-          (change)="setRole($any($event.target).value)"
-        >
-          <option value="DISPATCHER">Dispatcher</option>
-          <option value="ADMIN">Admin</option>
-        </select>
-      </label>
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-300 border border-purple-400/30">
+          ADMIN Role
+        </span>
+      </div>
     </div>
   </header>
 
   <nav class="flex flex-wrap gap-2" aria-label="Admin navigation">
-    <a class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white" href="/admin">Overview</a>
-    @if (activeRole() === 'DISPATCHER') {
-      <a class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700" href="#zones">Zones</a>
-      <a class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700" href="#pricing">Pricing rules</a>
-    }
-    @if (activeRole() === 'ADMIN') {
-      <a routerLink="/admin/users" id="admin-staff-management-link" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:text-indigo-600">Staff management</a>
-      <span class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">Merchant approval</span>
-      <span class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">Audit log</span>
-    }
+    <a class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white" routerLink="/admin">Overview</a>
+    <a routerLink="/admin/users" id="admin-staff-management-link" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:text-indigo-600">Staff management</a>
+    <span class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">Merchant approval</span>
+    <span class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">Audit log</span>
   </nav>
 
-  @if (activeRole() === 'DISPATCHER') {
-    <div class="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
-      <ui-card title="Delivery zones" id="zones">
-        <div class="space-y-3">
-          @for (zone of zones(); track zone.name) {
-            <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-4">
-              <div>
-                <p class="font-semibold text-slate-800">{{ zone.name }}</p>
-                <p class="text-sm text-slate-500">{{ zone.districts.join(', ') }}</p>
-              </div>
-              <div class="text-right">
-                <p class="font-medium text-slate-800">LKR {{ zone.baseFeeLkr | number: '1.2-2' }}</p>
-                <span class="text-xs" [class]="zone.served ? 'text-emerald-600' : 'text-slate-500'">
-                  {{ zone.served ? 'Served' : 'Paused' }}
-                </span>
-              </div>
-            </div>
-          }
-        </div>
-      </ui-card>
-
-      <ui-card title="Add zone">
-        <form class="space-y-4" [formGroup]="zoneForm" (ngSubmit)="addZone()">
-          <label class="block text-sm font-medium text-slate-700">
-            Zone name
-            <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" formControlName="name" />
-          </label>
-          <label class="block text-sm font-medium text-slate-700">
-            Districts
-            <select class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" multiple formControlName="districts">
-              @for (district of districts; track district) {
-                <option [value]="district">{{ district }}</option>
-              }
-            </select>
-          </label>
-          <label class="block text-sm font-medium text-slate-700">
-            Base fee (LKR)
-            <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="number" formControlName="baseFeeLkr" />
-          </label>
-          <label class="flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" formControlName="served" /> Active served zone
-          </label>
-          <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" type="submit" [disabled]="zoneForm.invalid">
-            Add zone
-          </button>
-        </form>
-      </ui-card>
-    </div>
-
-    <div id="pricing" class="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
-      <ui-card title="Pricing rules">
-        <div class="space-y-3">
-          @for (rule of pricingRules(); track rule.key) {
-            <div class="rounded-lg bg-slate-50 p-4">
-              <div class="flex items-center justify-between gap-3">
-                <p class="font-semibold text-slate-800">{{ rule.key }}</p>
-                <span class="text-sm font-medium text-slate-700">LKR {{ rule.chargeLkr | number: '1.2-2' }}</span>
-              </div>
-              <p class="mt-1 text-sm text-slate-500">
-                {{ rule.kind === 'SIZE' ? 'Size charge' : (rule.minimumWeightKg + '–' + rule.maximumWeightKg + ' kg weight band') }}
-              </p>
-            </div>
-          }
-        </div>
-      </ui-card>
-
-      <ui-card title="Add pricing rule">
-        <form class="space-y-4" [formGroup]="pricingForm" (ngSubmit)="addPricingRule()">
-          <label class="block text-sm font-medium text-slate-700">
-            Rule type
-            <select class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" formControlName="kind">
-              <option value="SIZE">Size</option>
-              <option value="WEIGHT_BAND">Weight band</option>
-            </select>
-          </label>
-          <label class="block text-sm font-medium text-slate-700">
-            Key
-            <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" formControlName="key" placeholder="LARGE or UP_TO_5KG" />
-          </label>
-          <div class="grid grid-cols-2 gap-3">
-            <label class="block text-sm font-medium text-slate-700">
-              Minimum kg
-              <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="number" formControlName="minimumWeightKg" />
-            </label>
-            <label class="block text-sm font-medium text-slate-700">
-              Maximum kg
-              <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="number" formControlName="maximumWeightKg" />
-            </label>
-          </div>
-          <label class="block text-sm font-medium text-slate-700">
-            Charge (LKR)
-            <input class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" type="number" formControlName="chargeLkr" />
-          </label>
-          <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" type="submit" [disabled]="pricingForm.invalid">
-            Add pricing rule
-          </button>
-        </form>
-      </ui-card>
-    </div>
-  } @else {
-    <ui-card title="Administrator navigation">
+  <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    <ui-card title="Staff user management">
       <div class="space-y-3">
-        <p class="text-slate-600">Merchant approval and audit log pages will be added in their planned week.</p>
+        <p class="text-sm text-slate-600">
+          Provision, search, and enable or disable staff accounts (COURIER and DISPATCHER).
+        </p>
         <div>
-          <a routerLink="/admin/users" id="admin-card-staff-link" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition-colors">
-            <span>Manage Staff Accounts →</span>
+          <a
+            routerLink="/admin/users"
+            id="admin-card-staff-link"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm transition-colors"
+          >
+            <span>Manage Staff Users →</span>
           </a>
         </div>
       </div>
     </ui-card>
-  }
+
+    <ui-card title="Merchant approval">
+      <div class="space-y-3">
+        <p class="text-sm text-slate-600">
+          Review business registration documents and approve onboarding applications.
+        </p>
+        <span class="inline-block text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
+          Planned Feature (Week 3)
+        </span>
+      </div>
+    </ui-card>
+
+    <ui-card title="Audit logs">
+      <div class="space-y-3">
+        <p class="text-sm text-slate-600">
+          System audit trails and administrative change logs for regulatory compliance.
+        </p>
+        <span class="inline-block text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
+          Planned Feature (Week 3)
+        </span>
+      </div>
+    </ui-card>
+  </div>
 </div>
