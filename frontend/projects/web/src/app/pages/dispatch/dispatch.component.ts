@@ -1,10 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
-  CourierWorkload,
-  UnassignedParcel,
+  CourierWorkloadItem,
+  DispatchParcelSummary,
 } from './dispatch.model';
 import { DispatchService } from './dispatch.service';
 
@@ -172,7 +172,7 @@ type DispatchTab = 'queue' | 'workload';
             <select
               id="queue-zone-filter"
               [ngModel]="selectedZone()"
-              (ngModelChange)="selectedZone.set($event)"
+              (ngModelChange)="onQueueZoneChange($event)"
               class="px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
               <option value="">All Delivery Zones</option>
@@ -182,76 +182,114 @@ type DispatchTab = 'queue' | 'workload';
             </select>
           </div>
 
-          <p class="text-xs text-slate-500 font-medium">
-            Showing <strong class="text-slate-800">{{ filteredParcels().length }}</strong> unassigned parcel(s)
-          </p>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              id="refresh-queue-btn"
+              (click)="retryLoadQueue()"
+              class="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-slate-50 text-xs font-semibold transition-colors flex items-center gap-1.5"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+            <p class="text-xs text-slate-500 font-medium">
+              Showing <strong class="text-slate-800">{{ filteredParcels().length }}</strong> unassigned parcel(s)
+            </p>
+          </div>
+        </div>
+
+        <!-- Loading State -->
+        <div *ngIf="dispatchService.isLoadingParcels()" class="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+          <div class="inline-block animate-spin text-3xl">⏳</div>
+          <p class="text-sm font-semibold text-slate-600">Loading unassigned dispatch queue...</p>
+        </div>
+
+        <!-- Error State with Retry -->
+        <div *ngIf="!dispatchService.isLoadingParcels() && dispatchService.parcelsError()" class="bg-rose-50 rounded-2xl border border-rose-200 p-6 text-center space-y-3">
+          <div class="text-3xl">⚠️</div>
+          <h3 class="text-sm font-bold text-rose-800">Failed to Load Dispatch Queue</h3>
+          <p class="text-xs text-rose-600 max-w-md mx-auto">{{ dispatchService.parcelsError() }}</p>
+          <button
+            type="button"
+            id="retry-queue-btn"
+            (click)="retryLoadQueue()"
+            class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-colors"
+          >
+            Retry Loading Queue
+          </button>
         </div>
 
         <!-- Parcels Grid / Table -->
-        <div *ngIf="filteredParcels().length > 0; else emptyQueueTemplate" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div
-            *ngFor="let parcel of filteredParcels()"
-            class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:border-indigo-200 transition-all space-y-4 flex flex-col justify-between"
-          >
-            <div>
-              <div class="flex items-center justify-between gap-2">
-                <span class="font-mono text-sm font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
-                  {{ parcel.trackingNumber }}
-                </span>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                  ● CREATED (Unassigned)
-                </span>
-              </div>
+        <div *ngIf="!dispatchService.isLoadingParcels() && !dispatchService.parcelsError()">
+          <div *ngIf="filteredParcels().length > 0; else emptyQueueTemplate" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div
+              *ngFor="let parcel of filteredParcels()"
+              class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:border-indigo-200 transition-all space-y-4 flex flex-col justify-between"
+            >
+              <div>
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-mono text-sm font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                    {{ parcel.trackingNumber }}
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                    ● {{ parcel.status }} (Unassigned)
+                  </span>
+                </div>
 
-              <!-- Pickup & Dropoff Routing -->
-              <div class="mt-4 space-y-2.5 text-xs text-slate-600">
-                <div class="flex items-start gap-2">
-                  <span class="text-emerald-600 font-bold mt-0.5">🟢 PICKUP:</span>
-                  <div>
-                    <p class="font-bold text-slate-800">{{ parcel.pickupAddress }}</p>
-                    <p class="text-[11px] text-slate-500">{{ parcel.pickupZone }}</p>
+                <!-- Pickup & Dropoff Routing -->
+                <div class="mt-4 space-y-2.5 text-xs text-slate-600">
+                  <div class="flex items-start gap-2">
+                    <span class="text-emerald-600 font-bold mt-0.5">🟢 PICKUP:</span>
+                    <div>
+                      <p class="font-bold text-slate-800">{{ parcel.pickupAddress || 'Address on file' }}</p>
+                      <p class="text-[11px] text-slate-500">{{ parcel.pickupZone }}</p>
+                    </div>
+                  </div>
+                  <div class="flex items-start gap-2">
+                    <span class="text-indigo-600 font-bold mt-0.5">📍 DROPOFF:</span>
+                    <div>
+                      <p class="font-bold text-slate-800">{{ parcel.dropoffAddress || 'Address on file' }}</p>
+                      <p class="text-[11px] text-slate-500">
+                        {{ parcel.dropoffZone }}
+                        <span *ngIf="parcel.recipientName"> • Recipient: {{ parcel.recipientName }}</span>
+                        <span *ngIf="parcel.recipientPhone"> ({{ parcel.recipientPhone }})</span>
+                      </p>
+                    </div>
                   </div>
                 </div>
-                <div class="flex items-start gap-2">
-                  <span class="text-indigo-600 font-bold mt-0.5">📍 DROPOFF:</span>
-                  <div>
-                    <p class="font-bold text-slate-800">{{ parcel.dropoffAddress }}</p>
-                    <p class="text-[11px] text-slate-500">{{ parcel.dropoffZone }} • Recipient: {{ parcel.recipientName }} ({{ parcel.recipientPhone }})</p>
-                  </div>
+              </div>
+
+              <!-- Footer Specs & Assign Trigger -->
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-3 text-xs text-slate-500 font-medium">
+                  <span *ngIf="parcel.weightKg !== undefined">⚖️ {{ parcel.weightKg }} kg</span>
+                  <span>•</span>
+                  <span>Attempts: {{ parcel.attemptCount ?? 0 }}</span>
                 </div>
-              </div>
-            </div>
 
-            <!-- Footer Specs & Assign Trigger -->
-            <div class="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-              <div class="flex items-center gap-3 text-xs text-slate-500 font-medium">
-                <span>⚖️ {{ parcel.weightKg }} kg</span>
-                <span>•</span>
-                <span>Attempts: {{ parcel.attemptCount }}</span>
+                <button
+                  type="button"
+                  [attr.id]="'assign-parcel-' + parcel.parcelId + '-btn'"
+                  (click)="openAssignModal(parcel)"
+                  class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  <span>Assign Courier</span>
+                  <span>→</span>
+                </button>
               </div>
-
-              <button
-                type="button"
-                [attr.id]="'assign-parcel-' + parcel.parcelId + '-btn'"
-                (click)="openAssignModal(parcel)"
-                class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
-              >
-                <span>Assign Courier</span>
-                <span>→</span>
-              </button>
             </div>
           </div>
+
+          <ng-template #emptyQueueTemplate>
+            <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+              <div class="text-4xl">🎉</div>
+              <h3 class="text-base font-bold text-slate-800">All Parcels Assigned!</h3>
+              <p class="text-xs text-slate-500 max-w-sm mx-auto">
+                There are currently no parcels in the unassigned queue awaiting courier assignment.
+              </p>
+            </div>
+          </ng-template>
         </div>
-
-        <ng-template #emptyQueueTemplate>
-          <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
-            <div class="text-4xl">🎉</div>
-            <h3 class="text-base font-bold text-slate-800">All Parcels Assigned!</h3>
-            <p class="text-xs text-slate-500 max-w-sm mx-auto">
-              There are currently no parcels in the unassigned queue awaiting courier assignment.
-            </p>
-          </div>
-        </ng-template>
       </div>
 
       <!-- ================================================================= -->
@@ -264,7 +302,7 @@ type DispatchTab = 'queue' | 'workload';
             <select
               id="workload-zone-filter"
               [ngModel]="workloadZone()"
-              (ngModelChange)="workloadZone.set($event)"
+              (ngModelChange)="onWorkloadZoneChange($event)"
               class="px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
               <option value="">All Delivery Zones</option>
@@ -278,104 +316,146 @@ type DispatchTab = 'queue' | 'workload';
                 type="checkbox"
                 id="available-only-toggle"
                 [ngModel]="availableOnly()"
-                (ngModelChange)="availableOnly.set($event)"
+                (ngModelChange)="onAvailableOnlyChange($event)"
                 class="rounded text-indigo-600 focus:ring-indigo-500"
               />
               <span>Online Only</span>
             </label>
           </div>
 
-          <p class="text-xs text-slate-500 font-medium">
-            Active Couriers: <strong class="text-slate-800">{{ filteredCouriers().length }}</strong>
-          </p>
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              id="refresh-workload-btn"
+              (click)="retryLoadWorkload()"
+              class="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-slate-50 text-xs font-semibold transition-colors flex items-center gap-1.5"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+            <p class="text-xs text-slate-500 font-medium">
+              Active Couriers: <strong class="text-slate-800">{{ filteredCouriers().length }}</strong>
+            </p>
+          </div>
+        </div>
+
+        <!-- Workload Loading State -->
+        <div *ngIf="dispatchService.isLoadingCouriers()" class="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+          <div class="inline-block animate-spin text-3xl">⏳</div>
+          <p class="text-sm font-semibold text-slate-600">Loading courier workload board...</p>
+        </div>
+
+        <!-- Workload Error State -->
+        <div *ngIf="!dispatchService.isLoadingCouriers() && dispatchService.couriersError()" class="bg-rose-50 rounded-2xl border border-rose-200 p-6 text-center space-y-3">
+          <div class="text-3xl">⚠️</div>
+          <h3 class="text-sm font-bold text-rose-800">Failed to Load Workload Board</h3>
+          <p class="text-xs text-rose-600 max-w-md mx-auto">{{ dispatchService.couriersError() }}</p>
+          <button
+            type="button"
+            id="retry-workload-btn"
+            (click)="retryLoadWorkload()"
+            class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-colors"
+          >
+            Retry Loading Workload
+          </button>
         </div>
 
         <!-- Couriers Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div
-            *ngFor="let courier of filteredCouriers()"
-            class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 space-y-4 hover:border-slate-300 transition-all flex flex-col justify-between"
-          >
-            <div>
-              <div class="flex items-start justify-between gap-2">
-                <div class="flex items-center gap-3">
-                  <div
-                    class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-base"
-                    [class.bg-emerald-100]="courier.available"
-                    [class.text-emerald-700]="courier.available"
-                    [class.bg-slate-100]="!courier.available"
-                    [class.text-slate-500]="!courier.available"
-                  >
-                    {{ courier.vehicleType === 'VAN' ? '🚐' : courier.vehicleType === 'THREE_WHEELER' ? '🛺' : '🏍️' }}
-                  </div>
-                  <div>
-                    <h3 class="text-sm font-extrabold text-slate-900">{{ courier.name }}</h3>
-                    <p class="text-[11px] text-slate-500 font-medium">{{ courier.phoneNumber }}</p>
-                  </div>
-                </div>
-
-                <span
-                  class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold"
-                  [class.bg-emerald-50]="courier.available"
-                  [class.text-emerald-700]="courier.available"
-                  [class.border]="courier.available"
-                  [class.border-emerald-200]="courier.available"
-                  [class.bg-slate-100]="!courier.available"
-                  [class.text-slate-600]="!courier.available"
-                >
-                  {{ courier.available ? '● Online' : '○ Offline' }}
-                </span>
-              </div>
-
-              <!-- Zone & Vehicle Info -->
-              <div class="mt-4 pt-3 border-t border-slate-100 space-y-1 text-xs text-slate-600">
-                <p><span class="font-semibold text-slate-400">Zone:</span> {{ courier.zone }}</p>
-                <p><span class="font-semibold text-slate-400">Vehicle:</span> {{ courier.vehicleType }}</p>
-              </div>
-            </div>
-
-            <!-- Workload Counter Display & Toggle -->
-            <div class="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+        <div *ngIf="!dispatchService.isLoadingCouriers() && !dispatchService.couriersError()">
+          <div *ngIf="filteredCouriers().length > 0; else emptyWorkloadTemplate" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div
+              *ngFor="let courier of filteredCouriers()"
+              class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 space-y-4 hover:border-slate-300 transition-all flex flex-col justify-between"
+            >
               <div>
-                <p class="text-[10px] uppercase font-bold text-slate-400">Active Load</p>
-                <div class="flex items-center gap-1.5 mt-0.5">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex items-center gap-3">
+                    <div
+                      class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-base"
+                      [class.bg-emerald-100]="courier.available"
+                      [class.text-emerald-700]="courier.available"
+                      [class.bg-slate-100]="!courier.available"
+                      [class.text-slate-500]="!courier.available"
+                    >
+                      {{ courier.vehicleType === 'VAN' ? '🚐' : courier.vehicleType === 'THREE_WHEELER' ? '🛺' : '🏍️' }}
+                    </div>
+                    <div>
+                      <h3 class="text-sm font-extrabold text-slate-900">{{ courier.name }}</h3>
+                      <p class="text-[11px] text-slate-500 font-medium">{{ courier.phoneNumber || 'No phone' }}</p>
+                    </div>
+                  </div>
+
                   <span
-                    class="inline-flex items-center justify-center px-2.5 py-0.5 rounded-lg text-xs font-black"
-                    [class.bg-emerald-100]="courier.activeCount <= 2"
-                    [class.text-emerald-800]="courier.activeCount <= 2"
-                    [class.bg-amber-100]="courier.activeCount > 2 && courier.activeCount <= 4"
-                    [class.text-amber-800]="courier.activeCount > 2 && courier.activeCount <= 4"
-                    [class.bg-rose-100]="courier.activeCount > 4"
-                    [class.text-rose-800]="courier.activeCount > 4"
+                    class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold"
+                    [class.bg-emerald-50]="courier.available"
+                    [class.text-emerald-700]="courier.available"
+                    [class.border]="courier.available"
+                    [class.border-emerald-200]="courier.available"
+                    [class.bg-slate-100]="!courier.available"
+                    [class.text-slate-600]="!courier.available"
                   >
-                    {{ courier.activeCount }} active
+                    {{ courier.available ? '● Online' : '○ Offline' }}
                   </span>
-                  <span class="text-[11px] text-slate-400 font-medium">
-                    {{ courier.activeCount <= 2 ? 'Light' : courier.activeCount <= 4 ? 'Moderate' : 'Heavy' }}
-                  </span>
+                </div>
+
+                <!-- Zone & Vehicle Info -->
+                <div class="mt-4 pt-3 border-t border-slate-100 space-y-1 text-xs text-slate-600">
+                  <p><span class="font-semibold text-slate-400">Zone:</span> {{ courier.zone || 'Unassigned' }}</p>
+                  <p><span class="font-semibold text-slate-400">Vehicle:</span> {{ courier.vehicleType || 'Standard' }}</p>
                 </div>
               </div>
 
-              <button
-                type="button"
-                [attr.id]="'toggle-courier-' + courier.courierId + '-btn'"
-                (click)="toggleCourierAvailability(courier)"
-                class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
-                [class.border-slate-200]="courier.available"
-                [class.text-slate-600]="courier.available"
-                [class.hover:bg-slate-50]="courier.available"
-                [class.bg-emerald-600]="!courier.available"
-                [class.text-white]="!courier.available"
-                [class.hover:bg-emerald-700]="!courier.available"
-              >
-                {{ courier.available ? 'Set Offline' : 'Set Online' }}
-              </button>
+              <!-- Workload Counter Display & Toggle -->
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <div>
+                  <p class="text-[10px] uppercase font-bold text-slate-400">Active Load</p>
+                  <div class="flex items-center gap-1.5 mt-0.5">
+                    <span
+                      class="inline-flex items-center justify-center px-2.5 py-0.5 rounded-lg text-xs font-black"
+                      [class.bg-emerald-100]="courier.activeCount <= 2"
+                      [class.text-emerald-800]="courier.activeCount <= 2"
+                      [class.bg-amber-100]="courier.activeCount > 2 && courier.activeCount <= 4"
+                      [class.text-amber-800]="courier.activeCount > 2 && courier.activeCount <= 4"
+                      [class.bg-rose-100]="courier.activeCount > 4"
+                      [class.text-rose-800]="courier.activeCount > 4"
+                    >
+                      {{ courier.activeCount }} active
+                    </span>
+                    <span class="text-[11px] text-slate-400 font-medium">
+                      {{ courier.activeCount <= 2 ? 'Light' : courier.activeCount <= 4 ? 'Moderate' : 'Heavy' }}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  [attr.id]="'toggle-courier-' + courier.courierId + '-btn'"
+                  (click)="toggleCourierAvailability(courier)"
+                  class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
+                  [class.border-slate-200]="courier.available"
+                  [class.text-slate-600]="courier.available"
+                  [class.hover:bg-slate-50]="courier.available"
+                  [class.bg-emerald-600]="!courier.available"
+                  [class.text-white]="!courier.available"
+                  [class.hover:bg-emerald-700]="!courier.available"
+                >
+                  {{ courier.available ? 'Set Offline' : 'Set Online' }}
+                </button>
+              </div>
             </div>
           </div>
+
+          <ng-template #emptyWorkloadTemplate>
+            <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+              <div class="text-4xl">👷</div>
+              <h3 class="text-base font-bold text-slate-800">No Couriers Found</h3>
+              <p class="text-xs text-slate-500 max-w-sm mx-auto">
+                No active couriers match the selected zone or availability criteria.
+              </p>
+            </div>
+          </ng-template>
         </div>
       </div>
-
-
 
       <!-- ================================================================= -->
       <!-- MODAL: ASSIGN PARCEL DIALOG -->
@@ -392,8 +472,9 @@ type DispatchTab = 'queue' | 'workload';
             </div>
             <button
               type="button"
+              [disabled]="isSubmittingAssignment()"
               (click)="selectedParcelForAssign.set(null)"
-              class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-sm"
+              class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-sm disabled:opacity-50"
             >
               ✕
             </button>
@@ -403,7 +484,7 @@ type DispatchTab = 'queue' | 'workload';
           <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200/80 text-xs space-y-1.5 text-slate-700">
             <p><strong>Route:</strong> {{ selectedParcelForAssign()?.pickupZone }} → {{ selectedParcelForAssign()?.dropoffZone }}</p>
             <p><strong>Dropoff Address:</strong> {{ selectedParcelForAssign()?.dropoffAddress }}</p>
-            <p><strong>Weight:</strong> {{ selectedParcelForAssign()?.weightKg }} kg</p>
+            <p *ngIf="selectedParcelForAssign()?.weightKg !== undefined"><strong>Weight:</strong> {{ selectedParcelForAssign()?.weightKg }} kg</p>
           </div>
 
           <!-- Select Courier -->
@@ -414,10 +495,10 @@ type DispatchTab = 'queue' | 'workload';
             <div class="max-h-56 overflow-y-auto space-y-2 pr-1">
               <div
                 *ngFor="let courier of dispatchService.couriers()"
-                (click)="courier.available ? selectedCourierId.set(courier.courierId) : null"
+                (click)="courier.available && !isSubmittingAssignment() ? selectedCourierId.set(courier.courierId) : null"
                 class="p-3 rounded-xl border flex items-center justify-between gap-3 transition-all"
-                [class.cursor-pointer]="courier.available"
-                [class.cursor-not-allowed]="!courier.available"
+                [class.cursor-pointer]="courier.available && !isSubmittingAssignment()"
+                [class.cursor-not-allowed]="!courier.available || isSubmittingAssignment()"
                 [class.opacity-50]="!courier.available"
                 [class.border-indigo-600]="selectedCourierId() === courier.courierId"
                 [class.bg-indigo-50/50]="selectedCourierId() === courier.courierId"
@@ -429,12 +510,12 @@ type DispatchTab = 'queue' | 'workload';
                     name="courierSelection"
                     [value]="courier.courierId"
                     [checked]="selectedCourierId() === courier.courierId"
-                    [disabled]="!courier.available"
+                    [disabled]="!courier.available || isSubmittingAssignment()"
                     class="text-indigo-600 focus:ring-indigo-500"
                   />
                   <div>
                     <p class="text-xs font-bold text-slate-900">{{ courier.name }}</p>
-                    <p class="text-[11px] text-slate-500">{{ courier.zone }} • {{ courier.vehicleType }}</p>
+                    <p class="text-[11px] text-slate-500">{{ courier.zone || 'Zone N/A' }} • {{ courier.vehicleType || 'Standard' }}</p>
                   </div>
                 </div>
 
@@ -460,19 +541,21 @@ type DispatchTab = 'queue' | 'workload';
           <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
             <button
               type="button"
+              [disabled]="isSubmittingAssignment()"
               (click)="selectedParcelForAssign.set(null)"
-              class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+              class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="button"
               id="confirm-assignment-btn"
-              [disabled]="!selectedCourierId()"
+              [disabled]="!selectedCourierId() || isSubmittingAssignment()"
               (click)="confirmAssignment()"
-              class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Confirm Assignment
+              <span *ngIf="isSubmittingAssignment()" class="animate-spin text-xs">⏳</span>
+              <span>{{ isSubmittingAssignment() ? 'Assigning...' : 'Confirm Assignment' }}</span>
             </button>
           </div>
         </div>
@@ -480,11 +563,26 @@ type DispatchTab = 'queue' | 'workload';
     </div>
   `,
 })
-export class DispatchComponent {
+export class DispatchComponent implements OnInit {
   public dispatchService = inject(DispatchService);
   private readonly route = inject(ActivatedRoute, { optional: true });
 
   public activeTab = signal<DispatchTab>('queue');
+
+  // Search & Filter Signals
+  public searchQuery = signal('');
+  public selectedZone = signal('');
+  public workloadZone = signal('');
+  public availableOnly = signal(false);
+
+  // Modals & Submitting state
+  public selectedParcelForAssign = signal<DispatchParcelSummary | null>(null);
+  public selectedCourierId = signal<string>('');
+  public isSubmittingAssignment = signal(false);
+
+  // Toast state
+  public toastMessage = signal<string | null>(null);
+  public toastType = signal<'success' | 'error'>('success');
 
   constructor() {
     this.route?.queryParamMap.subscribe((params) => {
@@ -497,19 +595,41 @@ export class DispatchComponent {
     });
   }
 
-  // Search & Filter Signals
-  public searchQuery = signal('');
-  public selectedZone = signal('');
-  public workloadZone = signal('');
-  public availableOnly = signal(false);
+  public ngOnInit(): void {
+    this.retryLoadQueue();
+    this.retryLoadWorkload();
+  }
 
-  // Modals state
-  public selectedParcelForAssign = signal<UnassignedParcel | null>(null);
-  public selectedCourierId = signal<string>('');
+  public retryLoadQueue(): void {
+    this.dispatchService.loadUnassignedParcels(this.selectedZone()).subscribe({
+      error: (err) => {
+        // Error state signal is already updated in DispatchService
+      },
+    });
+  }
 
-  // Toast state
-  public toastMessage = signal<string | null>(null);
-  public toastType = signal<'success' | 'error'>('success');
+  public retryLoadWorkload(): void {
+    this.dispatchService.loadCourierWorkload(this.workloadZone(), this.availableOnly()).subscribe({
+      error: (err) => {
+        // Error state signal is already updated in DispatchService
+      },
+    });
+  }
+
+  public onQueueZoneChange(zone: string): void {
+    this.selectedZone.set(zone);
+    this.retryLoadQueue();
+  }
+
+  public onWorkloadZoneChange(zone: string): void {
+    this.workloadZone.set(zone);
+    this.retryLoadWorkload();
+  }
+
+  public onAvailableOnlyChange(availableOnly: boolean): void {
+    this.availableOnly.set(availableOnly);
+    this.retryLoadWorkload();
+  }
 
   public filteredParcels = computed(() => {
     let list = this.dispatchService.unassignedParcels();
@@ -524,9 +644,9 @@ export class DispatchComponent {
       list = list.filter(
         (p) =>
           p.trackingNumber.toLowerCase().includes(q) ||
-          p.pickupAddress.toLowerCase().includes(q) ||
-          p.dropoffAddress.toLowerCase().includes(q) ||
-          p.recipientName.toLowerCase().includes(q)
+          (p.pickupAddress && p.pickupAddress.toLowerCase().includes(q)) ||
+          (p.dropoffAddress && p.dropoffAddress.toLowerCase().includes(q)) ||
+          (p.recipientName && p.recipientName.toLowerCase().includes(q))
       );
     }
     return list;
@@ -544,44 +664,66 @@ export class DispatchComponent {
     return list;
   });
 
-  public openAssignModal(parcel: UnassignedParcel): void {
+  public openAssignModal(parcel: DispatchParcelSummary): void {
     this.selectedParcelForAssign.set(parcel);
     const firstAvailable = this.dispatchService.availableCouriers()[0];
     this.selectedCourierId.set(firstAvailable ? firstAvailable.courierId : '');
+    this.isSubmittingAssignment.set(false);
   }
 
   public confirmAssignment(): void {
     const parcel = this.selectedParcelForAssign();
     const courierId = this.selectedCourierId();
-    if (!parcel || !courierId) {
+    if (!parcel || !courierId || this.isSubmittingAssignment()) {
       return;
     }
 
-    try {
-      this.dispatchService.assignParcel(parcel.parcelId, courierId);
-      const courier = this.dispatchService
-        .couriers()
-        .find((c) => c.courierId === courierId);
-      this.showToast(
-        `Parcel ${parcel.trackingNumber} assigned to ${courier?.name || 'Courier'}. Workload count updated!`,
-        'success'
-      );
-      this.selectedParcelForAssign.set(null);
-    } catch (err: any) {
-      this.showToast(err.message || 'Failed to assign parcel', 'error');
-    }
+    this.isSubmittingAssignment.set(true);
+
+    this.dispatchService.assignParcel(parcel.parcelId, courierId).subscribe({
+      next: (result) => {
+        const courier = this.dispatchService
+          .couriers()
+          .find((c) => c.courierId === courierId);
+        this.showToast(
+          `Parcel ${parcel.trackingNumber} assigned to ${courier?.name || 'Courier'}. Workload count updated!`,
+          'success'
+        );
+        this.selectedParcelForAssign.set(null);
+        this.selectedCourierId.set('');
+        this.isSubmittingAssignment.set(false);
+      },
+      error: (err: any) => {
+        this.isSubmittingAssignment.set(false);
+        const errorMsg =
+          err?.error?.message ||
+          err?.message ||
+          'Failed to assign parcel. Please try again.';
+        this.showToast(errorMsg, 'error');
+
+        // On 409 Conflict (e.g. parcel was already assigned by another dispatcher),
+        // refresh the queue so stale records are cleaned up
+        if (err?.status === 409) {
+          this.retryLoadQueue();
+        }
+      },
+    });
   }
 
-  public toggleCourierAvailability(courier: CourierWorkload): void {
+  public toggleCourierAvailability(courier: CourierWorkloadItem): void {
     const nextStatus = !courier.available;
-    this.dispatchService.updateCourierAvailability(
-      courier.courierId,
-      nextStatus
-    );
-    this.showToast(
-      `${courier.name} is now ${nextStatus ? 'Online' : 'Offline'}.`,
-      'success'
-    );
+    this.dispatchService.updateCourierAvailability(courier.courierId, nextStatus).subscribe({
+      next: () => {
+        this.showToast(
+          `${courier.name} is now ${nextStatus ? 'Online' : 'Offline'}.`,
+          'success'
+        );
+      },
+      error: (err: any) => {
+        const msg = err?.error?.message || err?.message || 'Failed to update courier availability.';
+        this.showToast(msg, 'error');
+      },
+    });
   }
 
   private showToast(message: string, type: 'success' | 'error'): void {

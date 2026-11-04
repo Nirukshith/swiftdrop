@@ -128,5 +128,27 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.message").value("Notification not found with id: notif-missing"));
     }
+
+    @Test
+    @DisplayName("GET /api/v1/notifications unauthenticated returns 401")
+    void getNotifications_unauthenticated_returnsUnauthorized() throws Exception {
+        mockMvc.perform(get("/api/v1/notifications"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/notifications/{id}/read for another user's notification returns 404")
+    void markNotificationRead_crossUserAccess_returns404() throws Exception {
+        when(notificationService.markAsRead(eq("notif-userA"), eq("cust-userB")))
+                .thenThrow(new NotificationNotFoundException("Notification not found with id: notif-userA"));
+
+        mockMvc.perform(post("/api/v1/notifications/notif-userA/read")
+                        .with(jwt().jwt(builder -> builder.subject("cust-userB")))
+                        .with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+
+        verify(notificationService).markAsRead("notif-userA", "cust-userB");
+    }
 }
 
