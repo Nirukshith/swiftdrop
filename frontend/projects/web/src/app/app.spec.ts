@@ -34,4 +34,41 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('app-notification-bell')).toBeTruthy();
   });
+
+  it('should not show admin or dispatcher links to signed-out visitor', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).not.toContain('Staff Management');
+    expect(compiled.textContent).not.toContain('Dispatch');
+    expect(compiled.textContent).not.toContain('Zones');
+    expect(compiled.textContent).not.toContain('Pricing');
+  });
+
+  it('should show admin links only when user has ADMIN role', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    jest.spyOn(app.authService, 'hasRole').mockImplementation((role: string) => role === 'ADMIN');
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.textContent).toContain('Admin');
+    expect(compiled.textContent).toContain('Staff Management');
+    expect(compiled.textContent).not.toContain('Dispatch');
+    expect(compiled.textContent).not.toContain('Zones');
+    expect(compiled.textContent).not.toContain('Pricing');
+  });
+
+  it('should show dispatcher links only when user has DISPATCHER role', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    jest.spyOn(app.authService, 'hasRole').mockImplementation((role: string) => role === 'DISPATCHER');
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.textContent).toContain('Dispatch');
+    expect(compiled.textContent).toContain('Zones');
+    expect(compiled.textContent).toContain('Pricing');
+    expect(compiled.textContent).not.toContain('Staff Management');
+  });
 });

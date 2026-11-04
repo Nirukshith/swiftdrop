@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   CourierWorkload,
   UnassignedParcel,
@@ -482,8 +482,20 @@ type DispatchTab = 'queue' | 'workload';
 })
 export class DispatchComponent {
   public dispatchService = inject(DispatchService);
+  private readonly route = inject(ActivatedRoute, { optional: true });
 
   public activeTab = signal<DispatchTab>('queue');
+
+  constructor() {
+    this.route?.queryParamMap.subscribe((params) => {
+      const tab = params.get('tab');
+      if (tab === 'workload') {
+        this.activeTab.set('workload');
+      } else {
+        this.activeTab.set('queue');
+      }
+    });
+  }
 
   // Search & Filter Signals
   public searchQuery = signal('');
