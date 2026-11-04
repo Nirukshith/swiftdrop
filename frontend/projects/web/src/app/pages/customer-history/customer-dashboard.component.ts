@@ -149,8 +149,8 @@ export class CustomerDashboardComponent implements OnInit {
       });
   }
 
-  /** The detail page with the live timeline comes in week 3; until then open the public tracking page. */
+  /** Opens the parcel detail page with the live timeline. */
   track(parcel: CustomerParcel): void {
-    void this.router.navigate(['/track', parcel.trackingNumber]);
+    void this.router.navigate(['/customer/parcels', parcel.id]);
   }
 }
