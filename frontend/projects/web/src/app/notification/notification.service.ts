@@ -1,132 +1,179 @@
-import { Injectable, signal, computed } from '@angular/core';
-import { Observable, of, tap } from 'rxjs';
-import { NotificationItem, NotificationPage } from './notification.model';
+import { Injectable, inject, signal, effect } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Observable, of, from } from 'rxjs';
+import { catchError, concatMap, map, switchMap, tap, toArray } from 'rxjs/operators';
+import { AuthService } from 'shared-auth';
+import { NotificationDto, NotificationItem, NotificationPageResponse } from './notification.model';
 
 /**
  * NotificationService
  *
- * Week 2 implementation: uses in-memory mock data (aligned with mock layer
- * convention used by courier, customer, and merchant services). When the
- * integration-service API is accessible at runtime, replace the `of(...)`
- * calls with real HttpClient calls to:
- *   GET  /api/v1/notifications?page=0&size=20&unreadOnly=false
- *   POST /api/v1/notifications/{id}/read
- *
- * Swap-in note: inject HttpClient and remove mock signal internals.
+ * Connects the Angular notification bell to the real authenticated
+ * integration-service notification API (GET /api/v1/notifications
+ * and POST /api/v1/notifications/{id}/read).
  */
 @Injectable({
   providedIn: 'root',
 })
 export class NotificationService {
-  private readonly _notifications = signal<NotificationItem[]>([
-    {
-      id: 'notif-mock-001',
-      userId: 'user-mock-001',
-      eventId: 'evt-mock-001',
-      channel: 'IN_APP',
-      title: 'Parcel In Transit',
-      message:
-        'Your parcel SD-20261028-H9K3N1 is now in transit and on its way to the destination.',
-      read: false,
-      createdAt: new Date(Date.now() - 1800000).toISOString(),
-    },
-    {
-      id: 'notif-mock-002',
-      userId: 'user-mock-001',
-      eventId: 'evt-mock-002',
-      channel: 'IN_APP',
-      title: 'Parcel Delivered',
-      message:
-        'Great news! Your parcel SD-20261026-F4P8W2 has been successfully delivered.',
-      read: false,
-      createdAt: new Date(Date.now() - 7200000).toISOString(),
-    },
-    {
-      id: 'notif-mock-003',
-      userId: 'user-mock-001',
-      eventId: 'evt-mock-003',
-      channel: 'IN_APP',
-      title: 'Courier Assigned',
-      message:
-        'A courier has been assigned to your parcel SD-20261027-B7R1Q9 and will pick it up shortly.',
-      read: true,
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-    },
-    {
-      id: 'notif-mock-004',
-      userId: 'user-mock-001',
-      eventId: 'evt-mock-004',
-      channel: 'IN_APP',
-      title: 'Delivery Failed',
-      message:
-        'Unfortunately, delivery of SD-20261025-K2L9P3 failed. Reason: Customer premises closed.',
-      read: true,
-      createdAt: new Date(Date.now() - 172800000).toISOString(),
-    },
-    {
-      id: 'notif-mock-005',
-      userId: 'user-mock-001',
-      eventId: 'evt-mock-005',
-      channel: 'IN_APP',
-      title: 'Parcel Created',
-      message:
-        'Your parcel booking SD-20261024-T4N8Q1 is confirmed. Pickup scheduled.',
-      read: true,
-      createdAt: new Date(Date.now() - 259200000).toISOString(),
-    },
-  ]);
+  private readonly http = inject(HttpClient);
+  private readonly authService = inject(AuthService, { optional: true });
+  static readonly URL = '/api/v1/notifications';
+  private readonly baseUrl = NotificationService.URL;
 
-  /** Read-only signal — components observe this for reactive updates */
+  private readonly _notifications = signal<NotificationItem[]>([]);
+  private readonly _unreadCount = signal<number>(0);
+  private readonly _totalElements = signal<number>(0);
+  private readonly _isLoading = signal<boolean>(false);
+  private readonly _error = signal<string | null>(null);
+
   readonly notifications = this._notifications.asReadonly();
+  readonly unreadCount = this._unreadCount.asReadonly();
+  readonly totalElements = this._totalElements.asReadonly();
+  readonly isLoading = this._isLoading.asReadonly();
+  readonly error = this._error.asReadonly();
 
-  /** Unread count derived signal */
-  readonly unreadCount = computed(
-    () => this._notifications().filter((n) => !n.read).length
-  );
+  private lastUserId: string | null = null;
+
+  constructor() {
+    if (this.authService) {
+      effect(() => {
+        const user = this.authService?.currentUser();
+        const currentUserId = user?.id ?? null;
+        if (!user || !this.authService?.isAuthenticated()) {
+          this.clear();
+          this.lastUserId = null;
+        } else if (currentUserId !== this.lastUserId) {
+          this.clear();
+          this.lastUserId = currentUserId;
+          this.refreshUnreadCount().subscribe({ error: () => {} });
+        }
+      });
+    }
+  }
 
   /**
-   * Fetch a page of notifications.
-   * Mock implementation returns all items; real impl calls the API.
+   * Refreshes the unread count from the server.
+   */
+  refreshUnreadCount(): Observable<number> {
+    const params = new HttpParams().set('page', '0').set('size', '1');
+    return this.http.get<NotificationPageResponse>(this.baseUrl, { params }).pipe(
+      map((res) => {
+        this._unreadCount.set(res.unreadCount);
+        this._totalElements.set(res.totalElements);
+        return res.unreadCount;
+      }),
+      catchError(() => of(this._unreadCount()))
+    );
+  }
+
+  /**
+   * Loads notifications from the real API.
+   * If append is true, appends new items to existing list.
+   */
+  loadNotifications(
+    page = 0,
+    size = 20,
+    unreadOnly = false,
+    append = false
+  ): Observable<NotificationPageResponse> {
+    this._isLoading.set(true);
+    this._error.set(null);
+
+    const params = new HttpParams()
+      .set('page', page.toString())
+      .set('size', size.toString())
+      .set('unreadOnly', unreadOnly.toString());
+
+    return this.http.get<NotificationPageResponse>(this.baseUrl, { params }).pipe(
+      tap({
+        next: (response) => {
+          if (append) {
+            const existingIds = new Set(this._notifications().map((n) => n.id));
+            const newItems = response.items.filter((item) => !existingIds.has(item.id));
+            this._notifications.update((current) => [...current, ...newItems]);
+          } else {
+            this._notifications.set(response.items);
+          }
+          this._totalElements.set(response.totalElements);
+          this._unreadCount.set(response.unreadCount);
+          this._isLoading.set(false);
+          this._error.set(null);
+        },
+        error: () => {
+          this._isLoading.set(false);
+          this._error.set('Failed to load notifications. Please try again.');
+        },
+      })
+    );
+  }
+
+  /**
+   * Alias for loadNotifications for compatibility.
    */
   listNotifications(
     page = 0,
     size = 20,
     unreadOnly = false
-  ): Observable<NotificationPage> {
-    let items = this._notifications();
-    if (unreadOnly) {
-      items = items.filter((n) => !n.read);
-    }
-    const start = page * size;
-    const content = items.slice(start, start + size);
-    const result: NotificationPage = {
-      content,
-      totalElements: items.length,
-      totalPages: Math.ceil(items.length / size),
-      page,
-      size,
-    };
-    return of(result);
+  ): Observable<NotificationPageResponse> {
+    return this.loadNotifications(page, size, unreadOnly, false);
   }
 
   /**
-   * Mark a single notification as read.
-   * Mock implementation updates the in-memory signal.
-   * Real impl: POST /api/v1/notifications/{id}/read then update local state.
+   * Marks a single notification as read on the backend.
    */
-  markAsRead(id: string): Observable<void> {
-    this._notifications.update((list) =>
-      list.map((n) => (n.id === id ? { ...n, read: true } : n))
+  markAsRead(id: string): Observable<NotificationDto> {
+    return this.http.post<NotificationDto>(`${this.baseUrl}/${id}/read`, {}).pipe(
+      tap({
+        next: () => {
+          let wasUnread = false;
+          this._notifications.update((list) =>
+            list.map((n) => {
+              if (n.id === id) {
+                if (!n.read) wasUnread = true;
+                return { ...n, read: true };
+              }
+              return n;
+            })
+          );
+          if (wasUnread) {
+            this._unreadCount.update((count) => Math.max(0, count - 1));
+          }
+        },
+      })
     );
-    return of(void 0);
   }
 
   /**
-   * Mark all notifications as read.
+   * Marks all unread loaded notifications as read sequentially.
+   * Confirms each with the backend and refreshes the unread count.
    */
   markAllAsRead(): Observable<void> {
-    this._notifications.update((list) => list.map((n) => ({ ...n, read: true })));
-    return of(void 0);
+    const unread = this._notifications().filter((n) => !n.read);
+    if (unread.length === 0) {
+      return of(void 0);
+    }
+
+    return from(unread).pipe(
+      concatMap((item) =>
+        this.markAsRead(item.id).pipe(
+          catchError(() => of(null))
+        )
+      ),
+      toArray(),
+      switchMap(() => this.refreshUnreadCount()),
+      map(() => void 0)
+    );
+  }
+
+  /**
+   * Clears state on logout or account switch.
+   */
+  clear(): void {
+    this._notifications.set([]);
+    this._unreadCount.set(0);
+    this._totalElements.set(0);
+    this._isLoading.set(false);
+    this._error.set(null);
   }
 }
-
