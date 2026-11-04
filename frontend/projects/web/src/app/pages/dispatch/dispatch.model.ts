@@ -6,31 +6,68 @@ export interface AddressInfo {
   postalCode: string;
 }
 
-export interface UnassignedParcel {
+export interface DispatchParcelSummary {
   parcelId: string;
   trackingNumber: string;
-  status: 'CREATED' | 'ASSIGNED' | 'IN_TRANSIT' | 'DELIVERED' | 'FAILED' | 'CANCELLED';
+  status: string;
   pickupZone: string;
   dropoffZone: string;
-  pickupAddress: string;
-  dropoffAddress: string;
-  weightKg: number;
-  attemptCount: number;
-  failureReason: string | null;
+  pickupAddress?: string;
+  dropoffAddress?: string;
+  weightKg?: number;
+  attemptCount?: number;
+  failureReason?: string | null;
   createdAt: string;
-  recipientName: string;
-  recipientPhone: string;
+  recipientName?: string;
+  recipientPhone?: string;
   assignedCourierId?: string;
 }
 
-export interface CourierWorkload {
+export type UnassignedParcel = DispatchParcelSummary;
+
+export interface UnassignedParcelsPage {
+  content: DispatchParcelSummary[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  size: number;
+}
+
+export interface CourierWorkloadItem {
   courierId: string;
   name: string;
-  phoneNumber: string;
-  zone: string;
+  phoneNumber?: string;
+  zone?: string;
   activeCount: number;
   available: boolean;
-  vehicleType: string;
+  vehicleType?: string;
+}
+
+export type CourierWorkload = CourierWorkloadItem;
+
+export interface AssignParcelRequest {
+  parcelId: string;
+  courierId: string;
+}
+
+export type AssignParcelPayload = AssignParcelRequest;
+
+export interface AssignmentResult {
+  parcelId: string;
+  courierId: string;
+  assignedAt: string;
+  status: string;
+}
+
+export interface CourierAvailabilityUpdateRequest {
+  available: boolean;
+}
+
+export interface ErrorResponse {
+  code: string;
+  message: string;
+  correlationId: string;
+  timestamp: string;
 }
 
 export interface StaffUser {
@@ -50,9 +87,4 @@ export interface CreateStaffPayload {
   fullName: string;
   phoneNumber: string;
   role: 'COURIER' | 'DISPATCHER';
-}
-
-export interface AssignParcelPayload {
-  parcelId: string;
-  courierId: string;
 }
