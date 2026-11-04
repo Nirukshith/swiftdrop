@@ -11,6 +11,7 @@
     "target": "http://localhost:8082",
     "secure": false
   },
+  "/api/v1/tracking": { "target": "http://localhost:8082", "secure": false },
   "/tracking": {
     "target": "http://localhost:8082",
     "secure": false

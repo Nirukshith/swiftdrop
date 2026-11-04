@@ -32,8 +32,9 @@ export function trackingHandlers(db: MockParcelDb, baseUrl = '') {
   return [
     http.get(`${api}/tracking/:trackingNo`, ({ params }) => respond(db.publicTracking(String(params['trackingNo'])))),
 
-    // SSE (week 3): sends the current state once, then ends; EventSource reconnects after `retry`.
-    http.get(`${api}/tracking/:trackingNo/stream`, ({ params }) => {
+    // SSE, like the real stream: `retry`, the current state (unless Last-Event-ID already has it),
+    // then a heartbeat comment every 15 s until the page closes it. DELIVERED and CANCELLED end the stream.
+    http.get(`${api}/tracking/:trackingNo/stream`, ({ params, request }) => {
       const result = db.publicTracking(String(params['trackingNo']));
       if (result.status !== 200 || !result.body || !('timeline' in result.body)) {
         return respond(result);
@@ -45,8 +46,31 @@ export function trackingHandlers(db: MockParcelDb, baseUrl = '') {
         status: result.body.status,
         occurredAt: result.body.lastUpdatedAt,
       };
-      const frames = `retry: 5000\n\nid: ${event.sequence}\nevent: status\ndata: ${JSON.stringify(event)}\n\n`;
-      return new HttpResponse(frames, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
+      const lastEventId = Number(request.headers.get('Last-Event-ID') ?? 0) || 0;
+      const terminal = event.status === 'DELIVERED' || event.status === 'CANCELLED';
+      const encoder = new TextEncoder();
+      let heartbeat: ReturnType<typeof setInterval> | undefined;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode('retry: 5000\n\n'));
+          if (event.sequence > lastEventId) {
+            controller.enqueue(encoder.encode(`id: ${event.sequence}\nevent: status\ndata: ${JSON.stringify(event)}\n\n`));
+          }
+          if (terminal) {
+            controller.close();
+            return;
+          }
+          heartbeat = setInterval(() => controller.enqueue(encoder.encode(': heartbeat\n\n')), 15_000);
+          request.signal.addEventListener('abort', () => {
+            clearInterval(heartbeat);
+            controller.close();
+          });
+        },
+        cancel() {
+          clearInterval(heartbeat);
+        },
+      });
+      return new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
     }),
 
     http.get(`${api}/parcels/:id/history`, ({ params }) => respond(db.parcelHistory(String(params['id'])))),
