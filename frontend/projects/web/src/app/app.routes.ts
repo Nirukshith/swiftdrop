@@ -30,6 +30,7 @@ export const routes: Routes = [
   },
   { path: 'customer/dashboard', canActivate: [roleGuard(['CUSTOMER'])], loadComponent: () => import('./pages/customer-history/customer-dashboard.component').then((m) => m.CustomerDashboardComponent) },
   { path: 'customer/parcels', canActivate: [roleGuard(['CUSTOMER'])], loadComponent: () => import('./pages/customer-history/customer-parcels.component').then((m) => m.CustomerParcelsComponent) },
+  { path: 'customer/parcels/:id', canActivate: [roleGuard(['CUSTOMER'])], loadComponent: () => import('./pages/tracking/parcel-detail.component').then((m) => m.ParcelDetailComponent) },
   {
     path: 'merchant',
     canActivate: [roleGuard(['MERCHANT'])],

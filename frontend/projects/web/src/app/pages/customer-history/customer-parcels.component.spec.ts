@@ -105,12 +105,12 @@ describe('CustomerParcelsComponent', () => {
     expect(el.textContent).toContain('1 parcel');
   });
 
-  it('opens the tracking page when a row is clicked', () => {
+  it('opens the parcel detail page when a row is clicked', () => {
     const el = render();
     const navigate = jest.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
 
     (el.querySelector('tbody tr') as HTMLElement).click();
 
-    expect(navigate).toHaveBeenCalledWith(['/track', 'SD-20261028-TST001']);
+    expect(navigate).toHaveBeenCalledWith(['/customer/parcels', 'p-1']);
   });
 });
