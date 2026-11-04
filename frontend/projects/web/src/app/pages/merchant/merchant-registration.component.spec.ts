@@ -64,7 +64,10 @@ describe('MerchantRegistrationComponent', () => {
       email: 'asha@example.test',
       phoneNumber: '+94771234567',
     });
-    expect(fixture.nativeElement.textContent).toContain('Status: PENDING');
+    expect(fixture.nativeElement.textContent).toContain('Status:');
+    const badge = fixture.nativeElement.querySelector('ui-status-badge');
+    expect(badge).toBeTruthy();
+    expect(badge.textContent).toContain('PENDING');
   });
 
   it('shows a duplicate email message for a registration conflict', () => {
@@ -81,5 +84,16 @@ describe('MerchantRegistrationComponent', () => {
     fixture.detectChanges();
 
     expect(component.errorMessage()).toContain('already registered');
+  });
+
+  it('renders UI kit components: card, inputs, and submit button', () => {
+    const card = fixture.nativeElement.querySelector('ui-card');
+    expect(card).toBeTruthy();
+
+    const inputs = fixture.nativeElement.querySelectorAll('ui-input');
+    expect(inputs.length).toBe(5);
+
+    const submitBtn = fixture.nativeElement.querySelector('ui-button[type="submit"]');
+    expect(submitBtn).toBeTruthy();
   });
 });

@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { of } from 'rxjs';
 import { MerchantCredentialsComponent } from './merchant-credentials.component';
 import { MerchantService } from './merchant.service';
 
@@ -35,5 +36,34 @@ describe('MerchantCredentialsComponent', () => {
 
     expect(fixture.nativeElement.textContent).not.toContain('swd_test_secret_once_7f3a9c2e');
     expect(fixture.nativeElement.textContent).toContain('already been shown');
+  });
+
+  it('renders UI kit components: card, status badge, and button', () => {
+    const card = fixture.nativeElement.querySelector('ui-card');
+    expect(card).toBeTruthy();
+
+    const badge = fixture.nativeElement.querySelector('ui-status-badge');
+    expect(badge).toBeTruthy();
+    expect(badge.textContent).toContain('APPROVED');
+
+    const button = fixture.nativeElement.querySelector('ui-button');
+    expect(button).toBeTruthy();
+  });
+
+  it('shows awaiting administrator approval message when status is PENDING', () => {
+    jest.spyOn(service, 'getApiCredentials').mockReturnValue(of({
+      merchantId: 'm-pending',
+      status: 'PENDING',
+      clientId: 'swd_test_client_pending',
+      clientSecret: null,
+      secretAvailableOnce: false,
+    }));
+
+    const pendingFixture = TestBed.createComponent(MerchantCredentialsComponent);
+    pendingFixture.detectChanges();
+
+    expect(pendingFixture.nativeElement.textContent).toContain('awaiting administrator approval');
+    const badge = pendingFixture.nativeElement.querySelector('ui-status-badge');
+    expect(badge?.textContent).toContain('PENDING');
   });
 });
