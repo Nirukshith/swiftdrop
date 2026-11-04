@@ -29,7 +29,9 @@ describe('DispatchPricingComponent', () => {
   it('should render navigation links to queue, workload, and zones', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('#tab-queue-link')).toBeTruthy();
-    expect(compiled.querySelector('#tab-workload-link')).toBeTruthy();
+    const workloadLink = compiled.querySelector('#tab-workload-link') as HTMLAnchorElement;
+    expect(workloadLink).toBeTruthy();
+    expect(workloadLink.getAttribute('href')).toContain('tab=workload');
     expect(compiled.querySelector('#tab-zones-link')).toBeTruthy();
     expect(compiled.querySelector('#tab-pricing-btn')).toBeTruthy();
   });

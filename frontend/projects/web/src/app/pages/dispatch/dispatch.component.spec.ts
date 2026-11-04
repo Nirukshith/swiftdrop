@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { DispatchComponent } from './dispatch.component';
 import { DispatchService } from './dispatch.service';
@@ -38,6 +38,28 @@ describe('DispatchComponent', () => {
     component.activeTab.set('queue');
     fixture.detectChanges();
     expect(component.activeTab()).toBe('queue');
+  });
+
+  it('should select workload tab when route has query param tab=workload', async () => {
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/?tab=workload');
+
+    const queryFixture = TestBed.createComponent(DispatchComponent);
+    const queryComponent = queryFixture.componentInstance;
+    queryFixture.detectChanges();
+
+    expect(queryComponent.activeTab()).toBe('workload');
+  });
+
+  it('should default activeTab to queue when query param tab is missing or invalid', async () => {
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/?tab=other-tab');
+
+    const queryFixture = TestBed.createComponent(DispatchComponent);
+    const queryComponent = queryFixture.componentInstance;
+    queryFixture.detectChanges();
+
+    expect(queryComponent.activeTab()).toBe('queue');
   });
 
   it('should filter unassigned parcels by search query', () => {

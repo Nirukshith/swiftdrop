@@ -68,6 +68,7 @@ export interface PricingRule {
 
           <a
             routerLink="/dispatch"
+            [queryParams]="{ tab: 'workload' }"
             id="tab-workload-link"
             class="px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-slate-600 hover:text-indigo-600"
           >
