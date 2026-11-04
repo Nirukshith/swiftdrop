@@ -26,7 +26,7 @@ public class DispatchSecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/v1/dispatch/**").hasAnyRole("DISPATCHER", "ADMIN")
+                .requestMatchers("/api/v1/dispatch/**").hasRole("DISPATCHER")
                 .anyRequest().authenticated()
             );
 

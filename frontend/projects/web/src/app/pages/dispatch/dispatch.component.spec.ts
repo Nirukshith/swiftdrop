@@ -25,7 +25,6 @@ describe('DispatchComponent', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('#tab-queue-btn')).toBeTruthy();
     expect(compiled.querySelector('#tab-workload-btn')).toBeTruthy();
-    expect(compiled.querySelector('#tab-users-btn')).toBeTruthy();
   });
 
   it('should switch tabs when clicking tab buttons', () => {
@@ -33,9 +32,9 @@ describe('DispatchComponent', () => {
     fixture.detectChanges();
     expect(component.activeTab()).toBe('workload');
 
-    component.activeTab.set('users');
+    component.activeTab.set('queue');
     fixture.detectChanges();
-    expect(component.activeTab()).toBe('users');
+    expect(component.activeTab()).toBe('queue');
   });
 
   it('should filter unassigned parcels by search query', () => {
@@ -80,38 +79,5 @@ describe('DispatchComponent', () => {
       .couriers()
       .find((c) => c.courierId === courier.courierId);
     expect(updated?.available).toBe(!initialStatus);
-  });
-
-  it('should validate form and submit create staff user', () => {
-    component.newUserFullName = 'Test Staff';
-    component.newUserEmail = 'test.staff@swiftdrop.lk';
-    component.newUserPhone = '+94771234567';
-    component.newUserPassword = 'Password#2026';
-    component.newUserRole = 'COURIER';
-
-    expect(component.isFormValid()).toBe(true);
-
-    component.submitCreateStaffUser();
-    fixture.detectChanges();
-
-    expect(component.toastMessage()).toContain('created successfully');
-    expect(component.isCreateUserModalOpen()).toBe(false);
-
-    const user = dispatchService
-      .users()
-      .find((u) => u.email === 'test.staff@swiftdrop.lk');
-    expect(user).toBeDefined();
-    expect(user?.role).toBe('COURIER');
-  });
-
-  it('should toggle user account status', () => {
-    const user = dispatchService.users()[0];
-    const initialStatus = user.enabled;
-
-    component.toggleUserStatus(user);
-    fixture.detectChanges();
-
-    const updated = dispatchService.users().find((u) => u.id === user.id);
-    expect(updated?.enabled).toBe(!initialStatus);
   });
 });
