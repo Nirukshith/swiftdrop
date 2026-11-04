@@ -5,22 +5,22 @@
 
 export type NotificationChannel = 'EMAIL' | 'SMS' | 'IN_APP';
 
-export interface NotificationItem {
+export interface NotificationDto {
   id: string;
-  userId: string;
-  eventId: string;
-  channel: NotificationChannel;
   title: string;
   message: string;
+  channel: NotificationChannel;
+  parcelId?: string | null;
+  trackingNumber?: string | null;
   read: boolean;
   createdAt: string;
 }
 
-export interface NotificationPage {
-  content: NotificationItem[];
+export type NotificationItem = NotificationDto;
+
+export interface NotificationPageResponse {
+  items: NotificationDto[];
   totalElements: number;
-  totalPages: number;
-  page: number;
-  size: number;
+  unreadCount: number;
 }
 
