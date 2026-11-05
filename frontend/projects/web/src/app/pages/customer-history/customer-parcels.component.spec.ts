@@ -6,6 +6,7 @@ import { CustomerParcelsComponent } from './customer-parcels.component';
 import { CustomerParcel, ParcelListQuery, ParcelPage } from './customer-history.model';
 import { CustomerParcelsService } from './customer-parcels.service';
 import { pageOf, parcel } from './testing';
+import { ReceiptService } from '../tracking/receipt.service';
 
 describe('CustomerParcelsComponent', () => {
   let fixture: ComponentFixture<CustomerParcelsComponent>;
@@ -31,9 +32,15 @@ describe('CustomerParcelsComponent', () => {
     });
     TestBed.configureTestingModule({
       imports: [CustomerParcelsComponent],
-      providers: [provideRouter([]), { provide: CustomerParcelsService, useValue: { list } }],
+      providers: [
+        provideRouter([]),
+        { provide: CustomerParcelsService, useValue: { list } },
+        { provide: ReceiptService, useValue: { download } },
+      ],
     });
   });
+
+  const download = jest.fn(() => of('receipt.pdf'));
 
   it('loads the first page of 10 and shows paging', () => {
     const el = render();
@@ -112,5 +119,27 @@ describe('CustomerParcelsComponent', () => {
     (el.querySelector('tbody tr') as HTMLElement).click();
 
     expect(navigate).toHaveBeenCalledWith(['/customer/parcels', 'p-1']);
+  });
+
+  it('offers a receipt download only on delivered rows, without opening the row', () => {
+    const el = render();
+    const navigate = jest.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    download.mockClear();
+
+    const rows = Array.from(el.querySelectorAll('tbody tr'));
+    const withReceipt = rows.filter((row) => row.querySelector('[data-testid="receipt-button"]'));
+    // Parcels 1, 4, 7 and 10 on the first page are DELIVERED.
+    expect(withReceipt.map((row) => row.textContent)).toEqual([
+      expect.stringContaining('TST001'),
+      expect.stringContaining('TST004'),
+      expect.stringContaining('TST007'),
+      expect.stringContaining('TST010'),
+    ]);
+    expect(el.querySelector('thead')?.textContent).toContain('Receipt');
+
+    (withReceipt[1].querySelector('[data-testid="receipt-button"] button') as HTMLButtonElement).click();
+
+    expect(download).toHaveBeenCalledWith('p-4');
+    expect(navigate).not.toHaveBeenCalled();
   });
 });
