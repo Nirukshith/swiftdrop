@@ -3,12 +3,15 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
+  AssignParcelRequest,
+  BulkAssignResponse,
   CourierWorkloadItem,
   DispatchParcelSummary,
+  RequeueResponse,
 } from './dispatch.model';
 import { DispatchService } from './dispatch.service';
 
-type DispatchTab = 'queue' | 'workload';
+type DispatchTab = 'queue' | 'workload' | 'failed';
 
 @Component({
   selector: 'app-dispatch',
@@ -52,6 +55,12 @@ type DispatchTab = 'queue' | 'workload';
             <p class="text-lg font-black text-amber-800">{{ dispatchService.unassignedCount() }}</p>
           </div>
           <div
+            class="px-4 py-2 rounded-xl bg-rose-50/80 border border-rose-200/80 text-center flex-1 sm:flex-initial"
+          >
+            <p class="text-[11px] uppercase font-bold text-rose-600 tracking-wider">Failed Parcels</p>
+            <p class="text-lg font-black text-rose-800">{{ dispatchService.totalFailedCount() }}</p>
+          </div>
+          <div
             class="px-4 py-2 rounded-xl bg-emerald-50/80 border border-emerald-200/80 text-center flex-1 sm:flex-initial"
           >
             <p class="text-[11px] uppercase font-bold text-emerald-600 tracking-wider">Online Couriers</p>
@@ -91,6 +100,29 @@ type DispatchTab = 'queue' | 'workload';
               [class.text-slate-700]="activeTab() !== 'queue'"
             >
               {{ dispatchService.unassignedCount() }}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            id="tab-failed-btn"
+            (click)="activeTab.set('failed')"
+            [class.bg-white]="activeTab() === 'failed'"
+            [class.shadow-sm]="activeTab() === 'failed'"
+            [class.text-rose-600]="activeTab() === 'failed'"
+            [class.text-slate-600]="activeTab() !== 'failed'"
+            class="px-4 py-2 rounded-lg transition-all flex items-center gap-2"
+          >
+            <span>⚠️</span>
+            <span>Failed Deliveries</span>
+            <span
+              class="ml-1 px-1.5 py-0.2 rounded-full text-xs font-bold"
+              [class.bg-rose-100]="activeTab() === 'failed'"
+              [class.text-rose-700]="activeTab() === 'failed'"
+              [class.bg-slate-200]="activeTab() !== 'failed'"
+              [class.text-slate-700]="activeTab() !== 'failed'"
+            >
+              {{ dispatchService.totalFailedCount() }}
             </span>
           </button>
 
@@ -183,6 +215,16 @@ type DispatchTab = 'queue' | 'workload';
           </div>
 
           <div class="flex items-center gap-3">
+            <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                id="select-all-queue-checkbox"
+                [checked]="isAllSelected()"
+                (change)="toggleSelectAll()"
+                class="rounded text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>Select All</span>
+            </label>
             <button
               type="button"
               id="refresh-queue-btn"
@@ -195,6 +237,53 @@ type DispatchTab = 'queue' | 'workload';
             <p class="text-xs text-slate-500 font-medium">
               Showing <strong class="text-slate-800">{{ filteredParcels().length }}</strong> unassigned parcel(s)
             </p>
+          </div>
+        </div>
+
+        <!-- Bulk Assign Action Bar -->
+        <div *ngIf="selectedParcelIds().size > 0" class="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-indigo-600 text-white font-black text-sm shadow-sm">
+              {{ selectedParcelIds().size }}
+            </span>
+            <div>
+              <p class="text-sm font-bold text-indigo-950">{{ selectedParcelIds().size }} Parcel(s) Selected for Bulk Assignment</p>
+              <p class="text-xs text-indigo-700 font-medium">Assign all selected parcels to a single courier simultaneously</p>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2.5">
+            <select
+              id="bulk-courier-select"
+              [ngModel]="bulkCourierId()"
+              (ngModelChange)="bulkCourierId.set($event)"
+              class="px-3 py-1.5 rounded-xl border border-indigo-300 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-800"
+            >
+              <option value="">Select Target Courier...</option>
+              <option *ngFor="let c of dispatchService.availableCouriers()" [value]="c.courierId">
+                {{ c.name }} ({{ c.activeCount }} active) • {{ c.zone }}
+              </option>
+            </select>
+
+            <button
+              type="button"
+              id="submit-bulk-assign-btn"
+              [disabled]="!bulkCourierId() || isSubmittingBulk()"
+              (click)="submitBulkAssign()"
+              class="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <span *ngIf="isSubmittingBulk()" class="animate-spin text-xs">⏳</span>
+              <span>{{ isSubmittingBulk() ? 'Assigning...' : 'Assign Selected' }}</span>
+            </button>
+
+            <button
+              type="button"
+              id="clear-selection-btn"
+              (click)="clearSelection()"
+              class="px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold transition-colors"
+            >
+              Clear
+            </button>
           </div>
         </div>
 
@@ -228,9 +317,18 @@ type DispatchTab = 'queue' | 'workload';
             >
               <div>
                 <div class="flex items-center justify-between gap-2">
-                  <span class="font-mono text-sm font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
-                    {{ parcel.trackingNumber }}
-                  </span>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      [attr.id]="'select-parcel-' + parcel.parcelId"
+                      [checked]="isParcelSelected(parcel.parcelId)"
+                      (change)="toggleSelectParcel(parcel.parcelId)"
+                      class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                    />
+                    <span class="font-mono text-sm font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                      {{ parcel.trackingNumber }}
+                    </span>
+                  </div>
                   <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
                     ● {{ parcel.status }} (Unassigned)
                   </span>
@@ -458,6 +556,157 @@ type DispatchTab = 'queue' | 'workload';
       </div>
 
       <!-- ================================================================= -->
+      <!-- TAB 3: FAILED DELIVERIES -->
+      <!-- ================================================================= -->
+      <div *ngIf="activeTab() === 'failed'" class="space-y-4">
+        <!-- Filters & Search -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-3 flex-1">
+            <div class="relative flex-1 max-w-sm">
+              <input
+                type="text"
+                id="failed-search-input"
+                [ngModel]="failedSearchQuery()"
+                (ngModelChange)="failedSearchQuery.set($event)"
+                placeholder="Search by tracking # or failure reason..."
+                class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+              />
+              <span class="absolute left-3 top-2.5 text-slate-400 text-sm">🔍</span>
+            </div>
+
+            <select
+              id="failed-zone-filter"
+              [ngModel]="failedSelectedZone()"
+              (ngModelChange)="onFailedZoneChange($event)"
+              class="px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white"
+            >
+              <option value="">All Delivery Zones</option>
+              <option value="ZONE-COLOMBO-NORTH">Colombo North</option>
+              <option value="ZONE-COLOMBO-SOUTH">Colombo South</option>
+              <option value="ZONE-KANDY">Kandy Central</option>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button
+              type="button"
+              id="refresh-failed-btn"
+              (click)="retryLoadFailed()"
+              class="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-slate-50 text-xs font-semibold transition-colors flex items-center gap-1.5"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
+            </button>
+            <p class="text-xs text-slate-500 font-medium">
+              Showing <strong class="text-slate-800">{{ filteredFailedParcels().length }}</strong> failed parcel(s)
+            </p>
+          </div>
+        </div>
+
+        <!-- Loading State -->
+        <div *ngIf="dispatchService.isLoadingFailed()" class="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+          <div class="inline-block animate-spin text-3xl">⏳</div>
+          <p class="text-sm font-semibold text-slate-600">Loading failed delivery parcels...</p>
+        </div>
+
+        <!-- Error State with Retry -->
+        <div *ngIf="!dispatchService.isLoadingFailed() && dispatchService.failedError()" class="bg-rose-50 rounded-2xl border border-rose-200 p-6 text-center space-y-3">
+          <div class="text-3xl">⚠️</div>
+          <h3 class="text-sm font-bold text-rose-800">Failed to Load Failed Deliveries</h3>
+          <p class="text-xs text-rose-600 max-w-md mx-auto">{{ dispatchService.failedError() }}</p>
+          <button
+            type="button"
+            id="retry-failed-btn"
+            (click)="retryLoadFailed()"
+            class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-colors"
+          >
+            Retry Loading
+          </button>
+        </div>
+
+        <!-- Failed Parcels Grid -->
+        <div *ngIf="!dispatchService.isLoadingFailed() && !dispatchService.failedError()">
+          <div *ngIf="filteredFailedParcels().length > 0; else emptyFailedTemplate" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div
+              *ngFor="let parcel of filteredFailedParcels()"
+              class="bg-white rounded-2xl border border-rose-200/80 shadow-sm p-5 hover:border-rose-300 transition-all space-y-4 flex flex-col justify-between"
+            >
+              <div>
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-mono text-sm font-black text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                    {{ parcel.trackingNumber }}
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                    ● FAILED
+                  </span>
+                </div>
+
+                <!-- Failure Reason Alert Box -->
+                <div class="mt-3 p-3 rounded-xl bg-rose-50/70 border border-rose-200 text-xs text-rose-900 space-y-1">
+                  <div class="flex items-center gap-1.5 font-bold">
+                    <span>⚠️</span>
+                    <span>Failure Reason:</span>
+                  </div>
+                  <p class="text-rose-700 font-medium pl-5">{{ parcel.failureReason || 'Delivery attempt failed' }}</p>
+                </div>
+
+                <!-- Routing -->
+                <div class="mt-3 space-y-2 text-xs text-slate-600">
+                  <div class="flex items-start gap-2">
+                    <span class="text-emerald-600 font-bold mt-0.5">🟢 PICKUP:</span>
+                    <div>
+                      <p class="font-bold text-slate-800">{{ parcel.pickupAddress || 'Address on file' }}</p>
+                      <p class="text-[11px] text-slate-500">{{ parcel.pickupZone }}</p>
+                    </div>
+                  </div>
+                  <div class="flex items-start gap-2">
+                    <span class="text-rose-600 font-bold mt-0.5">📍 DROPOFF:</span>
+                    <div>
+                      <p class="font-bold text-slate-800">{{ parcel.dropoffAddress || 'Address on file' }}</p>
+                      <p class="text-[11px] text-slate-500">
+                        {{ parcel.dropoffZone }}
+                        <span *ngIf="parcel.recipientName"> • Recipient: {{ parcel.recipientName }}</span>
+                        <span *ngIf="parcel.recipientPhone"> ({{ parcel.recipientPhone }})</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Footer & Re-queue Trigger -->
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                  <span class="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 font-bold">
+                    Attempt #{{ parcel.attemptCount ?? 1 }}
+                  </span>
+                  <span *ngIf="parcel.weightKg !== undefined">• {{ parcel.weightKg }} kg</span>
+                </div>
+
+                <button
+                  type="button"
+                  [attr.id]="'requeue-parcel-' + parcel.parcelId + '-btn'"
+                  (click)="openRequeueModal(parcel)"
+                  class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  <span>🔄 Re-queue Parcel</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <ng-template #emptyFailedTemplate>
+            <div class="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
+              <div class="text-4xl">✨</div>
+              <h3 class="text-base font-bold text-slate-800">No Failed Deliveries</h3>
+              <p class="text-xs text-slate-500 max-w-sm mx-auto">
+                There are no failed parcels requiring dispatcher attention at this time.
+              </p>
+            </div>
+          </ng-template>
+        </div>
+      </div>
+
+      <!-- ================================================================= -->
       <!-- MODAL: ASSIGN PARCEL DIALOG -->
       <!-- ================================================================= -->
       <div
@@ -560,6 +809,161 @@ type DispatchTab = 'queue' | 'workload';
           </div>
         </div>
       </div>
+
+      <!-- ================================================================= -->
+      <!-- MODAL: BULK ASSIGN RESULTS -->
+      <!-- ================================================================= -->
+      <div
+        *ngIf="bulkResult()"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in"
+      >
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg p-6 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 class="text-base font-extrabold text-slate-900">Bulk Assignment Summary</h3>
+            <button
+              type="button"
+              (click)="bulkResult.set(null)"
+              class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 text-sm"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 text-center">
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <p class="text-[11px] font-bold text-slate-500 uppercase">Total</p>
+              <p class="text-lg font-black text-slate-900">{{ bulkResult()?.totalRequested }}</p>
+            </div>
+            <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+              <p class="text-[11px] font-bold text-emerald-600 uppercase">Succeeded</p>
+              <p class="text-lg font-black text-emerald-800">{{ bulkResult()?.successfulCount }}</p>
+            </div>
+            <div class="p-3 rounded-xl bg-rose-50 border border-rose-200">
+              <p class="text-[11px] font-bold text-rose-600 uppercase">Failed</p>
+              <p class="text-lg font-black text-rose-800">{{ bulkResult()?.failedCount }}</p>
+            </div>
+          </div>
+
+          <div class="max-h-60 overflow-y-auto space-y-2 pr-1">
+            <div
+              *ngFor="let item of bulkResult()?.results"
+              class="p-2.5 rounded-xl border text-xs flex items-center justify-between gap-3"
+              [class.bg-emerald-50/50]="item.success"
+              [class.border-emerald-200]="item.success"
+              [class.bg-rose-50/50]="!item.success"
+              [class.border-rose-200]="!item.success"
+            >
+              <div class="flex items-center gap-2">
+                <span>{{ item.success ? '✅' : '❌' }}</span>
+                <div>
+                  <p class="font-mono font-bold text-slate-800">{{ item.parcelId }}</p>
+                  <p *ngIf="!item.success" class="text-[11px] text-rose-600">
+                    {{ item.errorMessage || item.errorCode }}
+                  </p>
+                </div>
+              </div>
+              <span
+                class="px-2 py-0.5 rounded text-[11px] font-bold"
+                [class.bg-emerald-100]="item.success"
+                [class.text-emerald-800]="item.success"
+                [class.bg-rose-100]="!item.success"
+                [class.text-rose-800]="!item.success"
+              >
+                {{ item.success ? 'Assigned' : 'Failed' }}
+              </span>
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 flex justify-end">
+            <button
+              type="button"
+              id="close-bulk-results-btn"
+              (click)="bulkResult.set(null)"
+              class="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- MODAL: RE-QUEUE PARCEL CONFIRMATION -->
+      <!-- ================================================================= -->
+      <div
+        *ngIf="selectedParcelForRequeue()"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in"
+      >
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg p-6 space-y-5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <h3 class="text-base font-extrabold text-slate-900">Re-queue Failed Parcel</h3>
+              <p class="text-xs text-slate-500 font-mono">{{ selectedParcelForRequeue()?.trackingNumber }}</p>
+            </div>
+            <button
+              type="button"
+              [disabled]="isSubmittingRequeue()"
+              (click)="selectedParcelForRequeue.set(null)"
+              class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-sm disabled:opacity-50"
+            >
+              ✕
+            </button>
+          </div>
+
+          <!-- Warning info box -->
+          <div class="bg-amber-50 rounded-xl p-3.5 border border-amber-200 text-xs space-y-1.5 text-amber-900">
+            <p class="font-bold flex items-center gap-1.5">
+              <span>ℹ️</span>
+              <span>Re-queue Confirmation</span>
+            </p>
+            <p>
+              This action will return the parcel from <strong>FAILED</strong> to <strong>CREATED</strong> status,
+              remove previous courier assignment, and increment the delivery attempt count
+              (from <strong>{{ selectedParcelForRequeue()?.attemptCount ?? 1 }}</strong> to <strong>{{ (selectedParcelForRequeue()?.attemptCount ?? 1) + 1 }}</strong>).
+            </p>
+            <p class="text-slate-600 mt-1">
+              Previous Failure Reason: <em>"{{ selectedParcelForRequeue()?.failureReason || 'N/A' }}"</em>
+            </p>
+          </div>
+
+          <!-- Reason Input -->
+          <div class="space-y-1.5">
+            <label for="requeue-reason-input" class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Dispatcher Reason (Optional)
+            </label>
+            <input
+              type="text"
+              id="requeue-reason-input"
+              [ngModel]="requeueReason()"
+              (ngModelChange)="requeueReason.set($event)"
+              placeholder="e.g. Customer requested redelivery tomorrow morning"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+            />
+          </div>
+
+          <!-- Actions -->
+          <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              [disabled]="isSubmittingRequeue()"
+              (click)="selectedParcelForRequeue.set(null)"
+              class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              id="confirm-requeue-btn"
+              [disabled]="isSubmittingRequeue()"
+              (click)="confirmRequeue()"
+              class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              <span *ngIf="isSubmittingRequeue()" class="animate-spin text-xs">⏳</span>
+              <span>{{ isSubmittingRequeue() ? 'Re-queueing...' : 'Confirm Re-queue' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
 })
@@ -574,11 +978,24 @@ export class DispatchComponent implements OnInit {
   public selectedZone = signal('');
   public workloadZone = signal('');
   public availableOnly = signal(false);
+  public failedSearchQuery = signal('');
+  public failedSelectedZone = signal('');
 
   // Modals & Submitting state
   public selectedParcelForAssign = signal<DispatchParcelSummary | null>(null);
   public selectedCourierId = signal<string>('');
   public isSubmittingAssignment = signal(false);
+
+  // Re-queue state
+  public selectedParcelForRequeue = signal<DispatchParcelSummary | null>(null);
+  public requeueReason = signal('');
+  public isSubmittingRequeue = signal(false);
+
+  // Bulk assignment state
+  public selectedParcelIds = signal<Set<string>>(new Set());
+  public bulkCourierId = signal('');
+  public isSubmittingBulk = signal(false);
+  public bulkResult = signal<BulkAssignResponse | null>(null);
 
   // Toast state
   public toastMessage = signal<string | null>(null);
@@ -589,6 +1006,8 @@ export class DispatchComponent implements OnInit {
       const tab = params.get('tab');
       if (tab === 'workload') {
         this.activeTab.set('workload');
+      } else if (tab === 'failed') {
+        this.activeTab.set('failed');
       } else {
         this.activeTab.set('queue');
       }
@@ -598,21 +1017,24 @@ export class DispatchComponent implements OnInit {
   public ngOnInit(): void {
     this.retryLoadQueue();
     this.retryLoadWorkload();
+    this.retryLoadFailed();
   }
 
   public retryLoadQueue(): void {
     this.dispatchService.loadUnassignedParcels(this.selectedZone()).subscribe({
-      error: (err) => {
-        // Error state signal is already updated in DispatchService
-      },
+      error: () => {},
     });
   }
 
   public retryLoadWorkload(): void {
     this.dispatchService.loadCourierWorkload(this.workloadZone(), this.availableOnly()).subscribe({
-      error: (err) => {
-        // Error state signal is already updated in DispatchService
-      },
+      error: () => {},
+    });
+  }
+
+  public retryLoadFailed(): void {
+    this.dispatchService.loadFailedParcels(this.failedSelectedZone()).subscribe({
+      error: () => {},
     });
   }
 
@@ -624,6 +1046,11 @@ export class DispatchComponent implements OnInit {
   public onWorkloadZoneChange(zone: string): void {
     this.workloadZone.set(zone);
     this.retryLoadWorkload();
+  }
+
+  public onFailedZoneChange(zone: string): void {
+    this.failedSelectedZone.set(zone);
+    this.retryLoadFailed();
   }
 
   public onAvailableOnlyChange(availableOnly: boolean): void {
@@ -664,6 +1091,138 @@ export class DispatchComponent implements OnInit {
     return list;
   });
 
+  public filteredFailedParcels = computed(() => {
+    let list = this.dispatchService.failedParcels();
+    const zone = this.failedSelectedZone();
+    if (zone) {
+      list = list.filter(
+        (p) => p.pickupZone === zone || p.dropoffZone === zone
+      );
+    }
+    const q = this.failedSearchQuery().trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (p) =>
+          p.trackingNumber.toLowerCase().includes(q) ||
+          (p.failureReason && p.failureReason.toLowerCase().includes(q)) ||
+          (p.pickupAddress && p.pickupAddress.toLowerCase().includes(q)) ||
+          (p.dropoffAddress && p.dropoffAddress.toLowerCase().includes(q)) ||
+          (p.recipientName && p.recipientName.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  });
+
+  // -------------------------------------------------------------------------
+  // Bulk Assignment Logic
+  // -------------------------------------------------------------------------
+  public isParcelSelected(parcelId: string): boolean {
+    return this.selectedParcelIds().has(parcelId);
+  }
+
+  public toggleSelectParcel(parcelId: string): void {
+    const updated = new Set(this.selectedParcelIds());
+    if (updated.has(parcelId)) {
+      updated.delete(parcelId);
+    } else {
+      updated.add(parcelId);
+    }
+    this.selectedParcelIds.set(updated);
+  }
+
+  public isAllSelected = computed(() => {
+    const current = this.filteredParcels();
+    if (current.length === 0) return false;
+    const selected = this.selectedParcelIds();
+    return current.every((p) => selected.has(p.parcelId));
+  });
+
+  public toggleSelectAll(): void {
+    if (this.isAllSelected()) {
+      this.clearSelection();
+    } else {
+      const allIds = new Set(this.filteredParcels().map((p) => p.parcelId));
+      this.selectedParcelIds.set(allIds);
+    }
+  }
+
+  public clearSelection(): void {
+    this.selectedParcelIds.set(new Set());
+    this.bulkCourierId.set('');
+  }
+
+  public submitBulkAssign(): void {
+    const courierId = this.bulkCourierId();
+    const parcelIds = Array.from(this.selectedParcelIds());
+    if (!courierId || parcelIds.length === 0 || this.isSubmittingBulk()) {
+      return;
+    }
+
+    this.isSubmittingBulk.set(true);
+
+    const assignments: AssignParcelRequest[] = parcelIds.map((id) => ({
+      parcelId: id,
+      courierId,
+    }));
+
+    this.dispatchService.bulkAssignParcels(assignments).subscribe({
+      next: (response) => {
+        this.isSubmittingBulk.set(false);
+        this.bulkResult.set(response);
+        this.clearSelection();
+        this.showToast(
+          `Bulk assignment completed: ${response.successfulCount} succeeded, ${response.failedCount} failed.`,
+          response.failedCount === 0 ? 'success' : 'error'
+        );
+      },
+      error: (err: any) => {
+        this.isSubmittingBulk.set(false);
+        const msg = err?.error?.message || err?.message || 'Bulk assignment failed.';
+        this.showToast(msg, 'error');
+      },
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Re-queue Parcel Logic
+  // -------------------------------------------------------------------------
+  public openRequeueModal(parcel: DispatchParcelSummary): void {
+    this.selectedParcelForRequeue.set(parcel);
+    this.requeueReason.set('');
+    this.isSubmittingRequeue.set(false);
+  }
+
+  public confirmRequeue(): void {
+    const parcel = this.selectedParcelForRequeue();
+    if (!parcel || this.isSubmittingRequeue()) {
+      return;
+    }
+
+    this.isSubmittingRequeue.set(true);
+
+    this.dispatchService.requeueParcel(parcel.parcelId, this.requeueReason()).subscribe({
+      next: (res) => {
+        this.isSubmittingRequeue.set(false);
+        this.selectedParcelForRequeue.set(null);
+        this.showToast(
+          `Parcel ${parcel.trackingNumber} successfully re-queued to CREATED (Attempt #${res.attemptCount})!`,
+          'success'
+        );
+      },
+      error: (err: any) => {
+        this.isSubmittingRequeue.set(false);
+        const errorMsg =
+          err?.error?.message ||
+          err?.message ||
+          'Failed to re-queue parcel. Please try again.';
+        this.showToast(errorMsg, 'error');
+      },
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Single Assignment Logic
+  // -------------------------------------------------------------------------
   public openAssignModal(parcel: DispatchParcelSummary): void {
     this.selectedParcelForAssign.set(parcel);
     const firstAvailable = this.dispatchService.availableCouriers()[0];
@@ -681,7 +1240,7 @@ export class DispatchComponent implements OnInit {
     this.isSubmittingAssignment.set(true);
 
     this.dispatchService.assignParcel(parcel.parcelId, courierId).subscribe({
-      next: (result) => {
+      next: () => {
         const courier = this.dispatchService
           .couriers()
           .find((c) => c.courierId === courierId);
@@ -701,8 +1260,6 @@ export class DispatchComponent implements OnInit {
           'Failed to assign parcel. Please try again.';
         this.showToast(errorMsg, 'error');
 
-        // On 409 Conflict (e.g. parcel was already assigned by another dispatcher),
-        // refresh the queue so stale records are cleaned up
         if (err?.status === 409) {
           this.retryLoadQueue();
         }

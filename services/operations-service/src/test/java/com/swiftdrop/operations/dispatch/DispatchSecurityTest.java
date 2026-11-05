@@ -1,5 +1,6 @@
 package com.swiftdrop.operations.dispatch;
 
+import com.swiftdrop.operations.dispatch.dto.FailedParcelsPage;
 import com.swiftdrop.operations.dispatch.dto.UnassignedParcelsPage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -59,6 +60,25 @@ class DispatchSecurityTest {
     @DisplayName("GET /api/v1/dispatch/parcels rejects unauthenticated request")
     void dispatchParcels_unauthenticated() throws Exception {
         mockMvc.perform(get("/api/v1/dispatch/parcels"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "dispatcher", roles = {"DISPATCHER"})
+    @DisplayName("GET /api/v1/dispatch/parcels/failed returns 200 for DISPATCHER role")
+    void failedParcels_allowsDispatcher() throws Exception {
+        when(dispatchService.listFailedParcels(any(), any(), anyInt(), anyInt()))
+            .thenReturn(new FailedParcelsPage(List.of(), 0, 0, 0, 20));
+
+        mockMvc.perform(get("/api/v1/dispatch/parcels/failed"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    @DisplayName("GET /api/v1/dispatch/parcels/failed returns 403 Forbidden for ADMIN role")
+    void failedParcels_forbiddenForAdmin() throws Exception {
+        mockMvc.perform(get("/api/v1/dispatch/parcels/failed"))
             .andExpect(status().isForbidden());
     }
 }

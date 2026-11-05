@@ -7,8 +7,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class DispatchService {
@@ -44,6 +47,137 @@ public class DispatchService {
             response.totalPages(),
             response.page(),
             response.size()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public FailedParcelsPage listFailedParcels(String zone, LocalDate date, int page, int size) {
+        ParcelPageClientResponse response = parcelServiceClient.queryFailedParcels(zone, date, page, size);
+        if (response == null || response.content() == null) {
+            return new FailedParcelsPage(List.of(), 0, 0, page, size);
+        }
+
+        List<DispatchParcelSummary> summaries = response.content().stream()
+            .map(this::mapToSummary)
+            .toList();
+
+        return new FailedParcelsPage(
+            summaries,
+            response.totalElements(),
+            response.totalPages(),
+            response.page(),
+            response.size()
+        );
+    }
+
+    @Transactional
+    public RequeueResponse requeueParcel(String parcelId, String reason, String requeuedBy) {
+        ParcelClientResponse response = parcelServiceClient.requeueParcel(parcelId, reason, requeuedBy);
+        return new RequeueResponse(
+            response.id(),
+            response.status(),
+            response.attemptCount(),
+            response.updatedAt() != null ? response.updatedAt() : Instant.now()
+        );
+    }
+
+    public BulkAssignResponse bulkAssignParcels(BulkAssignRequest request, String assignedBy) {
+        if (request == null || request.assignments() == null || request.assignments().isEmpty()) {
+            return new BulkAssignResponse(0, 0, 0, List.of());
+        }
+
+        List<AssignParcelRequest> assignments = request.assignments();
+        List<BulkAssignItemResult> results = new ArrayList<>();
+        Set<String> seenParcelIds = new HashSet<>();
+        int successCount = 0;
+        int failCount = 0;
+
+        for (AssignParcelRequest item : assignments) {
+            String parcelId = item.parcelId();
+            String courierId = item.courierId();
+
+            if (parcelId != null && !seenParcelIds.add(parcelId)) {
+                results.add(new BulkAssignItemResult(
+                    parcelId,
+                    courierId,
+                    false,
+                    "DUPLICATE_PARCEL_IN_BATCH",
+                    "Duplicate parcel in batch request"
+                ));
+                failCount++;
+                continue;
+            }
+
+            try {
+                Optional<CourierSummary> courierOpt = courierDirectory.findCourierById(courierId);
+                if (courierOpt.isEmpty()) {
+                    results.add(new BulkAssignItemResult(
+                        parcelId,
+                        courierId,
+                        false,
+                        "COURIER_NOT_FOUND",
+                        "Courier not found with id: " + courierId
+                    ));
+                    failCount++;
+                    continue;
+                }
+
+                if (!courierOpt.get().available()) {
+                    results.add(new BulkAssignItemResult(
+                        parcelId,
+                        courierId,
+                        false,
+                        "COURIER_UNAVAILABLE",
+                        "Courier is currently unavailable for assignments."
+                    ));
+                    failCount++;
+                    continue;
+                }
+
+                parcelServiceClient.assignCourier(parcelId, courierId, assignedBy);
+                results.add(new BulkAssignItemResult(
+                    parcelId,
+                    courierId,
+                    true,
+                    null,
+                    null
+                ));
+                successCount++;
+            } catch (ParcelAlreadyAssignedException ex) {
+                results.add(new BulkAssignItemResult(
+                    parcelId,
+                    courierId,
+                    false,
+                    "PARCEL_ALREADY_ASSIGNED",
+                    ex.getMessage()
+                ));
+                failCount++;
+            } catch (ParcelNotFoundException ex) {
+                results.add(new BulkAssignItemResult(
+                    parcelId,
+                    courierId,
+                    false,
+                    "PARCEL_NOT_FOUND",
+                    ex.getMessage()
+                ));
+                failCount++;
+            } catch (Exception ex) {
+                results.add(new BulkAssignItemResult(
+                    parcelId,
+                    courierId,
+                    false,
+                    "ASSIGNMENT_FAILED",
+                    ex.getMessage() != null ? ex.getMessage() : "Unknown assignment failure"
+                ));
+                failCount++;
+            }
+        }
+
+        return new BulkAssignResponse(
+            assignments.size(),
+            successCount,
+            failCount,
+            results
         );
     }
 

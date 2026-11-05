@@ -4,12 +4,17 @@ import { Observable, catchError, finalize, tap, throwError } from 'rxjs';
 import {
   AssignParcelRequest,
   AssignmentResult,
+  BulkAssignRequest,
+  BulkAssignResponse,
   CourierAvailabilityUpdateRequest,
   CourierWorkloadItem,
   DispatchParcelSummary,
-  UnassignedParcelsPage,
+  FailedParcelsPage,
   PricingRule,
   PricingRuleRequest,
+  RequeueRequest,
+  RequeueResponse,
+  UnassignedParcelsPage,
   Zone,
   ZoneRequest,
 } from './dispatch.model';
@@ -31,10 +36,18 @@ export class DispatchService {
   private totalPagesSignal = signal<number>(0);
   private pageSizeSignal = signal<number>(20);
 
+  private failedParcelsSignal = signal<DispatchParcelSummary[]>([]);
+  private totalFailedCountSignal = signal<number>(0);
+  private failedPageSignal = signal<number>(0);
+  private failedTotalPagesSignal = signal<number>(0);
+  private failedPageSizeSignal = signal<number>(20);
+
   public isLoadingParcels = signal<boolean>(false);
   public isLoadingCouriers = signal<boolean>(false);
+  public isLoadingFailed = signal<boolean>(false);
   public parcelsError = signal<string | null>(null);
   public couriersError = signal<string | null>(null);
+  public failedError = signal<string | null>(null);
   public zonesError = signal<string | null>(null);
   public pricingRulesError = signal<string | null>(null);
   public isLoadingZones = signal(false);
@@ -45,6 +58,8 @@ export class DispatchService {
   private lastParcelsDate?: string;
   private lastCouriersZone?: string;
   private lastCouriersAvailableOnly?: boolean;
+  private lastFailedZone?: string;
+  private lastFailedDate?: string;
 
   // -------------------------------------------------------------------------
   // Public Readonly Signals & Computeds
@@ -52,11 +67,17 @@ export class DispatchService {
   public parcels = this.parcelsSignal.asReadonly();
   public unassignedParcels = this.parcelsSignal.asReadonly();
   public couriers = this.couriersSignal.asReadonly();
+  public failedParcels = this.failedParcelsSignal.asReadonly();
 
   public totalElements = this.totalParcelsCount.asReadonly();
   public currentPage = this.currentPageSignal.asReadonly();
   public totalPages = this.totalPagesSignal.asReadonly();
   public pageSize = this.pageSizeSignal.asReadonly();
+
+  public totalFailedCount = this.totalFailedCountSignal.asReadonly();
+  public failedPage = this.failedPageSignal.asReadonly();
+  public failedTotalPages = this.failedTotalPagesSignal.asReadonly();
+  public failedPageSize = this.failedPageSizeSignal.asReadonly();
 
   public unassignedCount = computed(() => this.totalParcelsCount());
 
@@ -244,6 +265,102 @@ export class DispatchService {
   }
 
   /**
+   * Bulk assign parcels to couriers via POST /api/v1/dispatch/assignments/bulk
+   */
+  public bulkAssignParcels(
+    assignments: AssignParcelRequest[]
+  ): Observable<BulkAssignResponse> {
+    const payload: BulkAssignRequest = { assignments };
+
+    return this.http
+      .post<BulkAssignResponse>(
+        `${DispatchService.BASE_URL}/assignments/bulk`,
+        payload
+      )
+      .pipe(
+        tap(() => {
+          this.refreshQueue();
+          this.refreshWorkload();
+        })
+      );
+  }
+
+  /**
+   * Load failed delivery parcels via GET /api/v1/dispatch/parcels/failed
+   */
+  public loadFailedParcels(
+    zone?: string,
+    date?: string,
+    page = 0,
+    size = 20
+  ): Observable<FailedParcelsPage> {
+    this.lastFailedZone = zone;
+    this.lastFailedDate = date;
+    this.isLoadingFailed.set(true);
+    this.failedError.set(null);
+
+    let params = new HttpParams()
+      .set('page', page.toString())
+      .set('size', size.toString());
+
+    if (zone && zone.trim().length > 0) {
+      params = params.set('zone', zone.trim());
+    }
+    if (date && date.trim().length > 0) {
+      params = params.set('date', date.trim());
+    }
+
+    return this.http
+      .get<FailedParcelsPage>(`${DispatchService.BASE_URL}/parcels/failed`, {
+        params,
+      })
+      .pipe(
+        tap((pageData) => {
+          this.failedParcelsSignal.set(pageData?.content || []);
+          this.totalFailedCountSignal.set(
+            pageData?.totalElements ?? pageData?.content?.length ?? 0
+          );
+          this.failedPageSignal.set(pageData?.page ?? page);
+          this.failedTotalPagesSignal.set(pageData?.totalPages ?? 1);
+          this.failedPageSizeSignal.set(pageData?.size ?? size);
+        }),
+        catchError((err) => {
+          const msg =
+            err?.error?.message ||
+            err?.message ||
+            'Failed to load failed parcels from server.';
+          this.failedError.set(msg);
+          return throwError(() => err);
+        }),
+        finalize(() => {
+          this.isLoadingFailed.set(false);
+        })
+      );
+  }
+
+  /**
+   * Re-queue a failed parcel via POST /api/v1/dispatch/parcels/{id}/requeue
+   */
+  public requeueParcel(
+    parcelId: string,
+    reason?: string
+  ): Observable<RequeueResponse> {
+    const payload: RequeueRequest = reason ? { reason } : {};
+
+    return this.http
+      .post<RequeueResponse>(
+        `${DispatchService.BASE_URL}/parcels/${encodeURIComponent(parcelId)}/requeue`,
+        payload
+      )
+      .pipe(
+        tap(() => {
+          this.refreshFailed();
+          this.refreshQueue();
+        })
+      );
+  }
+
+  /**
    * Toggle courier availability via PATCH /api/v1/dispatch/couriers/{id}/availability
    */
   public updateCourierAvailability(
@@ -279,6 +396,20 @@ export class DispatchService {
       this.pageSizeSignal()
     ).subscribe({
       error: () => {}, // Handled by loadUnassignedParcels error signal
+    });
+  }
+
+  /**
+   * Helper to re-fetch failed parcels with last known filters and pagination
+   */
+  public refreshFailed(): void {
+    this.loadFailedParcels(
+      this.lastFailedZone,
+      this.lastFailedDate,
+      this.failedPageSignal(),
+      this.failedPageSizeSignal()
+    ).subscribe({
+      error: () => {},
     });
   }
 

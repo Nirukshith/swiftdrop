@@ -3,6 +3,7 @@ package com.swiftdrop.operations.dispatch;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.operations.dispatch.client.CourierUnavailableException;
 import com.swiftdrop.operations.dispatch.client.ParcelAlreadyAssignedException;
+import com.swiftdrop.operations.dispatch.client.ParcelNotEligibleForRequeueException;
 import com.swiftdrop.operations.dispatch.client.ParcelNotFoundException;
 import com.swiftdrop.operations.dispatch.dto.*;
 import org.junit.jupiter.api.DisplayName;
@@ -177,5 +178,126 @@ class DispatchControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.courierId").value(COURIER_ID))
             .andExpect(jsonPath("$.available").value(false));
+    }
+
+    @Test
+    @WithMockUser(username = "dispatcher", roles = {"DISPATCHER"})
+    @DisplayName("GET /api/v1/dispatch/parcels/failed returns 200 with failed page")
+    void listFailedParcels_returnsOk() throws Exception {
+        FailedParcelsPage page = new FailedParcelsPage(
+            List.of(new DispatchParcelSummary(
+                PARCEL_ID,
+                "SD-20261028-002",
+                "FAILED",
+                "Colombo",
+                "Kandy",
+                "10 Main St",
+                "20 Hill St",
+                2.5,
+                1,
+                "Recipient not available",
+                Instant.now()
+            )),
+            1,
+            1,
+            0,
+            20
+        );
+
+        when(dispatchService.listFailedParcels(any(), any(), eq(0), eq(20))).thenReturn(page);
+
+        mockMvc.perform(get("/api/v1/dispatch/parcels/failed")
+                .param("page", "0")
+                .param("size", "20"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalElements").value(1))
+            .andExpect(jsonPath("$.content[0].parcelId").value(PARCEL_ID))
+            .andExpect(jsonPath("$.content[0].status").value("FAILED"))
+            .andExpect(jsonPath("$.content[0].attemptCount").value(1))
+            .andExpect(jsonPath("$.content[0].failureReason").value("Recipient not available"));
+    }
+
+    @Test
+    @WithMockUser(username = "dispatcher", roles = {"DISPATCHER"})
+    @DisplayName("POST /api/v1/dispatch/parcels/{id}/requeue returns 200 on success")
+    void requeueParcel_returnsOk() throws Exception {
+        RequeueRequest request = new RequeueRequest("Customer requested redelivery tomorrow");
+        RequeueResponse response = new RequeueResponse(PARCEL_ID, "CREATED", 2, Instant.now());
+
+        when(dispatchService.requeueParcel(eq(PARCEL_ID), eq("Customer requested redelivery tomorrow"), anyString()))
+            .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/dispatch/parcels/{id}/requeue", PARCEL_ID)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.parcelId").value(PARCEL_ID))
+            .andExpect(jsonPath("$.status").value("CREATED"))
+            .andExpect(jsonPath("$.attemptCount").value(2));
+    }
+
+    @Test
+    @WithMockUser(username = "dispatcher", roles = {"DISPATCHER"})
+    @DisplayName("POST /api/v1/dispatch/parcels/{id}/requeue returns 400 when parcel is not in FAILED status")
+    void requeueParcel_returns400_whenNotFailed() throws Exception {
+        RequeueRequest request = new RequeueRequest("Invalid requeue");
+
+        when(dispatchService.requeueParcel(eq(PARCEL_ID), any(), anyString()))
+            .thenThrow(new ParcelNotEligibleForRequeueException("Parcel is not in FAILED status and cannot be re-queued."));
+
+        mockMvc.perform(post("/api/v1/dispatch/parcels/{id}/requeue", PARCEL_ID)
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("PARCEL_NOT_FAILED"))
+            .andExpect(jsonPath("$.message").value("Parcel is not in FAILED status and cannot be re-queued."));
+    }
+
+    @Test
+    @WithMockUser(username = "dispatcher", roles = {"DISPATCHER"})
+    @DisplayName("POST /api/v1/dispatch/parcels/{id}/requeue returns 404 when parcel not found")
+    void requeueParcel_returns404_whenNotFound() throws Exception {
+        when(dispatchService.requeueParcel(eq(PARCEL_ID), any(), anyString()))
+            .thenThrow(new ParcelNotFoundException("Parcel not found with id: " + PARCEL_ID));
+
+        mockMvc.perform(post("/api/v1/dispatch/parcels/{id}/requeue", PARCEL_ID)
+                .with(csrf()))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("PARCEL_NOT_FOUND"));
+    }
+
+    @Test
+    @WithMockUser(username = "dispatcher", roles = {"DISPATCHER"})
+    @DisplayName("POST /api/v1/dispatch/assignments/bulk returns 200 with batch results")
+    void bulkAssignParcels_returnsOk() throws Exception {
+        BulkAssignRequest request = new BulkAssignRequest(List.of(
+            new AssignParcelRequest(PARCEL_ID, COURIER_ID),
+            new AssignParcelRequest("p2", COURIER_ID)
+        ));
+        BulkAssignResponse response = new BulkAssignResponse(
+            2,
+            1,
+            1,
+            List.of(
+                new BulkAssignItemResult(PARCEL_ID, COURIER_ID, true, null, null),
+                new BulkAssignItemResult("p2", COURIER_ID, false, "PARCEL_ALREADY_ASSIGNED", "Already assigned")
+            )
+        );
+
+        when(dispatchService.bulkAssignParcels(any(), anyString())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/dispatch/assignments/bulk")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalRequested").value(2))
+            .andExpect(jsonPath("$.successfulCount").value(1))
+            .andExpect(jsonPath("$.failedCount").value(1))
+            .andExpect(jsonPath("$.results[0].success").value(true))
+            .andExpect(jsonPath("$.results[1].success").value(false))
+            .andExpect(jsonPath("$.results[1].errorCode").value("PARCEL_ALREADY_ASSIGNED"));
     }
 }

@@ -31,6 +31,31 @@ public class DispatchController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/parcels/failed")
+    public ResponseEntity<FailedParcelsPage> listFailedParcels(
+        @RequestParam(required = false) String zone,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+        @RequestParam(required = false, defaultValue = "0") int page,
+        @RequestParam(required = false, defaultValue = "20") int size
+    ) {
+        FailedParcelsPage response = dispatchService.listFailedParcels(zone, date, page, size);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/parcels/{id}/requeue")
+    public ResponseEntity<RequeueResponse> requeueParcel(
+        @PathVariable String id,
+        @RequestBody(required = false) RequeueRequest request,
+        Principal principal
+    ) {
+        String requeuedBy = (principal != null && principal.getName() != null)
+            ? principal.getName()
+            : "DISPATCHER";
+        String reason = (request != null) ? request.reason() : null;
+        RequeueResponse response = dispatchService.requeueParcel(id, reason, requeuedBy);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/couriers")
     public ResponseEntity<List<CourierWorkloadItem>> getCourierWorkloadBoard(
         @RequestParam(required = false) String zone,
@@ -50,6 +75,18 @@ public class DispatchController {
             : "DISPATCHER";
         AssignmentResult result = dispatchService.assignParcel(request, assignedBy);
         return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/assignments/bulk")
+    public ResponseEntity<BulkAssignResponse> bulkAssignParcels(
+        @Valid @RequestBody BulkAssignRequest request,
+        Principal principal
+    ) {
+        String assignedBy = (principal != null && principal.getName() != null)
+            ? principal.getName()
+            : "DISPATCHER";
+        BulkAssignResponse response = dispatchService.bulkAssignParcels(request, assignedBy);
+        return ResponseEntity.ok(response);
     }
 
     @PatchMapping("/couriers/{id}/availability")
