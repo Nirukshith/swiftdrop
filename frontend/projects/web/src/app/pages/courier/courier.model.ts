@@ -1,8 +1,12 @@
 export type DeliveryStatus =
-  | 'ASSIGNED'
+  | 'CREATED'
   | 'PICKED_UP'
   | 'IN_TRANSIT'
+  | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
+  | 'FAILED'
+  // Legacy aliases for backwards compatibility
+  | 'ASSIGNED'
   | 'FAILED_DELIVERY';
 
 export type FailureReasonCode =
@@ -27,6 +31,7 @@ export interface CourierDeliveryCard {
   status: string;
   recipientName: string;
   recipientPhone: string | null;
+  pickupAddress?: string;
   dropoffAddress: string;
   googleMapsUrl?: string | null;
   weightKg: number;
@@ -41,6 +46,75 @@ export interface CourierDailySummary {
   pendingCount: number;
   completedCount: number;
   deliveries: CourierDeliveryCard[];
+}
+
+export interface CourierDeliveriesResponse {
+  date: string;
+  totalDeliveries: number;
+  pendingCount: number;
+  completedCount: number;
+  deliveries: CourierDeliveryCard[];
+}
+
+export interface DeliveryProofInfo {
+  proofId: string;
+  proofType?: string;
+  proofUrl: string;
+  recipientName: string;
+  uploadedAt: string;
+}
+
+export interface CourierDeliveryDetail {
+  parcelId: string;
+  trackingNumber: string;
+  status: string;
+  recipientName: string;
+  recipientPhone: string;
+  senderName?: string;
+  senderPhone?: string;
+  pickupAddress: string;
+  dropoffAddress: string;
+  googleMapsUrl?: string | null;
+  specialInstructions?: string | null;
+  weightKg: number;
+  attemptCount: number;
+  allowedNextStatuses: string[];
+  proofRequired?: boolean;
+  proof?: DeliveryProofInfo | null;
+  failureReason?: string | null;
+}
+
+export interface CourierStatusUpdateRequest {
+  status: string;
+  reason?: string;
+  recipientName?: string;
+  idempotencyKey?: string;
+}
+
+export interface CourierStatusUpdateResponse {
+  parcelId: string;
+  trackingNumber: string;
+  previousStatus: string;
+  currentStatus: string;
+  updatedAt: string;
+  allowedNextStatuses: string[];
+}
+
+export interface ProofUploadPayload {
+  file: File;
+  recipientName?: string;
+  notes?: string;
+  deliveryNotes?: string;
+  idempotencyKey?: string;
+}
+
+export interface ProofUploadResponse {
+  proofId: string;
+  parcelId: string;
+  proofUrl: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  uploadedAt: string;
 }
 
 export interface CourierAddress {
@@ -67,41 +141,45 @@ export interface DeliveryProof {
 export interface CourierDelivery {
   parcelId: string;
   trackingNumber: string;
-  courierId: string;
+  courierId?: string;
   status: DeliveryStatus;
   recipientName: string;
   recipientPhone: string;
-  recipientAddress: CourierAddress;
-  senderName: string;
-  senderAddress: CourierAddress;
+  pickupAddress?: string;
+  dropoffAddress?: string;
+  recipientAddress?: CourierAddress;
+  senderName?: string;
+  senderPhone?: string;
+  senderAddress?: CourierAddress;
   specialInstructions?: string | null;
   weightKg: number;
-  sizeCategory: 'SMALL' | 'MEDIUM' | 'LARGE';
+  sizeCategory?: 'SMALL' | 'MEDIUM' | 'LARGE';
   timeSlot?: string | null;
-  proof?: DeliveryProof | null;
+  allowedNextStatuses?: string[];
+  proofRequired?: boolean;
+  proof?: DeliveryProofInfo | DeliveryProof | null;
   failureReason?: string | null;
-  updatedAt: string;
-  createdAt: string;
+  googleMapsUrl?: string | null;
+  attemptCount?: number;
+  sequenceOrder?: number;
+  updatedAt?: string;
+  createdAt?: string;
 }
 
 export interface StatusUpdateRequest {
   status: DeliveryStatus;
   idempotencyKey?: string;
   reason?: string;
-}
-
-export interface ProofUploadPayload {
-  file: File;
-  recipientName: string;
-  deliveryNotes?: string;
-  idempotencyKey?: string;
+  recipientName?: string;
 }
 
 export interface CourierStats {
   total: number;
-  assigned: number;
+  created: number;
+  assigned: number; // alias for created
   pickedUp: number;
   inTransit: number;
+  outForDelivery: number;
   delivered: number;
   failed: number;
 }

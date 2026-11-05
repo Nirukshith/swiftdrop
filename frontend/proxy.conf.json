@@ -24,6 +24,10 @@
     "target": "http://localhost:8083",
     "secure": false
   },
+  "/api/v1/courier": {
+    "target": "http://localhost:8083",
+    "secure": false
+  },
   "/courier": {
     "target": "http://localhost:8083",
     "secure": false
