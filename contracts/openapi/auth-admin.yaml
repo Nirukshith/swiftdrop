@@ -132,6 +132,75 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /api/v1/admin/audit:
+    get:
+      summary: Retrieve system audit logs
+      description: Returns a paginated list of security, authentication, and administrative audit events with optional filtering by action, actor, target type, and date range. Restricted to ADMIN role only per ADR 001.
+      operationId: getAuditLogs
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: action
+          in: query
+          required: false
+          description: Filter by audit event action code (e.g. USER_LOGIN_SUCCESS, USER_REGISTERED)
+          schema:
+            type: string
+        - name: actorId
+          in: query
+          required: false
+          description: Filter by user or system actor ID
+          schema:
+            type: string
+        - name: targetType
+          in: query
+          required: false
+          description: Filter by affected entity type (e.g. USER, MERCHANT, PARCEL)
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          required: false
+          description: Start date-time (ISO-8601 UTC)
+          schema:
+            type: string
+            format: date-time
+        - name: toDate
+          in: query
+          required: false
+          description: End date-time (ISO-8601 UTC)
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Audit logs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -289,3 +358,78 @@ components:
           type: string
           format: date-time
           example: "2026-10-25T13:20:00Z"
+
+    AuditRecordResponse:
+      type: object
+      required:
+        - id
+        - occurredAt
+        - actorId
+        - actorRole
+        - action
+        - targetType
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "f5b61a49-92c2-4cb6-a67b-117565eb0012"
+        occurredAt:
+          type: string
+          format: date-time
+          example: "2026-10-25T14:22:10Z"
+        actorId:
+          type: string
+          example: "admin-uuid-001"
+        actorRole:
+          type: string
+          example: "ADMIN"
+        action:
+          type: string
+          example: "MERCHANT_APPROVED"
+        targetType:
+          type: string
+          example: "MERCHANT"
+        targetId:
+          type: string
+          nullable: true
+          example: "merchant-uuid-99"
+        ipAddress:
+          type: string
+          nullable: true
+          example: "192.168.1.15"
+        correlationId:
+          type: string
+          nullable: true
+          example: "8f3b89e2-1e94-4d1a-8bb4-fae26610bca4"
+        details:
+          type: object
+          nullable: true
+          additionalProperties: true
+          example:
+            businessName: "Colombo Tech Ltd"
+
+    AuditLogPage:
+      type: object
+      required:
+        - content
+        - totalElements
+        - totalPages
+        - page
+        - size
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditRecordResponse'
+        totalElements:
+          type: integer
+          example: 1
+        totalPages:
+          type: integer
+          example: 1
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
