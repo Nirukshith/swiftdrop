@@ -60,16 +60,22 @@ public class WorkloadCounter {
         boolean stateMutated = false;
 
         if (isAssignedEvent(eventType)) {
-            // Reassignment: decrement previous courier if specified and different
-            if (event.previousCourierId() != null && !event.previousCourierId().isBlank()
-                    && !Objects.equals(event.previousCourierId(), event.courierId())) {
-                decrement(event.previousCourierId());
-            }
+            boolean isSameCourier = event.previousCourierId() != null
+                    && !event.previousCourierId().isBlank()
+                    && Objects.equals(event.previousCourierId(), event.courierId());
 
-            // Increment new courier's count
-            if (event.courierId() != null && !event.courierId().isBlank()) {
-                increment(event.courierId());
-                stateMutated = true;
+            if (!isSameCourier) {
+                // Reassignment: decrement previous courier if present and different
+                if (event.previousCourierId() != null && !event.previousCourierId().isBlank()) {
+                    decrement(event.previousCourierId());
+                    stateMutated = true;
+                }
+
+                // Increment new courier's count
+                if (event.courierId() != null && !event.courierId().isBlank()) {
+                    increment(event.courierId());
+                    stateMutated = true;
+                }
             }
         } else if (isStatusChangedEvent(eventType)) {
             String toStatus = event.toStatus();

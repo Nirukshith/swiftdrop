@@ -16,6 +16,7 @@ import {
 import { CUSTOMER_NAV } from '../customer-history/customer-nav';
 import { LiveIndicatorComponent } from './live-indicator.component';
 import { PageState, failure, followParcel } from './live-stream';
+import { ParcelRatingComponent } from './parcel-rating.component';
 import { ReceiptButtonComponent } from './receipt-button.component';
 import { LiveTimeline } from './live-timeline';
 import { TrackingApiService } from './tracking-api.service';
@@ -45,6 +46,7 @@ import { ParcelDetail } from './tracking.model';
     LiveIndicatorComponent,
     TrackingTimelineComponent,
     ReceiptButtonComponent,
+    ParcelRatingComponent,
   ],
   template: `
     <ui-shell [navItems]="nav" homeLink="/customer/dashboard" pageTitle="Parcel details">
@@ -101,6 +103,10 @@ import { ParcelDetail } from './tracking.model';
               }
               <app-live-indicator class="mt-4 border-t border-surface-border pt-4" [state]="stream()" (retry)="reconnect()" />
             </ui-card>
+
+            @if (timeline.status() === 'DELIVERED') {
+              <app-parcel-rating class="mt-4 block" [parcelId]="p.id" />
+            }
 
             <ui-card class="mt-4" title="Timeline">
               @if (timeline.isEmpty()) {

@@ -7,7 +7,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -17,6 +19,10 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
 
 @SpringBootTest
 @Testcontainers
@@ -35,13 +41,16 @@ class AdminUserIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @MockBean
+    private KafkaTemplate<String, Object> kafkaTemplate;
+
     @BeforeEach
     void cleanUp() {
         adminUserRepository.deleteAll();
     }
 
     @Test
-    @DisplayName("End-to-end: Admin provisions courier staff account in database")
+    @DisplayName("End-to-end: Admin provisions courier staff account in database and publishes event")
     void createCourierStaffAccount_success() {
         CreateStaffUserRequest request = new CreateStaffUserRequest(
             "courier.sunil@swiftdrop.lk",
@@ -62,10 +71,12 @@ class AdminUserIntegrationTest {
         assertThat(persisted).isPresent();
         assertThat(persisted.get().getEmail()).isEqualTo("courier.sunil@swiftdrop.lk");
         assertThat(passwordEncoder.matches("SecurePass#2026", persisted.get().getPasswordHash())).isTrue();
+
+        verify(kafkaTemplate, atLeastOnce()).send(eq("user.registered.v1"), eq(summary.id()), any());
     }
 
     @Test
-    @DisplayName("End-to-end: Admin provisions dispatcher staff account in database")
+    @DisplayName("End-to-end: Admin provisions dispatcher staff account in database and publishes event")
     void createDispatcherStaffAccount_success() {
         CreateStaffUserRequest request = new CreateStaffUserRequest(
             "dispatch.anura@swiftdrop.lk",
@@ -81,6 +92,8 @@ class AdminUserIntegrationTest {
         Optional<User> persisted = adminUserRepository.findById(summary.id());
         assertThat(persisted).isPresent();
         assertThat(persisted.get().getRole()).isEqualTo("DISPATCHER");
+
+        verify(kafkaTemplate, atLeastOnce()).send(eq("user.registered.v1"), eq(summary.id()), any());
     }
 
     @Test

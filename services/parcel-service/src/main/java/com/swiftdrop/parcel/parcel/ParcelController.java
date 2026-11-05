@@ -8,6 +8,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+
 @RestController
 @RequestMapping("/api/v1/parcels")
 public class ParcelController {
@@ -32,6 +34,16 @@ public class ParcelController {
     ) {
         String customerId = CurrentUser.require().userId();
         return ResponseEntity.ok(parcelService.listCustomerParcels(customerId, status, pageable));
+    }
+
+    @GetMapping("/quote")
+    public ResponseEntity<PricingQuoteResponse> getQuote(
+            @RequestParam String pickupDistrict,
+            @RequestParam String dropoffDistrict,
+            @RequestParam java.math.BigDecimal weightKg,
+            @RequestParam ParcelSize size
+    ) {
+        return ResponseEntity.ok(parcelService.getQuote(pickupDistrict, dropoffDistrict, weightKg, size));
     }
 
     @GetMapping("/{id}")

@@ -175,4 +175,60 @@ class ParcelControllerIntegrationTest {
                         .content(objectMapper.writeValueAsString(new CancelParcelRequest("Too late"))))
                 .andExpect(status().isConflict());
     }
+
+    @Test
+    @DisplayName("Customer requests fee quote: returns real calculated quote and breakdown")
+    void shouldReturnFeeQuoteSuccessfully() throws Exception {
+        when(pricingQuoteClient.fetchQuoteDetails("Colombo", "Kandy", new BigDecimal("2.5"), ParcelSize.MEDIUM))
+                .thenReturn(new PricingQuoteResponse(
+                        new BigDecimal("850.00"),
+                        "LKR",
+                        new PricingQuoteResponse.QuoteBreakdown(
+                                new BigDecimal("350.00"),
+                                new BigDecimal("250.00"),
+                                new BigDecimal("250.00")
+                        ),
+                        "Western",
+                        "Central"
+                ));
+
+        mockMvc.perform(get("/api/v1/parcels/quote")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .param("pickupDistrict", "Colombo")
+                        .param("dropoffDistrict", "Kandy")
+                        .param("weightKg", "2.5")
+                        .param("size", "MEDIUM"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currency", is("LKR")))
+                .andExpect(jsonPath("$.totalFee", is(850.00)))
+                .andExpect(jsonPath("$.breakdown.dropoffZoneBaseFee", is(350.00)))
+                .andExpect(jsonPath("$.breakdown.weightBandCharge", is(250.00)))
+                .andExpect(jsonPath("$.breakdown.sizeCharge", is(250.00)))
+                .andExpect(jsonPath("$.pickupZone", is("Western")))
+                .andExpect(jsonPath("$.dropoffZone", is("Central")));
+    }
+
+    @Test
+    @DisplayName("Quote request rejected for invalid Sri Lanka district")
+    void shouldRejectQuoteForInvalidDistrict() throws Exception {
+        mockMvc.perform(get("/api/v1/parcels/quote")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .param("pickupDistrict", "InvalidDistrict")
+                        .param("dropoffDistrict", "Colombo")
+                        .param("weightKg", "2.5")
+                        .param("size", "MEDIUM"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Quote request rejected for invalid weight (out of bounds)")
+    void shouldRejectQuoteForInvalidWeight() throws Exception {
+        mockMvc.perform(get("/api/v1/parcels/quote")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .param("pickupDistrict", "Colombo")
+                        .param("dropoffDistrict", "Galle")
+                        .param("weightKg", "0.0")
+                        .param("size", "MEDIUM"))
+                .andExpect(status().isBadRequest());
+    }
 }

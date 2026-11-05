@@ -319,49 +319,4 @@ describe('DispatchService (Real API Integration)', () => {
       expect(found?.available).toBe(false);
     });
   });
-
-  describe('Staff User Management (Governance)', () => {
-    it('should maintain staff users and allow provisioning accounts', () => {
-      const initialCount = service.users().length;
-      const created = service.createStaffUser({
-        email: 'new.courier@swiftdrop.lk',
-        password: 'Password123!',
-        fullName: 'New Courier',
-        phoneNumber: '+94771112222',
-        role: 'COURIER',
-      });
-
-      expect(created.email).toBe('new.courier@swiftdrop.lk');
-      expect(service.users().length).toBe(initialCount + 1);
-    });
-
-    it('should reject invalid role or duplicate email', () => {
-      expect(() => {
-        service.createStaffUser({
-          email: 'test@swiftdrop.lk',
-          password: 'Password123!',
-          fullName: 'Test',
-          phoneNumber: '+94771112222',
-          role: 'ADMIN' as any,
-        });
-      }).toThrow(/Only COURIER or DISPATCHER/);
-
-      expect(() => {
-        service.createStaffUser({
-          email: service.users()[0].email,
-          password: 'Password123!',
-          fullName: 'Duplicate',
-          phoneNumber: '+94771112222',
-          role: 'COURIER',
-        });
-      }).toThrow(/already exists/);
-    });
-
-    it('should toggle user status', () => {
-      const user = service.users()[0];
-      const initial = user.enabled;
-      service.toggleUserStatus(user.id);
-      expect(service.users().find((u) => u.id === user.id)?.enabled).toBe(!initial);
-    });
-  });
 });

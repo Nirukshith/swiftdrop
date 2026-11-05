@@ -118,7 +118,7 @@ services:
       integration-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost/health"]
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1/health"]
       interval: 10s
       timeout: 5s
       retries: 6

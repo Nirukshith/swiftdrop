@@ -150,8 +150,8 @@ CREATE INDEX IF NOT EXISTS idx_tracking_event_parcel_seq ON tracking_event(parce
 CREATE INDEX IF NOT EXISTS idx_tracking_event_tracking_no ON tracking_event(tracking_number, sequence);
 
 CREATE TABLE IF NOT EXISTS parcel_rating (
-    parcel_id   UUID PRIMARY KEY,            -- one rating per parcel
-    customer_id UUID NOT NULL,
+    parcel_id   VARCHAR(36) PRIMARY KEY,     -- one rating per parcel (ids are VARCHAR(36) like parcels.id)
+    customer_id VARCHAR(36) NOT NULL,
     score       SMALLINT NOT NULL CHECK (score BETWEEN 1 AND 5),
     comment     VARCHAR(500),
     created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -261,7 +261,7 @@ Should-have, deferred until the Must-haves are done (ADR 006).
 - Only the owner customer (`ROLE_CUSTOMER` and `customerId` match) may rate. Merchant parcels have no `customerId`, so they cannot be rated by customers.
 - The parcel must be `DELIVERED` at the time of the request, otherwise `409 PARCEL_NOT_DELIVERED`.
 - Once per parcel: `parcel_rating.parcel_id` is the primary key, so a second attempt (including a race) fails with `409 RATING_ALREADY_EXISTS`.
-- The body (`score` 1-5, optional `comment` up to 500 characters) is a proposal (Q6).
+- The body is `score` (integer 1-5) and an optional `comment` (up to 500 characters, trimmed; blank is stored as no comment), as in parcel-read.yaml. Implemented in V4__create_parcel_rating.sql (Q6 resolved).
 
 ---
 
@@ -288,7 +288,7 @@ The public page must work at 360 px width (NF-04).
 | Q3 | Recipient name mask format (`S*** S***` proposed). | Team |
 | Q4 | Show anything for `FAILED` on the public page, e.g. a fixed reason code like `RECIPIENT_UNAVAILABLE`, never free text? | Team |
 | Q5 | ~~Which statuses allow a receipt download? Can DISPATCHER download it too?~~ **Resolved:** `DELIVERED` only (`409 PARCEL_NOT_DELIVERED` otherwise); owner customer and ADMIN only, DISPATCHER and courier get `403` (section 8). | Team |
-| Q6 | Rating body: is `score` 1-5 plus an optional comment enough? Does anyone (M5 reports) consume ratings? | Team, M5 |
+| Q6 | ~~Rating body: is `score` 1-5 plus an optional comment enough? Does anyone (M5 reports) consume ratings?~~ **Resolved:** `score` 1-5 plus an optional comment, exactly as in parcel-read.yaml. No other service consumes ratings, so no event is published. | Team, M5 |
 | Q7 | Is a private (authenticated) SSE stream needed, or is the public stream enough for signed-in pages (3.5)? | Team, M10 |
 | Q8 | One shared `processed_event` table in `parcel_db`, or separate idempotency per package? | M1 |
 | Q9 | Rate-limit numbers in section 6. | M9 |

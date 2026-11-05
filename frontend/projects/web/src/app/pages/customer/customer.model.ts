@@ -108,12 +108,26 @@ export interface CustomerParcel {
   updatedAt?: string;
 }
 
-export interface FeePreview {
-  baseFee: number;
-  interDistrictFee: number;
-  weightFee: number;
-  sizeTierFee: number;
+export interface QuoteBreakdown {
+  dropoffZoneBaseFee: number;
+  weightBandCharge: number;
+  sizeCharge: number;
+}
+
+export interface QuoteResponse {
+  currency: string;
   totalFee: number;
+  breakdown: QuoteBreakdown;
+  pickupZone?: string | null;
+  dropoffZone?: string | null;
+}
+
+export interface FeePreview {
+  currency: string;
+  totalFee: number;
+  breakdown: QuoteBreakdown;
+  pickupZone?: string | null;
+  dropoffZone?: string | null;
   pickupDistrict: District;
   dropoffDistrict: District;
   weightKg: number;
