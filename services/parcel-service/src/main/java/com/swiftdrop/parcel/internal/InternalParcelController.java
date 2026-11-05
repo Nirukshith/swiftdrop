@@ -27,9 +27,11 @@ public class InternalParcelController {
     @PutMapping("/{id}/assignment")
     public ResponseEntity<ParcelResponse> assignCourier(
             @PathVariable String id,
+            @RequestParam(required = false) Boolean reassign,
             @Valid @RequestBody ParcelAssignmentRequest request
     ) {
-        ParcelResponse response = parcelService.assignCourier(id, request.courierId(), request.assignedBy());
+        boolean allowReassignment = Boolean.TRUE.equals(reassign) || Boolean.TRUE.equals(request.reassign());
+        ParcelResponse response = parcelService.assignCourier(id, request.courierId(), request.assignedBy(), allowReassignment);
         return ResponseEntity.ok(response);
     }
 

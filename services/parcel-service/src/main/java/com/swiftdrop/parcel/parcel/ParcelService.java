@@ -196,6 +196,10 @@ public class ParcelService {
 
     @Transactional
     public ParcelResponse assignCourier(String id, String courierId, String assignedBy, boolean allowReassignment) {
+        if (courierId == null || courierId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Courier ID is required");
+        }
+
         Parcel parcel = parcelRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Parcel not found with id: " + id));
 
@@ -206,6 +210,10 @@ public class ParcelService {
 
         String previousCourier = parcel.getCourierId();
         if (previousCourier != null && !previousCourier.isBlank()) {
+            if (previousCourier.equals(courierId)) {
+                // Idempotent duplicate: already assigned to this courier, no re-assignment needed
+                return ParcelResponse.from(parcel);
+            }
             if (!allowReassignment) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "Parcel has already been assigned to courier " + previousCourier);
