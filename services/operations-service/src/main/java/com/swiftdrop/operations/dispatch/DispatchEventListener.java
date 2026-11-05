@@ -1,14 +1,21 @@
 package com.swiftdrop.operations.dispatch;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.common.EventEnvelope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.kafka.annotation.DltHandler;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.annotation.RetryableTopic;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.retry.annotation.Backoff;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
+import java.util.Optional;
 
 @Component
 public class DispatchEventListener {
@@ -18,20 +25,30 @@ public class DispatchEventListener {
     private final WorkloadCounter workloadCounter;
     private final CourierWorkloadRepository courierWorkloadRepository;
     private final ProcessedEventRepository processedEventRepository;
+    private final ParcelSequenceRepository parcelSequenceRepository;
     private final ObjectMapper objectMapper;
 
     public DispatchEventListener(
         WorkloadCounter workloadCounter,
         CourierWorkloadRepository courierWorkloadRepository,
         ProcessedEventRepository processedEventRepository,
+        ParcelSequenceRepository parcelSequenceRepository,
         ObjectMapper objectMapper
     ) {
         this.workloadCounter = workloadCounter;
         this.courierWorkloadRepository = courierWorkloadRepository;
         this.processedEventRepository = processedEventRepository;
+        this.parcelSequenceRepository = parcelSequenceRepository;
         this.objectMapper = objectMapper;
     }
 
+    @RetryableTopic(
+        attempts = "5",
+        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 16000),
+        autoCreateTopics = "true",
+        retryTopicSuffix = ".retry",
+        dltTopicSuffix = ".dlt"
+    )
     @KafkaListener(
         topics = {
             "${swiftdrop.kafka.topics.parcel-assigned:parcel.assigned.v1}",
@@ -40,13 +57,14 @@ public class DispatchEventListener {
         groupId = "operations-dispatch"
     )
     @Transactional
-    public void onEvent(String payload) {
-        try {
-            EventEnvelope event = objectMapper.readValue(payload, EventEnvelope.class);
-            processEvent(event);
-        } catch (Exception e) {
-            log.error("Failed to parse and process event in operations-dispatch: {}", e.getMessage(), e);
-        }
+    public void onEvent(String payload) throws JsonProcessingException {
+        EventEnvelope event = objectMapper.readValue(payload, EventEnvelope.class);
+        processEvent(event);
+    }
+
+    @DltHandler
+    public void handleDlt(String payload, @Header(KafkaHeaders.RECEIVED_TOPIC) String topic) {
+        log.error("Exhausted retry attempts for dispatch event from topic {}: {}", topic, payload);
     }
 
     @Transactional
@@ -61,33 +79,59 @@ public class DispatchEventListener {
             return;
         }
 
-        // 2. Pure domain state update
+        // 2. Persistent per-parcel sequence check (survives application restarts)
+        String parcelId = event.parcelId();
+        Long sequence = event.sequence();
+        if (parcelId != null && sequence != null) {
+            Optional<ParcelSequenceEntity> seqOpt = parcelSequenceRepository.findById(parcelId);
+            if (seqOpt.isPresent() && sequence <= seqOpt.get().getLastSequence()) {
+                log.warn("Stale or out-of-order event for parcel {}: received sequence {} <= lastSequence {}",
+                        parcelId, sequence, seqOpt.get().getLastSequence());
+                return;
+            }
+        }
+
+        // 3. Domain state validation via WorkloadCounter
         boolean applied = workloadCounter.apply(event);
         if (!applied) {
             log.debug("WorkloadCounter rejected or ignored event: {}", event.eventId());
+            return;
         }
 
-        // 3. Update database state
+        // 4. Update database courier workload counters
         String eventType = event.eventType();
         if (isAssignedEvent(eventType)) {
-            // Reassignment: decrement previous courier
-            if (event.previousCourierId() != null && !event.previousCourierId().isBlank()
-                    && !Objects.equals(event.previousCourierId(), event.courierId())) {
-                decrementWorkload(event.previousCourierId(), event.sequence(), event.eventId());
-            }
+            boolean isSameCourier = event.previousCourierId() != null
+                    && !event.previousCourierId().isBlank()
+                    && Objects.equals(event.previousCourierId(), event.courierId());
 
-            // Increment assigned courier
-            if (event.courierId() != null && !event.courierId().isBlank()) {
-                incrementWorkload(event.courierId(), event.sequence(), event.eventId());
+            if (!isSameCourier) {
+                // Reassignment: decrement previous courier
+                if (event.previousCourierId() != null && !event.previousCourierId().isBlank()) {
+                    decrementWorkload(event.previousCourierId(), sequence, event.eventId());
+                }
+
+                // Increment assigned courier
+                if (event.courierId() != null && !event.courierId().isBlank()) {
+                    incrementWorkload(event.courierId(), sequence, event.eventId());
+                }
             }
         } else if (isStatusChangedEvent(eventType)) {
             String toStatus = event.toStatus();
             if (isTerminalStatus(toStatus) && event.courierId() != null && !event.courierId().isBlank()) {
-                decrementWorkload(event.courierId(), event.sequence(), event.eventId());
+                decrementWorkload(event.courierId(), sequence, event.eventId());
             }
         }
 
-        // 4. Record event as processed for persistence idempotency
+        // 5. Update per-parcel sequence record atomically
+        if (parcelId != null && sequence != null) {
+            ParcelSequenceEntity seqEntity = parcelSequenceRepository.findById(parcelId)
+                    .orElseGet(() -> new ParcelSequenceEntity(parcelId, sequence));
+            seqEntity.setLastSequence(sequence);
+            parcelSequenceRepository.save(seqEntity);
+        }
+
+        // 6. Record event as processed for persistence idempotency
         processedEventRepository.save(new ProcessedEventEntity(
             event.eventId(),
             event.eventType() != null ? event.eventType() : "UNKNOWN",
