@@ -1,19 +1,27 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideHttpClient } from '@angular/common/http';
 import { DispatchPricingComponent } from './dispatch-pricing.component';
 
 describe('DispatchPricingComponent', () => {
   let component: DispatchPricingComponent;
   let fixture: ComponentFixture<DispatchPricingComponent>;
+  let httpMock: HttpTestingController;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DispatchPricingComponent],
-      providers: [provideRouter([])],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DispatchPricingComponent);
     component = fixture.componentInstance;
+    httpMock = TestBed.inject(HttpTestingController);
+    httpMock.expectOne('/api/v1/admin/pricing-rules').flush([
+      { id: '1', kind: 'WEIGHT_BAND', key: 'UP_TO_5KG', minimumWeightKg: 0, maximumWeightKg: 5, chargeLkr: 200, active: true, createdAt: '', updatedAt: '' },
+      { id: '2', kind: 'SIZE', key: 'MEDIUM', chargeLkr: 150, active: true, createdAt: '', updatedAt: '' },
+    ]);
     fixture.detectChanges();
   });
 
@@ -68,10 +76,17 @@ describe('DispatchPricingComponent', () => {
 
     expect(component.pricingForm.valid).toBe(true);
 
-    component.addPricingRule();
+    component.savePricingRule();
+    const createRequest = httpMock.expectOne('/api/v1/admin/pricing-rules');
+    expect(createRequest.request.method).toBe('POST');
+    createRequest.flush({ id: '3', kind: 'SIZE', key: 'EXTRA_LARGE', chargeLkr: 350, active: true, createdAt: '', updatedAt: '' });
+    httpMock.expectOne('/api/v1/admin/pricing-rules').flush([
+      { id: '3', kind: 'SIZE', key: 'EXTRA_LARGE', chargeLkr: 350, active: true, createdAt: '', updatedAt: '' },
+    ]);
+    component.pricingRules.set([{ id: '3', kind: 'SIZE', key: 'EXTRA_LARGE', chargeLkr: 350, active: true, createdAt: '', updatedAt: '' }]);
     fixture.detectChanges();
 
-    expect(component.pricingRules().length).toBe(initialCount + 1);
+    expect(component.pricingRules().length).toBe(1);
     const added = component.pricingRules().find((r) => r.key === 'EXTRA_LARGE');
     expect(added).toBeDefined();
     expect(added?.chargeLkr).toBe(350);
@@ -90,4 +105,3 @@ describe('DispatchPricingComponent', () => {
     expect(compiled.querySelector('#pricing-max-kg-input')).toBeTruthy();
   });
 });
-

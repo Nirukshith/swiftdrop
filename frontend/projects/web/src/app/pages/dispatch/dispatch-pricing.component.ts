@@ -1,17 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ButtonComponent, CardComponent } from 'ui';
-
-export interface PricingRule {
-  kind: 'WEIGHT_BAND' | 'SIZE';
-  key: string;
-  minimumWeightKg?: number;
-  maximumWeightKg?: number;
-  chargeLkr: number;
-  active: boolean;
-}
+import { DispatchService } from './dispatch.service';
+import { PricingRule } from './dispatch.model';
 
 @Component({
   selector: 'app-dispatch-pricing',
@@ -100,6 +93,13 @@ export interface PricingRule {
       <div id="pricing" class="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
         <ui-card title="Pricing rules">
           <div class="space-y-3">
+            @if (dispatchService.isLoadingPricingRules()) {
+              <p class="text-sm text-slate-500">Loading pricing rules...</p>
+            } @else if (dispatchService.pricingRulesError()) {
+              <p class="text-sm text-rose-600">{{ dispatchService.pricingRulesError() }}</p>
+            } @else if (pricingRules().length === 0) {
+              <p class="text-sm text-slate-500">No pricing rules configured.</p>
+            }
             @for (rule of pricingRules(); track rule.key) {
               <div class="rounded-lg bg-slate-50 p-4 border border-slate-200/60">
                 <div class="flex items-center justify-between gap-3">
@@ -109,13 +109,23 @@ export interface PricingRule {
                 <p class="mt-1 text-sm text-slate-500">
                   {{ rule.kind === 'SIZE' ? 'Size charge' : (rule.minimumWeightKg + '–' + rule.maximumWeightKg + ' kg weight band') }}
                 </p>
+                <p class="text-xs" [class]="rule.active ? 'text-emerald-600' : 'text-slate-500'">
+                  {{ rule.active ? 'Active' : 'Inactive' }}
+                </p>
+                <div class="mt-2 flex gap-2">
+                  <button type="button" class="text-xs text-indigo-600" (click)="editPricingRule(rule)">Edit</button>
+                  <button type="button" class="text-xs text-rose-600" (click)="removePricingRule(rule)">Delete</button>
+                </div>
               </div>
             }
           </div>
         </ui-card>
 
         <ui-card title="Add pricing rule">
-          <form class="space-y-4" [formGroup]="pricingForm" (ngSubmit)="addPricingRule()">
+          <form class="space-y-4" [formGroup]="pricingForm" (ngSubmit)="savePricingRule()">
+            @if (mutationError()) {
+              <p class="text-sm text-rose-600">{{ mutationError() }}</p>
+            }
             <div>
               <label class="block text-sm font-medium text-slate-700">
                 Rule type
@@ -193,7 +203,7 @@ export interface PricingRule {
               type="submit"
               [disabled]="pricingForm.invalid"
             >
-              Add pricing rule
+              {{ editingRuleId ? 'Save changes' : 'Add pricing rule' }}
             </ui-button>
           </form>
         </ui-card>
@@ -202,17 +212,10 @@ export interface PricingRule {
   `,
 })
 export class DispatchPricingComponent {
-  readonly pricingRules = signal<PricingRule[]>([
-    {
-      kind: 'WEIGHT_BAND',
-      key: 'UP_TO_5KG',
-      minimumWeightKg: 0,
-      maximumWeightKg: 5,
-      chargeLkr: 200,
-      active: true,
-    },
-    { kind: 'SIZE', key: 'MEDIUM', chargeLkr: 150, active: true },
-  ]);
+  readonly dispatchService = inject(DispatchService);
+  readonly mutationError = signal<string | null>(null);
+  readonly pricingRules = signal<PricingRule[]>([]);
+  editingRuleId: string | null = null;
 
   readonly pricingForm: FormGroup;
 
@@ -225,22 +228,63 @@ export class DispatchPricingComponent {
       chargeLkr: [0, [Validators.required, Validators.min(0)]],
       active: [true],
     });
+    this.loadPricingRules();
+  }
+  private loadPricingRules(): void {
+    this.dispatchService.listPricingRules().subscribe({
+      next: (rules) => this.pricingRules.set(rules),
+      error: () => undefined,
+    });
   }
 
-  addPricingRule(): void {
+  savePricingRule(): void {
     if (this.pricingForm.invalid) {
       this.pricingForm.markAllAsTouched();
       return;
     }
-    this.pricingRules.update((rules) => [...rules, this.pricingForm.getRawValue()]);
-    this.pricingForm.reset({
-      kind: 'SIZE',
-      key: '',
-      minimumWeightKg: 0,
-      maximumWeightKg: 0,
-      chargeLkr: 0,
-      active: true,
+    this.mutationError.set(null);
+    const raw = this.pricingForm.getRawValue();
+    const request = raw.kind === 'SIZE'
+      ? { kind: raw.kind, key: raw.key, chargeLkr: raw.chargeLkr, active: raw.active }
+      : raw;
+    const operation = this.editingRuleId
+      ? this.dispatchService.updatePricingRule(this.editingRuleId, request)
+      : this.dispatchService.createPricingRule(request);
+    operation.subscribe({
+      next: () => {
+        this.editingRuleId = null;
+        this.pricingForm.reset({
+          kind: 'SIZE', key: '', minimumWeightKg: 0, maximumWeightKg: 0, chargeLkr: 0, active: true,
+        });
+        this.loadPricingRules();
+      },
+      error: (error) => this.mutationError.set(
+        error?.error?.message || error?.message || 'Unable to save the pricing rule.'
+      ),
+    });
+  }
+
+  editPricingRule(rule: PricingRule): void {
+    this.editingRuleId = rule.id;
+    this.pricingForm.setValue({
+      kind: rule.kind,
+      key: rule.key,
+      minimumWeightKg: rule.minimumWeightKg ?? 0,
+      maximumWeightKg: rule.maximumWeightKg ?? 0,
+      chargeLkr: rule.chargeLkr,
+      active: rule.active,
+    });
+  }
+
+  removePricingRule(rule: PricingRule): void {
+    if (!window.confirm(`Delete pricing rule ${rule.key}?`)) {
+      return;
+    }
+    this.dispatchService.deletePricingRule(rule.id).subscribe({
+      next: () => this.loadPricingRules(),
+      error: (error) => this.mutationError.set(
+        error?.error?.message || error?.message || 'Unable to delete the pricing rule.'
+      ),
     });
   }
 }
-

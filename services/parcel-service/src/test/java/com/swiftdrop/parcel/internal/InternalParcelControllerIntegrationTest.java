@@ -9,8 +9,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -44,6 +46,9 @@ class InternalParcelControllerIntegrationTest {
 
     @Autowired
     private StatusHistoryRepository statusHistoryRepository;
+
+    @MockBean
+    private KafkaTemplate<String, Object> kafkaTemplate;
 
     @BeforeEach
     void setUp() {
@@ -298,5 +303,104 @@ class InternalParcelControllerIntegrationTest {
                 org.springframework.dao.OptimisticLockingFailureException.class,
                 () -> parcelRepository.saveAndFlush(parcel)
         );
+    }
+
+    @Test
+    @DisplayName("Pre-pickup reassignment: succeeds with reassign=true query param, updates courier and sequence")
+    void testPrePickupReassignmentWithQueryParam() throws Exception {
+        Parcel parcel = createSampleParcel("SD-20261027-REASSGN1", ParcelStatus.CREATED, null);
+
+        // 1. Initial assignment to courier A
+        mockMvc.perform(put("/internal/v1/parcels/" + parcel.getId() + "/assignment")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ParcelAssignmentRequest("usr-courier-A", "dispatcher-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.courierId", is("usr-courier-A")))
+                .andExpect(jsonPath("$.sequence", is(2)));
+
+        // 2. Reassignment to courier B with ?reassign=true
+        mockMvc.perform(put("/internal/v1/parcels/" + parcel.getId() + "/assignment?reassign=true")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ParcelAssignmentRequest("usr-courier-B", "dispatcher-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.courierId", is("usr-courier-B")))
+                .andExpect(jsonPath("$.sequence", is(3)));
+
+        // Verify database state
+        Parcel updated = parcelRepository.findById(parcel.getId()).orElseThrow();
+        assertThat(updated.getCourierId()).isEqualTo("usr-courier-B");
+        assertThat(updated.getSequence()).isEqualTo(3L);
+
+        // Verify status history audit
+        var history = statusHistoryRepository.findByParcelIdOrderByCreatedAtAsc(parcel.getId());
+        assertThat(history).hasSize(2);
+        assertThat(history.get(1).getReason()).contains("Reassigned to courier usr-courier-B from usr-courier-A");
+    }
+
+    @Test
+    @DisplayName("Pre-pickup reassignment: succeeds with body reassign=true flag")
+    void testPrePickupReassignmentWithBodyFlag() throws Exception {
+        Parcel parcel = createSampleParcel("SD-20261027-REASSGN2", ParcelStatus.CREATED, "usr-courier-A");
+
+        mockMvc.perform(put("/internal/v1/parcels/" + parcel.getId() + "/assignment")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ParcelAssignmentRequest("usr-courier-C", "dispatcher-2", true))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.courierId", is("usr-courier-C")));
+
+        Parcel updated = parcelRepository.findById(parcel.getId()).orElseThrow();
+        assertThat(updated.getCourierId()).isEqualTo("usr-courier-C");
+    }
+
+    @Test
+    @DisplayName("Same-courier reassignment: idempotent retry returns 200 without changing sequence")
+    void testSameCourierReassignmentIsIdempotent() throws Exception {
+        Parcel parcel = createSampleParcel("SD-20261027-REASSGN3", ParcelStatus.CREATED, "usr-courier-A");
+        long initialSequence = parcel.getSequence();
+
+        mockMvc.perform(put("/internal/v1/parcels/" + parcel.getId() + "/assignment?reassign=true")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ParcelAssignmentRequest("usr-courier-A", "dispatcher-1"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.courierId", is("usr-courier-A")))
+                .andExpect(jsonPath("$.sequence", is((int) initialSequence)));
+
+        Parcel updated = parcelRepository.findById(parcel.getId()).orElseThrow();
+        assertThat(updated.getSequence()).isEqualTo(initialSequence);
+    }
+
+    @Test
+    @DisplayName("Reassignment post-pickup: returns 409 Conflict when parcel is already PICKED_UP")
+    void testReassignmentRejectedPostPickup() throws Exception {
+        Parcel parcel = createSampleParcel("SD-20261027-REASSGN4", ParcelStatus.PICKED_UP, "usr-courier-A");
+
+        mockMvc.perform(put("/internal/v1/parcels/" + parcel.getId() + "/assignment?reassign=true")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ParcelAssignmentRequest("usr-courier-B", "dispatcher-1"))))
+                .andExpect(status().isConflict());
+
+        // Database remains unchanged
+        Parcel unchanged = parcelRepository.findById(parcel.getId()).orElseThrow();
+        assertThat(unchanged.getCourierId()).isEqualTo("usr-courier-A");
+    }
+
+    @Test
+    @DisplayName("Reassignment: returns 404 Not Found for non-existent parcel")
+    void testReassignmentParcelNotFound() throws Exception {
+        mockMvc.perform(put("/internal/v1/parcels/00000000-0000-0000-0000-000000000000/assignment?reassign=true")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ParcelAssignmentRequest("usr-courier-B", "dispatcher-1"))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Reassignment: returns 400 Bad Request if courierId is blank")
+    void testReassignmentBlankCourier() throws Exception {
+        Parcel parcel = createSampleParcel("SD-20261027-REASSGN5", ParcelStatus.CREATED, "usr-courier-A");
+
+        mockMvc.perform(put("/internal/v1/parcels/" + parcel.getId() + "/assignment?reassign=true")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ParcelAssignmentRequest("  ", "dispatcher-1"))))
+                .andExpect(status().isBadRequest());
     }
 }
