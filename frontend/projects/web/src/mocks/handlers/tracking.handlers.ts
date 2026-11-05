@@ -1,5 +1,5 @@
 import { HttpResponse, http } from 'msw';
-import { MockParcelDb } from '../mock-db';
+import { MockParcelDb, error } from '../mock-db';
 import { readJson, respond } from './respond';
 
 /** A tiny valid one-page PDF, enough for the browser to download and open. */
@@ -79,6 +79,11 @@ export function trackingHandlers(db: MockParcelDb, baseUrl = '') {
       const found = db.getParcel(String(params['id']));
       if (found.status !== 200 || !found.body || !('trackingNumber' in found.body)) {
         return respond(found);
+      }
+      if ('status' in found.body && found.body.status !== 'DELIVERED') {
+        return respond(
+          error(409, 'PARCEL_NOT_DELIVERED', `A receipt is only available for delivered parcels; current status is ${found.body.status}`),
+        );
       }
       const trackingNumber = found.body.trackingNumber;
       return new HttpResponse(mockReceiptPdf(trackingNumber), {

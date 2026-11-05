@@ -16,6 +16,7 @@ import {
 import { CUSTOMER_NAV } from '../customer-history/customer-nav';
 import { LiveIndicatorComponent } from './live-indicator.component';
 import { PageState, failure, followParcel } from './live-stream';
+import { ReceiptButtonComponent } from './receipt-button.component';
 import { LiveTimeline } from './live-timeline';
 import { TrackingApiService } from './tracking-api.service';
 import { StreamState, TrackingStreamService } from './tracking-stream.service';
@@ -43,6 +44,7 @@ import { ParcelDetail } from './tracking.model';
     EmptyStateComponent,
     LiveIndicatorComponent,
     TrackingTimelineComponent,
+    ReceiptButtonComponent,
   ],
   template: `
     <ui-shell [navItems]="nav" homeLink="/customer/dashboard" pageTitle="Parcel details">
@@ -94,6 +96,9 @@ import { ParcelDetail } from './tracking.model';
                   <dd class="text-ink" data-testid="last-updated">{{ timeline.lastUpdatedAt() | date: 'medium' }}</dd>
                 </div>
               </dl>
+              @if (timeline.status() === 'DELIVERED') {
+                <app-receipt-button class="mt-4 block" [parcelId]="p.id" [trackingNumber]="p.trackingNumber" />
+              }
               <app-live-indicator class="mt-4 border-t border-surface-border pt-4" [state]="stream()" (retry)="reconnect()" />
             </ui-card>
 

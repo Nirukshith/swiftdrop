@@ -15,9 +15,11 @@ import {
   ShellComponent,
   StatusBadgeComponent,
   TableCellDirective,
+  TableColumn,
   TableComponent,
   humanizeStatus,
 } from 'ui';
+import { ReceiptButtonComponent } from '../tracking/receipt-button.component';
 import { CustomerParcel, PARCEL_STATUSES, ParcelStatus } from './customer-history.model';
 import { CustomerParcelsService } from './customer-parcels.service';
 import { CUSTOMER_NAV, errorMessage } from './customer-nav';
@@ -42,6 +44,7 @@ import { PARCEL_COLUMNS, parcelKey } from './parcel-columns';
     PaginationComponent,
     ErrorStateComponent,
     EmptyStateComponent,
+    ReceiptButtonComponent,
   ],
   template: `
     <ui-shell [navItems]="nav" homeLink="/customer/dashboard" pageTitle="My parcels">
@@ -90,6 +93,11 @@ import { PARCEL_COLUMNS, parcelKey } from './parcel-columns';
             </ng-template>
             <ng-template uiCell="createdAt" let-row>{{ $any(row).createdAt | date: 'mediumDate' }}</ng-template>
             <ng-template uiCell="fee" let-row>{{ $any(row).fee | currency: 'LKR' : 'symbol' : '1.2-2' }}</ng-template>
+            <ng-template uiCell="receipt" let-row>
+              @if ($any(row).status === 'DELIVERED') {
+                <app-receipt-button [parcelId]="$any(row).id" [trackingNumber]="$any(row).trackingNumber" size="sm" variant="ghost" />
+              }
+            </ng-template>
           </ui-table>
 
           @if (totalElements() > size) {
@@ -114,7 +122,8 @@ export class CustomerParcelsComponent implements OnInit {
   private request?: Subscription;
 
   protected readonly nav = CUSTOMER_NAV;
-  protected readonly columns = PARCEL_COLUMNS;
+  /** History table columns plus a receipt download for delivered parcels. */
+  protected readonly columns: TableColumn<CustomerParcel>[] = [...PARCEL_COLUMNS, { key: 'receipt', header: 'Receipt', value: () => '' }];
   protected readonly rowKey = parcelKey;
   protected readonly statusOptions: SelectOption<ParcelStatus>[] = PARCEL_STATUSES.map((s) => ({
     value: s,

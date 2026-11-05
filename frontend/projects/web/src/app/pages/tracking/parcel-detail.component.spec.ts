@@ -143,6 +143,38 @@ describe('ParcelDetailComponent', () => {
     expect(FakeEventSource.instances).toHaveLength(1);
   });
 
+  const receiptButton = () => el().querySelector('[data-testid="receipt-button"]');
+
+  it('offers no receipt while the parcel is on its way', async () => {
+    await open('p-1', TN);
+
+    expect(receiptButton()).toBeNull();
+  });
+
+  it('offers the receipt download for a delivered parcel', async () => {
+    await harness.navigateByUrl('/customer/parcels/p-3');
+    http.expectOne('/api/v1/parcels/p-3').flush(parcel('p-3', TN, 'DELIVERED'));
+    http.expectOne('/api/v1/parcels/p-3/history').flush(history('p-3', TN));
+    harness.detectChanges();
+
+    expect(receiptButton()?.textContent).toContain('Download receipt');
+    expect(FakeEventSource.instances).toHaveLength(0);
+  });
+
+  it('shows the receipt download as soon as the live stream reports DELIVERED', async () => {
+    await open('p-1', TN);
+    const source = FakeEventSource.latest();
+    source.open();
+
+    source.emit(statusEvent(TN, 4, 'OUT_FOR_DELIVERY'));
+    harness.detectChanges();
+    expect(receiptButton()).toBeNull();
+
+    source.emit(statusEvent(TN, 5, 'DELIVERED'));
+    harness.detectChanges();
+    expect(receiptButton()).not.toBeNull();
+  });
+
   it('another customer gets a no-access message and no stream', async () => {
     await openFailing('p-9', 403, { code: 'FORBIDDEN', message: 'Access denied' });
 
