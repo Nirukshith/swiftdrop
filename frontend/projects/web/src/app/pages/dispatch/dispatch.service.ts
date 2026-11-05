@@ -8,6 +8,10 @@ import {
   CourierWorkloadItem,
   DispatchParcelSummary,
   UnassignedParcelsPage,
+  PricingRule,
+  PricingRuleRequest,
+  Zone,
+  ZoneRequest,
 } from './dispatch.model';
 
 @Injectable({
@@ -31,6 +35,10 @@ export class DispatchService {
   public isLoadingCouriers = signal<boolean>(false);
   public parcelsError = signal<string | null>(null);
   public couriersError = signal<string | null>(null);
+  public zonesError = signal<string | null>(null);
+  public pricingRulesError = signal<string | null>(null);
+  public isLoadingZones = signal(false);
+  public isLoadingPricingRules = signal(false);
 
   // Stored active filters for refresh
   private lastParcelsZone?: string;
@@ -63,6 +71,57 @@ export class DispatchService {
   public totalWorkloadActive = computed(() =>
     this.couriersSignal().reduce((acc, c) => acc + (c.activeCount || 0), 0)
   );
+
+  public listZones(): Observable<Zone[]> {
+    this.isLoadingZones.set(true);
+    this.zonesError.set(null);
+    return this.http.get<Zone[]>('/api/v1/admin/zones').pipe(
+      catchError((err) => {
+        this.zonesError.set(err?.error?.message || err?.message || 'Failed to load zones.');
+        return throwError(() => err);
+      }),
+      finalize(() => this.isLoadingZones.set(false))
+    );
+  }
+
+  public createZone(request: ZoneRequest): Observable<Zone> {
+    return this.http.post<Zone>('/api/v1/admin/zones', request);
+  }
+
+  public updateZone(id: string, request: ZoneRequest): Observable<Zone> {
+    return this.http.put<Zone>(`/api/v1/admin/zones/${encodeURIComponent(id)}`, request);
+  }
+
+  public deleteZone(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/v1/admin/zones/${encodeURIComponent(id)}`);
+  }
+
+  public listPricingRules(): Observable<PricingRule[]> {
+    this.isLoadingPricingRules.set(true);
+    this.pricingRulesError.set(null);
+    return this.http.get<PricingRule[]>('/api/v1/admin/pricing-rules').pipe(
+      catchError((err) => {
+        this.pricingRulesError.set(err?.error?.message || err?.message || 'Failed to load pricing rules.');
+        return throwError(() => err);
+      }),
+      finalize(() => this.isLoadingPricingRules.set(false))
+    );
+  }
+
+  public createPricingRule(request: PricingRuleRequest): Observable<PricingRule> {
+    return this.http.post<PricingRule>('/api/v1/admin/pricing-rules', request);
+  }
+
+  public updatePricingRule(id: string, request: PricingRuleRequest): Observable<PricingRule> {
+    return this.http.put<PricingRule>(
+      `/api/v1/admin/pricing-rules/${encodeURIComponent(id)}`,
+      request
+    );
+  }
+
+  public deletePricingRule(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/v1/admin/pricing-rules/${encodeURIComponent(id)}`);
+  }
 
   // -------------------------------------------------------------------------
   // API Methods

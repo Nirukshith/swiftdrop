@@ -1,19 +1,27 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideHttpClient } from '@angular/common/http';
 import { DispatchZonesComponent } from './dispatch-zones.component';
 
 describe('DispatchZonesComponent', () => {
   let component: DispatchZonesComponent;
   let fixture: ComponentFixture<DispatchZonesComponent>;
+  let httpMock: HttpTestingController;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [DispatchZonesComponent],
-      providers: [provideRouter([])],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
 
     fixture = TestBed.createComponent(DispatchZonesComponent);
     component = fixture.componentInstance;
+    httpMock = TestBed.inject(HttpTestingController);
+    httpMock.expectOne('/api/v1/admin/zones').flush([
+      { id: '1', name: 'COLOMBO', districts: ['Colombo'], served: true, baseFeeLkr: 500, createdAt: '', updatedAt: '' },
+      { id: '2', name: 'GAMPAHA', districts: ['Gampaha'], served: true, baseFeeLkr: 500, createdAt: '', updatedAt: '' },
+    ]);
     fixture.detectChanges();
   });
 
@@ -71,10 +79,17 @@ describe('DispatchZonesComponent', () => {
 
     expect(component.zoneForm.valid).toBe(true);
 
-    component.addZone();
+    component.saveZone();
+    const createRequest = httpMock.expectOne('/api/v1/admin/zones');
+    expect(createRequest.request.method).toBe('POST');
+    createRequest.flush({ id: '3', name: 'KANDY_CENTRAL', districts: ['Kandy'], served: true, baseFeeLkr: 650, createdAt: '', updatedAt: '' });
+    httpMock.expectOne('/api/v1/admin/zones').flush([
+      { id: '3', name: 'KANDY_CENTRAL', districts: ['Kandy'], served: true, baseFeeLkr: 650, createdAt: '', updatedAt: '' },
+    ]);
+    component.zones.set([{ id: '3', name: 'KANDY_CENTRAL', districts: ['Kandy'], served: true, baseFeeLkr: 650, createdAt: '', updatedAt: '' }]);
     fixture.detectChanges();
 
-    expect(component.zones().length).toBe(initialCount + 1);
+    expect(component.zones().length).toBe(1);
     const added = component.zones().find((z) => z.name === 'KANDY_CENTRAL');
     expect(added).toBeDefined();
     expect(added?.baseFeeLkr).toBe(650);
@@ -85,4 +100,3 @@ describe('DispatchZonesComponent', () => {
     expect(component.zoneForm.get('districts')?.value).toEqual([]);
   });
 });
-
