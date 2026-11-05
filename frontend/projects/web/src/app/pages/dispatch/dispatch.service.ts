@@ -6,9 +6,7 @@ import {
   AssignmentResult,
   CourierAvailabilityUpdateRequest,
   CourierWorkloadItem,
-  CreateStaffPayload,
   DispatchParcelSummary,
-  StaffUser,
   UnassignedParcelsPage,
 } from './dispatch.model';
 
@@ -40,44 +38,12 @@ export class DispatchService {
   private lastCouriersZone?: string;
   private lastCouriersAvailableOnly?: boolean;
 
-  // Staff users state for admin user management
-  private usersSignal = signal<StaffUser[]>([
-    {
-      id: 'usr-admin-1',
-      email: 'admin.lead@swiftdrop.lk',
-      fullName: 'Agnes Ostina',
-      phoneNumber: '+94 77 000 1111',
-      role: 'ADMIN',
-      enabled: true,
-      createdAt: '2026-10-20T08:00:00Z',
-    },
-    {
-      id: 'usr-dispatch-1',
-      email: 'dispatcher.colombo@swiftdrop.lk',
-      fullName: 'Chathura Wickramasinghe',
-      phoneNumber: '+94 77 222 4444',
-      role: 'DISPATCHER',
-      enabled: true,
-      createdAt: '2026-10-22T09:30:00Z',
-    },
-    {
-      id: 'f8e7d6c5-b4a3-2109-8765-43210fedcba9',
-      email: 'courier.saman@swiftdrop.lk',
-      fullName: 'Saman Perera',
-      phoneNumber: '+94 77 123 4567',
-      role: 'COURIER',
-      enabled: true,
-      createdAt: '2026-10-23T10:15:00Z',
-    },
-  ]);
-
   // -------------------------------------------------------------------------
   // Public Readonly Signals & Computeds
   // -------------------------------------------------------------------------
   public parcels = this.parcelsSignal.asReadonly();
   public unassignedParcels = this.parcelsSignal.asReadonly();
   public couriers = this.couriersSignal.asReadonly();
-  public users = this.usersSignal.asReadonly();
 
   public totalElements = this.totalParcelsCount.asReadonly();
   public currentPage = this.currentPageSignal.asReadonly();
@@ -267,46 +233,5 @@ export class DispatchService {
     ).subscribe({
       error: () => {}, // Handled by loadCourierWorkload error signal
     });
-  }
-
-  // -------------------------------------------------------------------------
-  // Staff User Management Methods (Admin Users Governance)
-  // -------------------------------------------------------------------------
-  public createStaffUser(payload: CreateStaffPayload): StaffUser {
-    if (payload.role !== 'COURIER' && payload.role !== 'DISPATCHER') {
-      throw new Error('Only COURIER or DISPATCHER accounts can be provisioned.');
-    }
-
-    const existing = this.usersSignal().find(
-      (u) => u.email.toLowerCase() === payload.email.trim().toLowerCase()
-    );
-    if (existing) {
-      throw new Error(`User account with email ${payload.email} already exists.`);
-    }
-
-    const newId = `usr-${Date.now().toString(36)}`;
-    const newUser: StaffUser = {
-      id: newId,
-      email: payload.email.trim().toLowerCase(),
-      fullName: payload.fullName.trim(),
-      phoneNumber: payload.phoneNumber.trim(),
-      role: payload.role,
-      enabled: true,
-      createdAt: new Date().toISOString(),
-    };
-
-    this.usersSignal.update((users) => [newUser, ...users]);
-    return newUser;
-  }
-
-  public toggleUserStatus(userId: string): void {
-    this.usersSignal.update((users) =>
-      users.map((u) => {
-        if (u.id === userId) {
-          return { ...u, enabled: !u.enabled };
-        }
-        return u;
-      })
-    );
   }
 }
