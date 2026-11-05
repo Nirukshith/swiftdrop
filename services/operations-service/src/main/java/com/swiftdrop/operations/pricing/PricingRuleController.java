@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/admin/pricing-rules")
-@PreAuthorize("hasRole('DISPATCHER')")
+@PreAuthorize("hasAnyRole('DISPATCHER', 'ADMIN')")
 public class PricingRuleController {
 
     private final PricingRuleRepository repository;

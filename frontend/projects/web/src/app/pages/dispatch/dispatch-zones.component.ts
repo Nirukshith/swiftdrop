@@ -1,15 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ButtonComponent, CardComponent } from 'ui';
-
-export interface Zone {
-  name: string;
-  districts: string[];
-  served: boolean;
-  baseFeeLkr: number;
-}
+import { DispatchService } from './dispatch.service';
+import { Zone } from './dispatch.model';
 
 @Component({
   selector: 'app-dispatch-zones',
@@ -98,6 +93,13 @@ export interface Zone {
       <div class="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
         <ui-card title="Delivery zones" id="zones">
           <div class="space-y-3">
+            @if (dispatchService.isLoadingZones()) {
+              <p class="text-sm text-slate-500">Loading zones…</p>
+            } @else if (dispatchService.zonesError()) {
+              <p class="text-sm text-rose-600">{{ dispatchService.zonesError() }}</p>
+            } @else if (zones().length === 0) {
+              <p class="text-sm text-slate-500">No delivery zones configured.</p>
+            }
             @for (zone of zones(); track zone.name) {
               <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-4 border border-slate-200/60">
                 <div>
@@ -109,6 +111,10 @@ export interface Zone {
                   <span class="text-xs font-semibold" [class]="zone.served ? 'text-emerald-600' : 'text-slate-500'">
                     {{ zone.served ? '● Served' : '○ Paused' }}
                   </span>
+                  <div class="mt-2 flex gap-2">
+                    <button type="button" class="text-xs text-indigo-600" (click)="editZone(zone)">Edit</button>
+                    <button type="button" class="text-xs text-rose-600" (click)="removeZone(zone)">Delete</button>
+                  </div>
                 </div>
               </div>
             }
@@ -116,7 +122,10 @@ export interface Zone {
         </ui-card>
 
         <ui-card title="Add zone">
-          <form class="space-y-4" [formGroup]="zoneForm" (ngSubmit)="addZone()">
+          <form class="space-y-4" [formGroup]="zoneForm" (ngSubmit)="saveZone()">
+            @if (mutationError()) {
+              <p class="text-sm text-rose-600">{{ mutationError() }}</p>
+            }
             <div>
               <label class="block text-sm font-medium text-slate-700">
                 Zone name
@@ -182,7 +191,7 @@ export interface Zone {
               type="submit"
               [disabled]="zoneForm.invalid"
             >
-              Add zone
+              {{ editingZoneId ? 'Save changes' : 'Add zone' }}
             </ui-button>
           </form>
         </ui-card>
@@ -191,6 +200,9 @@ export interface Zone {
   `,
 })
 export class DispatchZonesComponent {
+  readonly dispatchService = inject(DispatchService);
+  readonly mutationError = signal<string | null>(null);
+  editingZoneId: string | null = null;
   readonly districts = [
     'Colombo',
     'Gampaha',
@@ -200,10 +212,7 @@ export class DispatchZonesComponent {
     'Kurunegala',
   ];
 
-  readonly zones = signal<Zone[]>([
-    { name: 'COLOMBO', districts: ['Colombo'], served: true, baseFeeLkr: 500 },
-    { name: 'GAMPAHA', districts: ['Gampaha'], served: true, baseFeeLkr: 500 },
-  ]);
+  readonly zones = signal<Zone[]>([]);
 
   readonly zoneForm: FormGroup;
 
@@ -214,15 +223,57 @@ export class DispatchZonesComponent {
       served: [true],
       baseFeeLkr: [0, [Validators.required, Validators.min(0)]],
     });
+    this.loadZones();
   }
 
-  addZone(): void {
+  private loadZones(): void {
+    this.dispatchService.listZones().subscribe({
+      next: (zones) => this.zones.set(zones),
+      error: () => undefined,
+    });
+  }
+
+  saveZone(): void {
     if (this.zoneForm.invalid) {
       this.zoneForm.markAllAsTouched();
       return;
     }
-    this.zones.update((zones) => [...zones, this.zoneForm.getRawValue()]);
-    this.zoneForm.reset({ name: '', districts: [], served: true, baseFeeLkr: 0 });
+    this.mutationError.set(null);
+    const request = this.zoneForm.getRawValue();
+    const operation = this.editingZoneId
+      ? this.dispatchService.updateZone(this.editingZoneId, request)
+      : this.dispatchService.createZone(request);
+    operation.subscribe({
+      next: () => {
+        this.editingZoneId = null;
+        this.zoneForm.reset({ name: '', districts: [], served: true, baseFeeLkr: 0 });
+        this.loadZones();
+      },
+      error: (error) => this.mutationError.set(
+        error?.error?.message || error?.message || 'Unable to save the delivery zone.'
+      ),
+    });
+  }
+
+  editZone(zone: Zone): void {
+    this.editingZoneId = zone.id;
+    this.zoneForm.setValue({
+      name: zone.name,
+      districts: zone.districts,
+      served: zone.served,
+      baseFeeLkr: zone.baseFeeLkr,
+    });
+  }
+
+  removeZone(zone: Zone): void {
+    if (!window.confirm(`Delete zone ${zone.name}?`)) {
+      return;
+    }
+    this.dispatchService.deleteZone(zone.id).subscribe({
+      next: () => this.loadZones(),
+      error: (error) => this.mutationError.set(
+        error?.error?.message || error?.message || 'Unable to delete the delivery zone.'
+      ),
+    });
   }
 }
-

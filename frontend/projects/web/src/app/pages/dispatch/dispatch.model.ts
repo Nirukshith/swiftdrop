@@ -70,6 +70,46 @@ export interface ErrorResponse {
   timestamp: string;
 }
 
+export interface Zone {
+  id: string;
+  name: string;
+  districts: string[];
+  served: boolean;
+  baseFeeLkr: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ZoneRequest {
+  name: string;
+  districts: string[];
+  served: boolean;
+  baseFeeLkr: number;
+}
+
+export type PricingRuleKind = 'WEIGHT_BAND' | 'SIZE';
+
+export interface PricingRule {
+  id: string;
+  kind: PricingRuleKind;
+  key: string;
+  minimumWeightKg?: number;
+  maximumWeightKg?: number;
+  chargeLkr: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PricingRuleRequest {
+  kind: PricingRuleKind;
+  key: string;
+  minimumWeightKg?: number;
+  maximumWeightKg?: number;
+  chargeLkr: number;
+  active: boolean;
+}
+
 export interface StaffUser {
   id: string;
   email: string;
