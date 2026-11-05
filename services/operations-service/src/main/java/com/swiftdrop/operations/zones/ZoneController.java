@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/admin/zones")
-@PreAuthorize("hasRole('DISPATCHER')")
+@PreAuthorize("hasAnyRole('DISPATCHER', 'ADMIN')")
 public class ZoneController {
 
     private final ZoneRepository repository;
