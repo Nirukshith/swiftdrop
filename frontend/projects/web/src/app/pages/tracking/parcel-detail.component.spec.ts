@@ -144,11 +144,13 @@ describe('ParcelDetailComponent', () => {
   });
 
   const receiptButton = () => el().querySelector('[data-testid="receipt-button"]');
+  const ratingCard = () => el().querySelector('[data-testid="rating-card"]');
 
-  it('offers no receipt while the parcel is on its way', async () => {
+  it('offers no receipt or rating while the parcel is on its way', async () => {
     await open('p-1', TN);
 
     expect(receiptButton()).toBeNull();
+    expect(ratingCard()).toBeNull();
   });
 
   it('offers the receipt download for a delivered parcel', async () => {
@@ -159,9 +161,13 @@ describe('ParcelDetailComponent', () => {
 
     expect(receiptButton()?.textContent).toContain('Download receipt');
     expect(FakeEventSource.instances).toHaveLength(0);
+    // The rating card of a delivered parcel loads the stored rating.
+    http.expectOne('/api/v1/parcels/p-3/rating').flush({}, { status: 404, statusText: 'Not Found' });
+    harness.detectChanges();
+    expect(ratingCard()).not.toBeNull();
   });
 
-  it('shows the receipt download as soon as the live stream reports DELIVERED', async () => {
+  it('shows the receipt download and rating as soon as the live stream reports DELIVERED', async () => {
     await open('p-1', TN);
     const source = FakeEventSource.latest();
     source.open();
@@ -169,10 +175,15 @@ describe('ParcelDetailComponent', () => {
     source.emit(statusEvent(TN, 4, 'OUT_FOR_DELIVERY'));
     harness.detectChanges();
     expect(receiptButton()).toBeNull();
+    expect(ratingCard()).toBeNull();
+    http.expectNone('/api/v1/parcels/p-1/rating');
 
     source.emit(statusEvent(TN, 5, 'DELIVERED'));
     harness.detectChanges();
     expect(receiptButton()).not.toBeNull();
+    http.expectOne('/api/v1/parcels/p-1/rating').flush({ parcelId: 'p-1', score: 5, comment: null, createdAt: '2026-11-04T12:00:00Z' });
+    harness.detectChanges();
+    expect(ratingCard()?.textContent).toContain('Your rating');
   });
 
   it('another customer gets a no-access message and no stream', async () => {

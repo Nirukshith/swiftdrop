@@ -94,3 +94,21 @@ export interface TimelineItem {
   occurredAt: string;
   reason?: string | null;
 }
+
+/** parcel-read.yaml CreateRatingRequest. */
+export interface CreateRatingRequest {
+  score: number;
+  comment?: string | null;
+}
+
+/** parcel-read.yaml RatingResponse. */
+export interface RatingResponse {
+  parcelId: string;
+  score: number;
+  comment?: string | null;
+  createdAt: string;
+}
+
+/** Allowed delivery rating scores and comment length (CreateRatingRequest). */
+export const RATING_SCORES = [1, 2, 3, 4, 5] as const;
+export const RATING_COMMENT_MAX = 500;
