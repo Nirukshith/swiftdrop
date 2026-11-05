@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   CourierDelivery,
@@ -38,7 +38,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               </span>
             </div>
             <p class="text-xs sm:text-sm text-slate-500 font-medium">
-              Harsha Kumarasamy (ID: courier-harsha-01) • Colombo Central Zone
+              {{ profile().name }} (ID: {{ profile().userId }}) • {{ profile().zone || 'Assigned Zone' }}
             </p>
           </div>
         </div>
@@ -56,7 +56,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
           >
             <p class="text-[11px] uppercase font-bold text-amber-600">Pending</p>
             <p class="text-base font-extrabold text-amber-700">
-              {{ stats().assigned + stats().pickedUp + stats().inTransit }}
+              {{ stats().created + stats().pickedUp + stats().inTransit + stats().outForDelivery }}
             </p>
           </div>
           <div
@@ -65,6 +65,16 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
             <p class="text-[11px] uppercase font-bold text-emerald-600">Delivered</p>
             <p class="text-base font-extrabold text-emerald-700">{{ stats().delivered }}</p>
           </div>
+          <button
+            type="button"
+            id="refresh-btn"
+            (click)="refreshDeliveries()"
+            [disabled]="isLoading()"
+            title="Refresh Deliveries"
+            class="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-colors shadow-xs"
+          >
+            <span [class.animate-spin]="isLoading()" class="inline-block">🔄</span>
+          </button>
         </div>
       </div>
 
@@ -96,7 +106,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
             [class.text-slate-600]="activeFilter() !== 'ACTIVE'"
             class="px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap"
           >
-            Active ({{ stats().assigned + stats().pickedUp + stats().inTransit }})
+            Active ({{ stats().created + stats().pickedUp + stats().inTransit + stats().outForDelivery }})
           </button>
           <button
             type="button"
@@ -129,15 +139,16 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
           <input
             type="text"
             id="search-input"
-            [(ngModel)]="searchQuery"
-            placeholder="Search tracking, recipient, city..."
+            [ngModel]="searchQuery()"
+            (ngModelChange)="searchQuery.set($event)"
+            placeholder="Search tracking, recipient, address..."
             class="w-full pl-9 pr-4 py-2 bg-white rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
           />
           <span class="absolute left-3 top-2.5 text-slate-400 text-sm">🔍</span>
           <button
-            *ngIf="searchQuery"
+            *ngIf="searchQuery()"
             type="button"
-            (click)="searchQuery = ''"
+            (click)="searchQuery.set('')"
             class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
           >
             ✕
@@ -148,6 +159,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
       <!-- Toast Notification Alert -->
       <div
         *ngIf="toastMessage()"
+        id="toast-notification"
         class="rounded-xl p-4 bg-indigo-50 border border-indigo-200 text-indigo-900 text-sm flex items-center justify-between shadow-sm animate-fade-in"
       >
         <div class="flex items-center gap-2">
@@ -163,8 +175,38 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
         </button>
       </div>
 
+      <!-- Error State Alert -->
+      <div
+        *ngIf="errorMessage()"
+        id="courier-error-banner"
+        class="rounded-xl p-4 bg-rose-50 border border-rose-200 text-rose-900 text-sm flex items-center justify-between shadow-sm"
+      >
+        <div class="flex items-center gap-2">
+          <span>⚠️</span>
+          <span class="font-medium">{{ errorMessage() }}</span>
+        </div>
+        <button
+          type="button"
+          (click)="refreshDeliveries()"
+          class="px-3 py-1 bg-white border border-rose-200 rounded-lg text-xs font-bold text-rose-700 hover:bg-rose-100"
+        >
+          Retry
+        </button>
+      </div>
+
+      <!-- Loading State Indicator -->
+      <div
+        *ngIf="isLoading() && filteredDeliveries().length === 0"
+        id="courier-loading-spinner"
+        class="bg-white rounded-2xl border border-slate-200 p-12 text-center"
+      >
+        <div class="text-4xl animate-bounce mb-3">🚚</div>
+        <h3 class="text-base font-bold text-slate-800">Loading deliveries...</h3>
+        <p class="text-xs text-slate-500 mt-1">Fetching your assigned parcels from operations service.</p>
+      </div>
+
       <!-- Deliveries List (Cards) -->
-      <div class="space-y-4">
+      <div *ngIf="!isLoading() || filteredDeliveries().length > 0" class="space-y-4">
         <div
           *ngFor="let delivery of filteredDeliveries()"
           [id]="'delivery-card-' + delivery.parcelId"
@@ -185,10 +227,10 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
             </div>
 
             <div class="flex items-center gap-2 text-xs text-slate-500">
-              <span *ngIf="delivery.timeSlot" class="font-medium bg-slate-100 px-2 py-0.5 rounded-md">
-                ⏰ {{ delivery.timeSlot }}
+              <span *ngIf="delivery.attemptCount !== undefined" class="font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+                Attempt: {{ delivery.attemptCount }}
               </span>
-              <span class="font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+              <span *ngIf="delivery.weightKg" class="font-medium bg-slate-100 px-2 py-0.5 rounded-md">
                 ⚖️ {{ delivery.weightKg }} kg
               </span>
             </div>
@@ -203,6 +245,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                   👤 {{ delivery.recipientName }}
                 </h3>
                 <a
+                  *ngIf="delivery.recipientPhone"
                   [href]="'tel:' + delivery.recipientPhone"
                   class="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors"
                 >
@@ -215,13 +258,18 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                 <span class="text-slate-400 mt-0.5">📍</span>
                 <div>
                   <p class="font-medium text-slate-800">
-                    {{ delivery.recipientAddress.line1 }}
-                    <span *ngIf="delivery.recipientAddress.line2">, {{ delivery.recipientAddress.line2 }}</span>
+                    {{ delivery.dropoffAddress || (delivery.recipientAddress?.line1) }}
+                    <span *ngIf="delivery.recipientAddress?.city">, {{ delivery.recipientAddress?.city }}</span>
                   </p>
-                  <p class="text-xs text-slate-500">
-                    {{ delivery.recipientAddress.city }}, {{ delivery.recipientAddress.district }}
-                    <span *ngIf="delivery.recipientAddress.postalCode">({{ delivery.recipientAddress.postalCode }})</span>
-                  </p>
+                  <a
+                    *ngIf="delivery.googleMapsUrl"
+                    [href]="delivery.googleMapsUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-xs font-medium text-indigo-600 hover:underline inline-flex items-center gap-1 mt-0.5"
+                  >
+                    🗺️ Open in Google Maps
+                  </a>
                 </div>
               </div>
 
@@ -236,7 +284,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
 
               <!-- Failure Reason if any -->
               <div
-                *ngIf="delivery.status === 'FAILED_DELIVERY' && delivery.failureReason"
+                *ngIf="(delivery.status === 'FAILED' || delivery.status === 'FAILED_DELIVERY') && delivery.failureReason"
                 class="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-1.5"
               >
                 <span class="text-rose-500">⚠️</span>
@@ -253,7 +301,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                   <div>
                     <p class="font-bold">Proof of Delivery Captured</p>
                     <p class="text-[11px] text-emerald-700">
-                      Received by {{ delivery.proof.recipientName }} • {{ delivery.proof.fileName }}
+                      Received by {{ delivery.proof.recipientName }}
                     </p>
                   </div>
                 </div>
@@ -262,7 +310,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                   (click)="viewProofDetail(delivery)"
                   class="px-2.5 py-1 bg-white rounded-lg border border-emerald-300 font-semibold text-emerald-800 hover:bg-emerald-100 text-[11px] transition-colors"
                 >
-                  View Proof
+                  View Details
                 </button>
               </div>
             </div>
@@ -271,19 +319,20 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
             <div class="md:col-span-5 flex flex-col justify-between border-t md:border-t-0 md:border-l border-slate-100 md:pl-4 pt-3 md:pt-0 space-y-3">
               <div class="text-xs text-slate-500">
                 <p class="text-[11px] uppercase font-bold text-slate-400">Pickup Origin</p>
-                <p class="font-semibold text-slate-700 mt-0.5">{{ delivery.senderName }}</p>
-                <p>{{ delivery.senderAddress.line1 }}, {{ delivery.senderAddress.city }}</p>
+                <p class="font-semibold text-slate-700 mt-0.5">{{ delivery.senderName || 'SwiftDrop Merchant' }}</p>
+                <p>{{ delivery.pickupAddress || (delivery.senderAddress?.line1) }}</p>
               </div>
 
               <!-- Action Buttons Depending on State -->
               <div class="pt-2 space-y-2">
-                <!-- If ASSIGNED -> Can Mark as Picked Up -->
+                <!-- If CREATED or ASSIGNED -> Can Confirm Picked Up -->
                 <button
-                  *ngIf="delivery.status === 'ASSIGNED'"
+                  *ngIf="delivery.status === 'CREATED' || delivery.status === 'ASSIGNED'"
                   type="button"
                   [id]="'pickup-btn-' + delivery.parcelId"
+                  [disabled]="isActionPending(delivery.parcelId)"
                   (click)="advanceStatus(delivery, 'PICKED_UP')"
-                  class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm shadow-sm shadow-indigo-200 hover:shadow-md transition-all flex items-center justify-center gap-1.5"
+                  class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm shadow-sm shadow-indigo-200 hover:shadow-md transition-all flex items-center justify-center gap-1.5"
                 >
                   <span>📦</span> Confirm Picked Up
                 </button>
@@ -293,42 +342,46 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                   *ngIf="delivery.status === 'PICKED_UP'"
                   type="button"
                   [id]="'transit-btn-' + delivery.parcelId"
+                  [disabled]="isActionPending(delivery.parcelId)"
                   (click)="advanceStatus(delivery, 'IN_TRANSIT')"
-                  class="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-sm shadow-blue-200 hover:shadow-md transition-all flex items-center justify-center gap-1.5"
+                  class="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm shadow-sm shadow-blue-200 hover:shadow-md transition-all flex items-center justify-center gap-1.5"
                 >
                   <span>🚚</span> Start Delivery (In Transit)
                 </button>
 
-                <!-- If IN_TRANSIT -> Can Deliver (with Proof) or Fail -->
-                <div *ngIf="delivery.status === 'IN_TRANSIT'" class="flex flex-col gap-2">
+                <!-- If IN_TRANSIT -> Can Advance to OUT_FOR_DELIVERY -->
+                <button
+                  *ngIf="delivery.status === 'IN_TRANSIT'"
+                  type="button"
+                  [id]="'out-btn-' + delivery.parcelId"
+                  [disabled]="isActionPending(delivery.parcelId)"
+                  (click)="advanceStatus(delivery, 'OUT_FOR_DELIVERY')"
+                  class="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm shadow-sm shadow-amber-200 hover:shadow-md transition-all flex items-center justify-center gap-1.5"
+                >
+                  <span>📍</span> Out for Final Delivery
+                </button>
+
+                <!-- If OUT_FOR_DELIVERY -> Can Complete (with Proof) or Fail -->
+                <div *ngIf="delivery.status === 'OUT_FOR_DELIVERY'" class="flex flex-col gap-2">
                   <button
                     type="button"
                     [id]="'deliver-btn-' + delivery.parcelId"
+                    [disabled]="isActionPending(delivery.parcelId)"
                     (click)="openProofModal(delivery)"
-                    class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-sm shadow-emerald-200 hover:shadow-md transition-all flex items-center justify-center gap-1.5"
+                    class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm shadow-sm shadow-emerald-200 hover:shadow-md transition-all flex items-center justify-center gap-1.5"
                   >
                     <span>📸</span> Complete & Upload Proof
                   </button>
                   <button
                     type="button"
                     [id]="'fail-btn-' + delivery.parcelId"
+                    [disabled]="isActionPending(delivery.parcelId)"
                     (click)="openFailModal(delivery)"
-                    class="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 font-semibold text-xs border border-slate-200 hover:border-rose-200 transition-colors flex items-center justify-center gap-1"
+                    class="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 disabled:opacity-50 text-slate-700 hover:text-rose-700 font-semibold text-xs border border-slate-200 hover:border-rose-200 transition-colors flex items-center justify-center gap-1"
                   >
                     <span>⚠️</span> Mark Delivery Attempt Failed
                   </button>
                 </div>
-
-                <!-- If FAILED -> Can Retry In Transit -->
-                <button
-                  *ngIf="delivery.status === 'FAILED_DELIVERY'"
-                  type="button"
-                  [id]="'retry-btn-' + delivery.parcelId"
-                  (click)="advanceStatus(delivery, 'IN_TRANSIT')"
-                  class="w-full py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5"
-                >
-                  <span>🔄</span> Re-attempt Delivery
-                </button>
 
                 <!-- If DELIVERED -> Done Badge -->
                 <div
@@ -337,6 +390,14 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                 >
                   ✅ Completed & Confirmed
                 </div>
+
+                <!-- If FAILED -> Attempt Recorded -->
+                <div
+                  *ngIf="delivery.status === 'FAILED' || delivery.status === 'FAILED_DELIVERY'"
+                  class="w-full py-2 px-3 rounded-xl bg-rose-50 text-rose-800 text-xs font-bold text-center border border-rose-200"
+                >
+                  ❌ Delivery Attempt Failed
+                </div>
               </div>
             </div>
           </div>
@@ -344,7 +405,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
 
         <!-- Empty State -->
         <div
-          *ngIf="filteredDeliveries().length === 0"
+          *ngIf="filteredDeliveries().length === 0 && !isLoading()"
           class="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center"
         >
           <div class="text-4xl mb-3">📦</div>
@@ -354,7 +415,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
           </p>
           <button
             type="button"
-            (click)="activeFilter.set('ALL'); searchQuery = ''"
+            (click)="activeFilter.set('ALL'); searchQuery.set('')"
             class="mt-4 px-4 py-2 bg-indigo-50 text-indigo-600 font-semibold text-xs rounded-xl hover:bg-indigo-100 transition-colors"
           >
             Clear Filters
@@ -423,9 +484,9 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
             <!-- Photo Upload Area -->
             <div>
               <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
-                Photo Proof (JPEG, PNG, WEBP - Max 5MB) *
+                Photo Proof (JPEG, PNG, WEBP - Max 5MB)
               </label>
-              
+
               <div
                 *ngIf="!proofImagePreview"
                 class="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-6 text-center cursor-pointer transition-colors bg-slate-50/50"
@@ -448,22 +509,19 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               <div *ngIf="proofImagePreview" class="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
                 <img
                   [src]="proofImagePreview"
-                  alt="Delivery Proof Preview"
-                  class="w-full h-44 object-cover"
+                  alt="Proof preview"
+                  class="w-full h-48 object-cover"
                 />
-                <div class="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-slate-900/80 to-transparent flex items-center justify-between text-white text-xs">
-                  <span class="truncate">{{ selectedFile?.name }} ({{ formatFileSize(selectedFile?.size || 0) }})</span>
-                  <button
-                    type="button"
-                    (click)="clearProofFile()"
-                    class="bg-rose-600 hover:bg-rose-700 px-2 py-0.5 rounded text-[11px] font-bold"
-                  >
-                    Remove
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  (click)="clearProofFile()"
+                  class="absolute top-2 right-2 px-2.5 py-1 bg-slate-900/70 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition-colors"
+                >
+                  ✕ Remove
+                </button>
               </div>
 
-              <p *ngIf="fileError()" class="text-xs text-rose-600 font-semibold mt-1">
+              <p *ngIf="fileError()" class="text-xs text-rose-600 mt-1 font-medium">
                 {{ fileError() }}
               </p>
             </div>
@@ -481,12 +539,12 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
             <button
               type="button"
               id="submit-proof-btn"
-              [disabled]="isSubmittingProof || !isProofFormValid()"
               (click)="submitProof()"
-              class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-sm shadow-emerald-200 flex items-center gap-1.5 transition-all"
+              [disabled]="isSubmittingProof || !isProofFormValid()"
+              class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-sm shadow-emerald-200 transition-all flex items-center gap-1.5"
             >
-              <span *ngIf="isSubmittingProof">Uploading...</span>
-              <span *ngIf="!isSubmittingProof">Confirm & Deliver</span>
+              <span *ngIf="isSubmittingProof" class="animate-spin">⏳</span>
+              <span>Confirm & Deliver</span>
             </button>
           </div>
         </div>
@@ -503,8 +561,8 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
           <!-- Modal Header -->
           <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-rose-50/50">
             <div>
-              <h2 class="text-lg font-bold text-rose-900 flex items-center gap-2">
-                <span>⚠️</span> Delivery Attempt Failed
+              <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <span>⚠️</span> Record Failed Delivery Attempt
               </h2>
               <p class="text-xs text-slate-500 font-mono">
                 Tracking: {{ selectedDeliveryForFailure()?.trackingNumber }}
@@ -520,33 +578,33 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
             </button>
           </div>
 
-          <!-- Modal Body Form -->
+          <!-- Modal Body -->
           <div class="p-5 space-y-4">
             <div>
               <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
-                Select Reason *
+                Reason Category *
               </label>
               <select
-                id="failure-reason-select"
+                id="fail-reason-select"
                 [(ngModel)]="failureReasonCategory"
-                class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 bg-white"
               >
-                <option value="RECIPIENT_UNAVAILABLE">Recipient unavailable</option>
-                <option value="INCORRECT_ADDRESS">Incorrect address</option>
-                <option value="CUSTOMER_REJECTED">Customer rejected</option>
-                <option value="ACCESS_RESTRICTED">Access restricted</option>
-                <option value="OTHER">Other</option>
+                <option value="RECIPIENT_UNAVAILABLE">Recipient unavailable / phone unreachable</option>
+                <option value="INCORRECT_ADDRESS">Incorrect address / premises not found</option>
+                <option value="CUSTOMER_REJECTED">Customer refused delivery</option>
+                <option value="ACCESS_RESTRICTED">Premises closed / access restricted</option>
+                <option value="OTHER">Other reason (describe below)</option>
               </select>
             </div>
 
             <div>
               <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
-                Additional Notes {{ failureReasonCategory === 'OTHER' ? '*' : '' }}
+                Additional Notes
               </label>
               <textarea
-                id="failure-notes"
+                id="fail-notes"
                 [(ngModel)]="failureNotes"
-                rows="2"
+                rows="3"
                 placeholder="Details of the delivery attempt..."
                 class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
               ></textarea>
@@ -566,10 +624,11 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               type="button"
               id="submit-fail-btn"
               (click)="submitFailure()"
-              [disabled]="failureReasonCategory === 'OTHER' && !failureNotes.trim()"
-              class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm shadow-rose-200 transition-all"
+              [disabled]="isSubmittingFailure || (failureReasonCategory === 'OTHER' && !failureNotes.trim())"
+              class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold shadow-sm shadow-rose-200 transition-all flex items-center gap-1.5"
             >
-              Save Failed Attempt
+              <span *ngIf="isSubmittingFailure" class="animate-spin">⏳</span>
+              <span>Save Failed Attempt</span>
             </button>
           </div>
         </div>
@@ -577,13 +636,20 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
     </div>
   `,
 })
-export class CourierComponent {
+export class CourierComponent implements OnInit {
   private courierService = inject(CourierService);
 
   readonly stats = this.courierService.stats;
+  readonly profile = this.courierService.profile;
+  readonly isLoading = this.courierService.isLoading;
+  readonly errorMessage = this.courierService.error;
+
   activeFilter = signal<FilterTab>('ALL');
-  searchQuery = '';
+  searchQuery = signal<string>('');
   toastMessage = signal<string>('');
+
+  // Pending actions state per parcelId
+  private pendingActions = signal<Set<string>>(new Set<string>());
 
   // Modals state
   selectedDeliveryForProof = signal<CourierDelivery | null>(null);
@@ -597,6 +663,35 @@ export class CourierComponent {
   selectedDeliveryForFailure = signal<CourierDelivery | null>(null);
   failureReasonCategory = 'RECIPIENT_UNAVAILABLE';
   failureNotes = '';
+  isSubmittingFailure = false;
+
+  ngOnInit(): void {
+    this.refreshDeliveries();
+  }
+
+  refreshDeliveries(): void {
+    this.courierService.loadDeliveries().subscribe({
+      error: (err) => {
+        // Handled in service signal
+      },
+    });
+  }
+
+  isActionPending(parcelId: string): boolean {
+    return this.pendingActions().has(parcelId);
+  }
+
+  private setActionPending(parcelId: string, pending: boolean): void {
+    this.pendingActions.update((set) => {
+      const copy = new Set(set);
+      if (pending) {
+        copy.add(parcelId);
+      } else {
+        copy.delete(parcelId);
+      }
+      return copy;
+    });
+  }
 
   // Filtered list
   readonly filteredDeliveries = computed(() => {
@@ -604,21 +699,24 @@ export class CourierComponent {
     const filter = this.activeFilter();
 
     if (filter === 'ACTIVE') {
-      list = list.filter((d) => ['ASSIGNED', 'PICKED_UP', 'IN_TRANSIT'].includes(d.status));
+      list = list.filter((d) =>
+        ['CREATED', 'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(d.status)
+      );
     } else if (filter === 'DELIVERED') {
       list = list.filter((d) => d.status === 'DELIVERED');
     } else if (filter === 'FAILED') {
-      list = list.filter((d) => d.status === 'FAILED_DELIVERY');
+      list = list.filter((d) => d.status === 'FAILED' || d.status === 'FAILED_DELIVERY');
     }
 
-    if (this.searchQuery.trim()) {
-      const q = this.searchQuery.toLowerCase().trim();
+    const q = this.searchQuery().toLowerCase().trim();
+    if (q) {
       list = list.filter(
         (d) =>
           d.trackingNumber.toLowerCase().includes(q) ||
           d.recipientName.toLowerCase().includes(q) ||
-          d.recipientAddress.city.toLowerCase().includes(q) ||
-          d.recipientAddress.line1.toLowerCase().includes(q)
+          (d.dropoffAddress && d.dropoffAddress.toLowerCase().includes(q)) ||
+          (d.recipientAddress?.city && d.recipientAddress.city.toLowerCase().includes(q)) ||
+          (d.recipientAddress?.line1 && d.recipientAddress.line1.toLowerCase().includes(q))
       );
     }
 
@@ -627,14 +725,18 @@ export class CourierComponent {
 
   getStatusLabel(status: DeliveryStatus): string {
     switch (status) {
+      case 'CREATED':
       case 'ASSIGNED':
         return 'To Pick Up';
       case 'PICKED_UP':
         return 'Picked Up';
       case 'IN_TRANSIT':
         return 'In Transit';
+      case 'OUT_FOR_DELIVERY':
+        return 'Out for Delivery';
       case 'DELIVERED':
         return 'Delivered';
+      case 'FAILED':
       case 'FAILED_DELIVERY':
         return 'Failed';
       default:
@@ -644,14 +746,18 @@ export class CourierComponent {
 
   getStatusBadgeClass(status: DeliveryStatus): string {
     switch (status) {
+      case 'CREATED':
       case 'ASSIGNED':
         return 'bg-amber-100 text-amber-800 border border-amber-200';
       case 'PICKED_UP':
         return 'bg-blue-100 text-blue-800 border border-blue-200';
       case 'IN_TRANSIT':
         return 'bg-indigo-100 text-indigo-800 border border-indigo-200';
+      case 'OUT_FOR_DELIVERY':
+        return 'bg-purple-100 text-purple-800 border border-purple-200';
       case 'DELIVERED':
         return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+      case 'FAILED':
       case 'FAILED_DELIVERY':
         return 'bg-rose-100 text-rose-800 border border-rose-200';
       default:
@@ -660,13 +766,20 @@ export class CourierComponent {
   }
 
   advanceStatus(delivery: CourierDelivery, nextStatus: DeliveryStatus): void {
+    if (this.isActionPending(delivery.parcelId)) return;
+
+    this.setActionPending(delivery.parcelId, true);
     const idempotencyKey = `ui-${delivery.parcelId}-${nextStatus}-${Date.now()}`;
+
     this.courierService.updateStatus(delivery.parcelId, { status: nextStatus, idempotencyKey }).subscribe({
       next: (res) => {
+        this.setActionPending(delivery.parcelId, false);
         this.showToast(`Updated ${delivery.trackingNumber} to ${this.getStatusLabel(nextStatus)}`);
       },
       error: (err) => {
-        this.showToast(`Error: ${err.message}`);
+        this.setActionPending(delivery.parcelId, false);
+        const msg = err?.error?.message || err?.message || 'Status update failed';
+        this.showToast(`Error: ${msg}`);
       },
     });
   }
@@ -717,46 +830,68 @@ export class CourierComponent {
     this.fileError.set('');
   }
 
-  formatFileSize(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  }
-
   isProofFormValid(): boolean {
-    return !!this.proofRecipientName.trim() && !!this.selectedFile;
+    return !!this.proofRecipientName.trim() || !!this.selectedFile;
   }
 
   submitProof(): void {
     const delivery = this.selectedDeliveryForProof();
-    if (!delivery || !this.selectedFile) return;
+    if (!delivery) return;
 
     this.isSubmittingProof = true;
+    const parcelId = delivery.parcelId;
+    const recipientName = this.proofRecipientName.trim();
+    const notes = this.proofDeliveryNotes.trim();
+
+    // If file is attached, upload proof first, then mark DELIVERED
+    if (this.selectedFile) {
+      this.courierService
+        .uploadProof(parcelId, {
+          file: this.selectedFile,
+          recipientName,
+          notes,
+        })
+        .subscribe({
+          next: () => {
+            this.completeDeliveryStatus(parcelId, delivery.trackingNumber, recipientName);
+          },
+          error: (err) => {
+            this.isSubmittingProof = false;
+            const msg = err?.error?.message || err?.message || 'Proof upload failed';
+            this.fileError.set(msg);
+          },
+        });
+    } else {
+      // Recipient name proof only
+      this.completeDeliveryStatus(parcelId, delivery.trackingNumber, recipientName);
+    }
+  }
+
+  private completeDeliveryStatus(parcelId: string, trackingNumber: string, recipientName: string): void {
+    const idempotencyKey = `proof-del-${parcelId}-${Date.now()}`;
     this.courierService
-      .uploadProof(delivery.parcelId, {
-        file: this.selectedFile,
-        recipientName: this.proofRecipientName,
-        deliveryNotes: this.proofDeliveryNotes,
-        idempotencyKey: `proof-${delivery.parcelId}-${Date.now()}`,
+      .updateStatus(parcelId, {
+        status: 'DELIVERED',
+        recipientName,
+        idempotencyKey,
       })
       .subscribe({
         next: () => {
           this.isSubmittingProof = false;
           this.closeProofModal();
-          this.showToast(`Proof captured & delivery marked completed for ${delivery.trackingNumber}!`);
+          this.showToast(`Delivery completed & proof recorded for ${trackingNumber}!`);
         },
         error: (err) => {
           this.isSubmittingProof = false;
-          this.fileError.set(err.message);
+          const msg = err?.error?.message || err?.message || 'Failed to complete delivery status';
+          this.fileError.set(msg);
         },
       });
   }
 
   openFailModal(delivery: CourierDelivery): void {
     this.selectedDeliveryForFailure.set(delivery);
-    this.failureReasonCategory = 'Recipient unavailable / phone unreachable';
+    this.failureReasonCategory = 'RECIPIENT_UNAVAILABLE';
     this.failureNotes = '';
   }
 
@@ -777,19 +912,25 @@ export class CourierComponent {
       ? `${this.failureReasonCategory}: ${this.failureNotes.trim()}`
       : this.failureReasonCategory;
 
+    this.isSubmittingFailure = true;
+    const idempotencyKey = `fail-${delivery.parcelId}-${Date.now()}`;
+
     this.courierService
       .updateStatus(delivery.parcelId, {
-        status: 'FAILED_DELIVERY',
+        status: 'FAILED',
         reason: fullReason,
-        idempotencyKey: `fail-${delivery.parcelId}-${Date.now()}`,
+        idempotencyKey,
       })
       .subscribe({
         next: () => {
+          this.isSubmittingFailure = false;
           this.closeFailModal();
-          this.showToast(`Marked ${delivery.trackingNumber} as delivery failed.`);
+          this.showToast(`Marked ${delivery.trackingNumber} as delivery attempt failed.`);
         },
         error: (err) => {
-          this.showToast(`Error: ${err.message}`);
+          this.isSubmittingFailure = false;
+          const msg = err?.error?.message || err?.message || 'Failed to update failure status';
+          this.showToast(`Error: ${msg}`);
         },
       });
   }
@@ -797,7 +938,9 @@ export class CourierComponent {
   viewProofDetail(delivery: CourierDelivery): void {
     if (delivery.proof) {
       alert(
-        `Delivery Proof for ${delivery.trackingNumber}\nRecipient: ${delivery.proof.recipientName}\nFile: ${delivery.proof.fileName}\nNotes: ${delivery.proof.deliveryNotes || 'None'}\nUploaded: ${new Date(delivery.proof.uploadedAt).toLocaleString()}`
+        `Delivery Proof for ${delivery.trackingNumber}\nRecipient: ${delivery.proof.recipientName}\nUploaded: ${new Date(
+          delivery.proof.uploadedAt
+        ).toLocaleString()}`
       );
     }
   }
