@@ -1,5 +1,9 @@
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { of, throwError } from 'rxjs';
 import { CustomerComponent } from './customer.component';
+import { CustomerParcel, QuoteResponse } from './customer/customer.model';
 import { CustomerService } from './customer/customer.service';
 
 describe('CustomerComponent', () => {
@@ -7,15 +11,62 @@ describe('CustomerComponent', () => {
   let fixture: ComponentFixture<CustomerComponent>;
   let customerService: CustomerService;
 
+  const mockQuote: QuoteResponse = {
+    currency: 'LKR',
+    totalFee: 850.0,
+    breakdown: {
+      dropoffZoneBaseFee: 350.0,
+      weightBandCharge: 250.0,
+      sizeCharge: 250.0,
+    },
+    pickupZone: 'Western',
+    dropoffZone: 'Central',
+  };
+
+  const mockCreatedParcel: CustomerParcel = {
+    id: 'pcl-real-uuid-1234',
+    trackingNumber: 'SD-20261105-H7K9N2',
+    status: 'CREATED',
+    pickupAddress: {
+      line1: '142 Havelock Road',
+      city: 'Colombo 05',
+      district: 'Colombo',
+      postalCode: '00500',
+    },
+    dropoffAddress: {
+      line1: '88 Kandy Road',
+      city: 'Kadugannawa',
+      district: 'Kandy',
+      postalCode: '20300',
+    },
+    weightKg: 2.5,
+    size: 'MEDIUM',
+    fee: 850.0,
+    attemptCount: 0,
+    recipientName: 'Kamal Silva',
+    recipientPhone: '+94771234567',
+    notes: 'Please ring bell',
+    createdAt: new Date().toISOString(),
+  };
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [CustomerComponent],
-      providers: [CustomerService],
+      providers: [
+        CustomerService,
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(CustomerComponent);
     component = fixture.componentInstance;
     customerService = TestBed.inject(CustomerService);
+
+    // Spy on getFeeQuote and createParcel by default
+    jest.spyOn(customerService, 'getFeeQuote').mockReturnValue(of(mockQuote));
+    jest.spyOn(customerService, 'createParcel').mockReturnValue(of(mockCreatedParcel));
+
     fixture.detectChanges();
   });
 
@@ -47,7 +98,7 @@ describe('CustomerComponent', () => {
     expect(component.parcels().every((p) => p.status === 'DELIVERED')).toBe(true);
   }));
 
-  it('should navigate through wizard steps with validation and fee calculation', () => {
+  it('should navigate through wizard steps with validation and real fee quote integration', fakeAsync(() => {
     component.startNewDelivery();
     expect(component.wizardStep()).toBe(1);
     expect(component.isStep1Valid()).toBe(true);
@@ -58,19 +109,45 @@ describe('CustomerComponent', () => {
 
     component.goToStep(3);
     expect(component.wizardStep()).toBe(3);
-    expect(component.feePreview()).toBeTruthy();
-    expect(component.feePreview()?.totalFee).toBeGreaterThan(0);
+    tick(50);
 
-    // Verify fee preview responds to district and size
+    expect(customerService.getFeeQuote).toHaveBeenCalledWith('Colombo', 'Kandy', 2.5, 'MEDIUM');
+    expect(component.feePreview()).toBeTruthy();
+    expect(component.feePreview()?.totalFee).toBe(850.0);
+    expect(component.feePreview()?.breakdown.dropoffZoneBaseFee).toBe(350.0);
+    expect(component.feePreview()?.currency).toBe('LKR');
+
+    // Update wizard inputs and verify fee quote re-calculates
     component.wizardData.pickupAddress.district = 'Colombo';
-    component.wizardData.dropoffAddress.district = 'Kandy';
+    component.wizardData.dropoffAddress.district = 'Galle';
     component.wizardData.size = 'LARGE';
     component.wizardData.weightKg = 4.0;
     component.updateFeePreview();
+    tick(50);
 
-    // Base 350 + Inter-district 150 + Weight (4-1)*100 = 300 + Large 250 = 1050
-    expect(component.feePreview()?.totalFee).toBe(1050);
-  });
+    expect(customerService.getFeeQuote).toHaveBeenCalledWith('Colombo', 'Galle', 4.0, 'LARGE');
+  }));
+
+  it('should handle fee quote failure with error state and retry option', fakeAsync(() => {
+    jest.spyOn(customerService, 'getFeeQuote').mockReturnValue(
+      throwError(() => ({ error: { message: 'Pickup district is not served' }, status: 422 }))
+    );
+
+    component.updateFeePreview();
+    tick(50);
+
+    expect(component.feePreview()).toBeNull();
+    expect(component.isLoadingQuote()).toBe(false);
+    expect(component.quoteError()).toContain('Pickup district is not served');
+
+    // Retrying with valid mock quote recovers from error
+    jest.spyOn(customerService, 'getFeeQuote').mockReturnValue(of(mockQuote));
+    component.updateFeePreview();
+    tick(50);
+
+    expect(component.feePreview()).toBeTruthy();
+    expect(component.quoteError()).toBeNull();
+  }));
 
   it('should quick-fill address from address book in wizard', fakeAsync(() => {
     tick(100);
@@ -81,18 +158,39 @@ describe('CustomerComponent', () => {
     expect(component.wizardData.pickupAddress.district).toBe(firstAddr.district);
   }));
 
-  it('should submit delivery order and receive confirmed tracking number', fakeAsync(() => {
+  it('should submit delivery order and receive confirmed tracking number and id', fakeAsync(() => {
     component.startNewDelivery();
     component.goToStep(4);
+    tick(50);
 
     expect(component.orderConfirmed()).toBe(false);
     component.submitDeliveryOrder();
     tick(200);
 
+    expect(customerService.createParcel).toHaveBeenCalledWith(component.wizardData);
     expect(component.orderConfirmed()).toBe(true);
     expect(component.confirmedParcel()).toBeTruthy();
-    expect(component.confirmedParcel()?.trackingNumber).toMatch(/^SD-\d{8}-[A-Z0-9]+$/);
+    expect(component.confirmedParcel()?.id).toBe('pcl-real-uuid-1234');
+    expect(component.confirmedParcel()?.trackingNumber).toBe('SD-20261105-H7K9N2');
     expect(component.notification()).toContain('booked successfully');
+    expect(component.notification()).toContain('SD-20261105-H7K9N2');
+  }));
+
+  it('should handle parcel creation failure gracefully', fakeAsync(() => {
+    jest.spyOn(customerService, 'createParcel').mockReturnValue(
+      throwError(() => ({ error: { message: 'Validation failed on server' }, status: 400 }))
+    );
+
+    component.startNewDelivery();
+    component.goToStep(4);
+    tick(50);
+
+    component.submitDeliveryOrder();
+    tick(50);
+
+    expect(component.orderConfirmed()).toBe(false);
+    expect(component.isSubmitting()).toBe(false);
+    expect(component.notification()).toContain('Validation failed on server');
   }));
 
   it('should cancel a CREATED parcel', fakeAsync(() => {

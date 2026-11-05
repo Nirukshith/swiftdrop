@@ -27,7 +27,7 @@ public class PricingQuoteClient {
         this.quoteUrl = quoteUrl;
     }
 
-    public BigDecimal fetchQuote(String pickupDistrict, String dropoffDistrict, BigDecimal weightKg, ParcelSize size) {
+    public PricingQuoteResponse fetchQuoteDetails(String pickupDistrict, String dropoffDistrict, BigDecimal weightKg, ParcelSize size) {
         try {
             PricingQuoteResponse response = restClient.get()
                     .uri(quoteUrl, uriBuilder -> uriBuilder
@@ -39,12 +39,12 @@ public class PricingQuoteClient {
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (req, res) -> {
                         log.warn("Pricing quote endpoint returned status {}", res.getStatusCode());
-                        throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Pricing quote service error: " + res.getStatusCode());
+                        throw new ResponseStatusException(res.getStatusCode(), "Pricing quote service error: " + res.getStatusCode());
                     })
                     .body(PricingQuoteResponse.class);
 
             if (response != null && response.totalFee() != null) {
-                return response.totalFee().setScale(2, RoundingMode.HALF_UP);
+                return response;
             }
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Received empty fee from pricing quote service");
         } catch (ResponseStatusException rse) {
@@ -53,5 +53,10 @@ public class PricingQuoteClient {
             log.error("Failed to fetch quote from pricing service at {}: {}", quoteUrl, ex.getMessage());
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Pricing service unavailable: " + ex.getMessage(), ex);
         }
+    }
+
+    public BigDecimal fetchQuote(String pickupDistrict, String dropoffDistrict, BigDecimal weightKg, ParcelSize size) {
+        PricingQuoteResponse details = fetchQuoteDetails(pickupDistrict, dropoffDistrict, weightKg, size);
+        return details.totalFee().setScale(2, RoundingMode.HALF_UP);
     }
 }

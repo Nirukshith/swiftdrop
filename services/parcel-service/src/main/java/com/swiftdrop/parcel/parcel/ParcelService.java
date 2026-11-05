@@ -42,6 +42,18 @@ public class ParcelService {
         this.eventPublisher = eventPublisher;
     }
 
+    @Transactional(readOnly = true)
+    public PricingQuoteResponse getQuote(String pickupDistrict, String dropoffDistrict, BigDecimal weightKg, ParcelSize size) {
+        validateDistricts(pickupDistrict, dropoffDistrict);
+        if (weightKg == null || weightKg.compareTo(BigDecimal.valueOf(0.1)) < 0 || weightKg.compareTo(BigDecimal.valueOf(50.0)) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Weight must be between 0.1 and 50.0 kg");
+        }
+        if (size == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Parcel size is required");
+        }
+        return pricingQuoteClient.fetchQuoteDetails(pickupDistrict, dropoffDistrict, weightKg, size);
+    }
+
     @Transactional
     public ParcelResponse createCustomerParcel(String customerId, CreateCustomerParcelRequest request) {
         validateDistricts(request.pickupAddress().district(), request.dropoffAddress().district());

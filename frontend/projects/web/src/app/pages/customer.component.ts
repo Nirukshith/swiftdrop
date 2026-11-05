@@ -580,7 +580,27 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             </p>
           </div>
 
-          @if (feePreview(); as quote) {
+          @if (isLoadingQuote()) {
+          <div class="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
+            <p class="text-sm font-semibold text-slate-700">Calculating instant delivery fee quote from backend...</p>
+          </div>
+          } @else if (quoteError()) {
+          <div class="p-6 bg-rose-50 border border-rose-200 rounded-2xl space-y-3">
+            <div class="flex items-center gap-2 text-rose-800 font-bold text-sm">
+              <span>⚠️</span> Quote Calculation Error
+            </div>
+            <p class="text-xs text-rose-700">{{ quoteError() }}</p>
+            <button
+              type="button"
+              id="retry-quote-btn"
+              (click)="updateFeePreview()"
+              class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-all"
+            >
+              Retry Quote
+            </button>
+          </div>
+          } @else if (feePreview(); as quote) {
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
             <!-- Route Card -->
             <div class="bg-slate-50/70 p-6 rounded-2xl border border-slate-200 space-y-4">
@@ -615,12 +635,14 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 </div>
               </div>
 
+              @if (quote.pickupZone || quote.dropoffZone) {
               <div class="pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs text-slate-600 font-medium">
-                <span>Inter-District Transfer:</span>
+                <span>Zone Routing:</span>
                 <span class="font-bold text-slate-800">
-                  {{ quote.pickupDistrict === quote.dropoffDistrict ? 'Intra-District (Same District)' : 'Inter-District (+Rs. 150)' }}
+                  {{ quote.pickupZone || quote.pickupDistrict }} → {{ quote.dropoffZone || quote.dropoffDistrict }}
                 </span>
               </div>
+              }
             </div>
 
             <!-- Price Breakdown Card -->
@@ -638,26 +660,22 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
 
               <div class="space-y-2.5 text-xs">
                 <div class="flex justify-between text-indigo-200">
-                  <span>Base Express Fare</span>
-                  <span class="font-mono">Rs. {{ quote.baseFee.toFixed(2) }}</span>
+                  <span>Drop-off Zone Base Fee</span>
+                  <span class="font-mono">{{ quote.currency }} {{ quote.breakdown.dropoffZoneBaseFee.toFixed(2) }}</span>
                 </div>
                 <div class="flex justify-between text-indigo-200">
-                  <span>Inter-District Surcharge</span>
-                  <span class="font-mono">Rs. {{ quote.interDistrictFee.toFixed(2) }}</span>
+                  <span>Weight Band Charge ({{ quote.weightKg }} kg)</span>
+                  <span class="font-mono">{{ quote.currency }} {{ quote.breakdown.weightBandCharge.toFixed(2) }}</span>
                 </div>
                 <div class="flex justify-between text-indigo-200">
-                  <span>Weight Surcharge ({{ quote.weightKg }} kg)</span>
-                  <span class="font-mono">Rs. {{ quote.weightFee.toFixed(2) }}</span>
-                </div>
-                <div class="flex justify-between text-indigo-200">
-                  <span>Size Tier Surcharge ({{ quote.size }})</span>
-                  <span class="font-mono">Rs. {{ quote.sizeTierFee.toFixed(2) }}</span>
+                  <span>Size Tier Charge ({{ quote.size }})</span>
+                  <span class="font-mono">{{ quote.currency }} {{ quote.breakdown.sizeCharge.toFixed(2) }}</span>
                 </div>
 
                 <div class="pt-4 border-t border-indigo-700/60 flex items-center justify-between">
                   <span class="text-sm font-bold text-white">Total Delivery Fee</span>
                   <span id="wizard-total-fee" class="text-2xl font-black text-white font-mono">
-                    Rs. {{ quote.totalFee.toFixed(2) }}
+                    {{ quote.currency }} {{ quote.totalFee.toFixed(2) }}
                   </span>
                 </div>
               </div>
@@ -677,7 +695,8 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               type="button"
               id="wizard-step3-next"
               (click)="goToStep(4)"
-              class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow-sm transition-all"
+              [disabled]="isLoadingQuote() || !feePreview() || !!quoteError()"
+              class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-sm transition-all"
             >
               Confirm Booking Details →
             </button>
@@ -739,7 +758,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 {{ wizardData.weightKg }} kg · {{ wizardData.size }}
               </p>
               <p class="text-indigo-600 font-bold font-mono">
-                Rs. {{ feePreview()?.totalFee?.toFixed(2) }} LKR
+                {{ feePreview()?.currency || 'LKR' }} {{ feePreview()?.totalFee?.toFixed(2) }}
               </p>
             </div>
           </div>
@@ -756,7 +775,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               type="button"
               id="confirm-booking-btn"
               (click)="submitDeliveryOrder()"
-              [disabled]="isSubmitting()"
+              [disabled]="isSubmitting() || !feePreview()"
               class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2"
             >
               @if (isSubmitting()) {
@@ -786,6 +805,11 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               <div id="confirmed-tracking-number" class="text-xl font-black text-indigo-700 font-mono tracking-wider">
                 {{ confirmedParcel()?.trackingNumber }}
               </div>
+              @if (confirmedParcel()?.id) {
+              <div id="confirmed-parcel-id" class="text-[10px] text-slate-400 font-mono">
+                Order ID: {{ confirmedParcel()?.id }}
+              </div>
+              }
             </div>
 
             <div class="flex items-center justify-center gap-3 pt-4">
@@ -1064,6 +1088,8 @@ export class CustomerComponent implements OnInit {
   };
 
   feePreview = signal<FeePreview | null>(null);
+  isLoadingQuote = signal<boolean>(false);
+  quoteError = signal<string | null>(null);
   isSubmitting = signal<boolean>(false);
   orderConfirmed = signal<boolean>(false);
   confirmedParcel = signal<CustomerParcel | null>(null);
@@ -1114,13 +1140,45 @@ export class CustomerComponent implements OnInit {
   }
 
   updateFeePreview(): void {
-    const quote = this.customerService.calculateFeePreview(
-      this.wizardData.pickupAddress.district,
-      this.wizardData.dropoffAddress.district,
-      Number(this.wizardData.weightKg),
-      this.wizardData.size
-    );
-    this.feePreview.set(quote);
+    const pickup = this.wizardData.pickupAddress.district;
+    const dropoff = this.wizardData.dropoffAddress.district;
+    const weight = Number(this.wizardData.weightKg);
+    const size = this.wizardData.size;
+
+    if (!pickup || !dropoff || !weight || weight <= 0 || !size) {
+      this.feePreview.set(null);
+      this.quoteError.set(null);
+      return;
+    }
+
+    this.isLoadingQuote.set(true);
+    this.quoteError.set(null);
+
+    this.customerService.getFeeQuote(pickup, dropoff, weight, size).subscribe({
+      next: (quote) => {
+        this.feePreview.set({
+          currency: quote.currency || 'LKR',
+          totalFee: quote.totalFee,
+          breakdown: quote.breakdown,
+          pickupZone: quote.pickupZone,
+          dropoffZone: quote.dropoffZone,
+          pickupDistrict: pickup,
+          dropoffDistrict: dropoff,
+          weightKg: weight,
+          size,
+        });
+        this.isLoadingQuote.set(false);
+      },
+      error: (err) => {
+        this.feePreview.set(null);
+        this.isLoadingQuote.set(false);
+        const message =
+          err.error?.message ||
+          err.message ||
+          'Unable to calculate delivery fee. Please verify your addresses and package details.';
+        this.quoteError.set(message);
+      },
+    });
   }
 
   selectSavedAddress(type: 'pickup' | 'dropoff', addressId: string): void {
@@ -1159,6 +1217,7 @@ export class CustomerComponent implements OnInit {
   }
 
   submitDeliveryOrder(): void {
+    if (this.isSubmitting() || !this.feePreview()) return;
     this.isSubmitting.set(true);
     this.customerService.createParcel(this.wizardData).subscribe({
       next: (created) => {
@@ -1168,8 +1227,13 @@ export class CustomerComponent implements OnInit {
         this.loadParcels();
         this.notification.set(`Parcel booked successfully! Tracking: ${created.trackingNumber}`);
       },
-      error: () => {
+      error: (err) => {
         this.isSubmitting.set(false);
+        const message =
+          err?.error?.message ||
+          err?.message ||
+          'Failed to place delivery order. Please try again.';
+        this.notification.set(message);
       },
     });
   }
