@@ -28,6 +28,9 @@ class DispatchEventListenerTest {
     @Mock
     private ProcessedEventRepository processedEventRepository;
 
+    @Mock
+    private ParcelSequenceRepository parcelSequenceRepository;
+
     private ObjectMapper objectMapper;
     private DispatchEventListener listener;
 
@@ -44,6 +47,7 @@ class DispatchEventListenerTest {
             workloadCounter,
             courierWorkloadRepository,
             processedEventRepository,
+            parcelSequenceRepository,
             objectMapper
         );
     }
@@ -68,6 +72,7 @@ class DispatchEventListenerTest {
         );
 
         when(processedEventRepository.existsByEventId("evt-001")).thenReturn(false);
+        when(parcelSequenceRepository.findById(PARCEL_ID)).thenReturn(Optional.empty());
         when(courierWorkloadRepository.findByCourierId(COURIER_1)).thenReturn(Optional.empty());
 
         listener.processEvent(event);
@@ -77,6 +82,11 @@ class DispatchEventListenerTest {
         assertThat(workloadCaptor.getValue().getCourierId()).isEqualTo(COURIER_1);
         assertThat(workloadCaptor.getValue().getActiveCount()).isEqualTo(1);
         assertThat(workloadCaptor.getValue().getLastSequence()).isEqualTo(1L);
+
+        ArgumentCaptor<ParcelSequenceEntity> seqCaptor = ArgumentCaptor.forClass(ParcelSequenceEntity.class);
+        verify(parcelSequenceRepository).save(seqCaptor.capture());
+        assertThat(seqCaptor.getValue().getParcelId()).isEqualTo(PARCEL_ID);
+        assertThat(seqCaptor.getValue().getLastSequence()).isEqualTo(1L);
 
         ArgumentCaptor<ProcessedEventEntity> eventCaptor = ArgumentCaptor.forClass(ProcessedEventEntity.class);
         verify(processedEventRepository).save(eventCaptor.capture());
@@ -104,6 +114,8 @@ class DispatchEventListenerTest {
         );
 
         when(processedEventRepository.existsByEventId("evt-002")).thenReturn(false);
+        when(parcelSequenceRepository.findById(PARCEL_ID))
+            .thenReturn(Optional.of(new ParcelSequenceEntity(PARCEL_ID, 1L)));
         when(courierWorkloadRepository.findByCourierId(COURIER_1))
             .thenReturn(Optional.of(new CourierWorkloadEntity(COURIER_1, 3, 1L, "evt-001")));
         when(courierWorkloadRepository.findByCourierId(COURIER_2))
@@ -122,6 +134,36 @@ class DispatchEventListenerTest {
 
         assertThat(savedCourier2.getCourierId()).isEqualTo(COURIER_2);
         assertThat(savedCourier2.getActiveCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Same-courier reassignment does not increase workload count")
+    void onEvent_sameCourierReassignment_doesNotDoubleCount() {
+        EventEnvelope event = new EventEnvelope(
+            "evt-same-courier",
+            "parcel.assigned.v1",
+            Instant.now(),
+            2L,
+            PARCEL_ID,
+            "SD-123",
+            "CREATED",
+            "CREATED",
+            COURIER_1,
+            COURIER_1,
+            null,
+            "cust-1",
+            "Reassigned to same courier"
+        );
+
+        when(processedEventRepository.existsByEventId("evt-same-courier")).thenReturn(false);
+        when(parcelSequenceRepository.findById(PARCEL_ID))
+            .thenReturn(Optional.of(new ParcelSequenceEntity(PARCEL_ID, 1L)));
+
+        listener.processEvent(event);
+
+        verify(courierWorkloadRepository, never()).save(any());
+        verify(parcelSequenceRepository).save(any(ParcelSequenceEntity.class));
+        verify(processedEventRepository).save(any(ProcessedEventEntity.class));
     }
 
     @Test
@@ -144,6 +186,8 @@ class DispatchEventListenerTest {
         );
 
         when(processedEventRepository.existsByEventId("evt-003")).thenReturn(false);
+        when(parcelSequenceRepository.findById(PARCEL_ID))
+            .thenReturn(Optional.of(new ParcelSequenceEntity(PARCEL_ID, 2L)));
         when(courierWorkloadRepository.findByCourierId(COURIER_1))
             .thenReturn(Optional.of(new CourierWorkloadEntity(COURIER_1, 2, 2L, "evt-002")));
 
@@ -174,6 +218,8 @@ class DispatchEventListenerTest {
         );
 
         when(processedEventRepository.existsByEventId("evt-004")).thenReturn(false);
+        when(parcelSequenceRepository.findById(PARCEL_ID))
+            .thenReturn(Optional.of(new ParcelSequenceEntity(PARCEL_ID, 3L)));
         when(courierWorkloadRepository.findByCourierId(COURIER_1))
             .thenReturn(Optional.of(new CourierWorkloadEntity(COURIER_1, 1, 3L, "evt-003")));
 
@@ -206,6 +252,36 @@ class DispatchEventListenerTest {
         when(processedEventRepository.existsByEventId("evt-duplicate")).thenReturn(true);
 
         listener.processEvent(event);
+
+        verify(courierWorkloadRepository, never()).save(any());
+        verify(processedEventRepository, never()).save(any());
+        verify(parcelSequenceRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Rejects stale or out-of-order sequence event based on database sequence record")
+    void onEvent_staleSequence_isSkippedWithoutModifyingWorkload() {
+        EventEnvelope staleEvent = new EventEnvelope(
+            "evt-stale",
+            "parcel.assigned.v1",
+            Instant.now(),
+            1L, // stale: current sequence in DB is 3L
+            PARCEL_ID,
+            "SD-123",
+            "CREATED",
+            "CREATED",
+            COURIER_2,
+            COURIER_1,
+            null,
+            "cust-1",
+            null
+        );
+
+        when(processedEventRepository.existsByEventId("evt-stale")).thenReturn(false);
+        when(parcelSequenceRepository.findById(PARCEL_ID))
+            .thenReturn(Optional.of(new ParcelSequenceEntity(PARCEL_ID, 3L)));
+
+        listener.processEvent(staleEvent);
 
         verify(courierWorkloadRepository, never()).save(any());
         verify(processedEventRepository, never()).save(any());

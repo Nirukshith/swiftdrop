@@ -214,6 +214,40 @@ class WorkloadCounterTest {
     }
 
     @Test
+    @DisplayName("Same-courier reassignment: does not double count workload")
+    void testSameCourierReassignmentDoesNotDoubleCount() {
+        String courierA = "courier-A";
+        String parcel1 = "parcel-1";
+
+        // Assign initially to courier A (seq 1)
+        workloadCounter.apply(createEnvelope(
+                WorkloadCounter.TOPIC_PARCEL_ASSIGNED,
+                1L,
+                parcel1,
+                "CREATED",
+                "CREATED",
+                courierA,
+                null
+        ));
+        assertEquals(1, workloadCounter.getActiveCount(courierA));
+
+        // Reassign to same courier A (seq 2)
+        EventEnvelope sameCourierEvent = createEnvelope(
+                WorkloadCounter.TOPIC_PARCEL_ASSIGNED,
+                2L,
+                parcel1,
+                "CREATED",
+                "CREATED",
+                courierA,
+                courierA
+        );
+
+        boolean applied = workloadCounter.apply(sameCourierEvent);
+        assertTrue(applied);
+        assertEquals(1, workloadCounter.getActiveCount(courierA), "Same-courier reassignment must maintain count at 1");
+    }
+
+    @Test
     @DisplayName("Duplicate event: idempotent consumption ignores repeated eventId")
     void testDuplicateEventIdempotency() {
         String courierA = "courier-A";
