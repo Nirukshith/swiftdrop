@@ -33,6 +33,44 @@ export interface UnassignedParcelsPage {
   size: number;
 }
 
+export interface FailedParcelsPage {
+  content: DispatchParcelSummary[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  size: number;
+}
+
+export interface RequeueRequest {
+  reason?: string;
+}
+
+export interface RequeueResponse {
+  parcelId: string;
+  status: string;
+  attemptCount: number;
+  requeuedAt: string;
+}
+
+export interface BulkAssignRequest {
+  assignments: AssignParcelRequest[];
+}
+
+export interface BulkAssignItemResult {
+  parcelId: string;
+  courierId: string;
+  success: boolean;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+}
+
+export interface BulkAssignResponse {
+  totalRequested: number;
+  successfulCount: number;
+  failedCount: number;
+  results: BulkAssignItemResult[];
+}
+
 export interface CourierWorkloadItem {
   courierId: string;
   name: string;

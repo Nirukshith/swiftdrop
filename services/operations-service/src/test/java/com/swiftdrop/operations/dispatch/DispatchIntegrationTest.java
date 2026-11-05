@@ -25,6 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
@@ -277,5 +278,136 @@ class DispatchIntegrationTest {
         // Stale event was rejected by database sequence check: Courier A is still 0, Courier B is still 1
         assertThat(courierWorkloadRepository.findByCourierId(COURIER_ID).get().getActiveCount()).isEqualTo(0);
         assertThat(courierWorkloadRepository.findByCourierId(COURIER_B_ID).get().getActiveCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("End-to-end: failed delivery decrements workload, requeue does not double-decrement, and re-assignment increments new courier")
+    void requeueFailedParcelAndReassignUpdatesWorkloadCorrectly() throws Exception {
+        // 1. Initial assignment of parcel to Courier A (seq 1)
+        String event1Id = UUID.randomUUID().toString();
+        EventEnvelope assignEvent = new EventEnvelope(
+            event1Id,
+            "parcel.assigned.v1",
+            Instant.now(),
+            1L,
+            PARCEL_ID,
+            "SD-20261028-IT",
+            "CREATED",
+            "ASSIGNED",
+            COURIER_ID,
+            null,
+            null,
+            "cust-1",
+            null
+        );
+        dispatchEventListener.onEvent(objectMapper.writeValueAsString(assignEvent));
+        assertThat(courierWorkloadRepository.findByCourierId(COURIER_ID).get().getActiveCount()).isEqualTo(1);
+
+        // 2. Delivery fails: status becomes FAILED (seq 2), terminal status decrements Courier A to 0
+        String failEventId = UUID.randomUUID().toString();
+        EventEnvelope failEvent = new EventEnvelope(
+            failEventId,
+            "parcel.status-changed.v1",
+            Instant.now(),
+            2L,
+            PARCEL_ID,
+            "SD-20261028-IT",
+            "OUT_FOR_DELIVERY",
+            "FAILED",
+            COURIER_ID,
+            null,
+            null,
+            "cust-1",
+            "Customer not home"
+        );
+        dispatchEventListener.onEvent(objectMapper.writeValueAsString(failEvent));
+        assertThat(courierWorkloadRepository.findByCourierId(COURIER_ID).get().getActiveCount()).isEqualTo(0);
+
+        // 3. Dispatcher re-queues parcel
+        Instant now = Instant.now();
+        ParcelClientResponse requeuedResponse = new ParcelClientResponse(
+            PARCEL_ID,
+            "SD-20261028-IT",
+            "CREATED",
+            "cust-1",
+            null,
+            null,
+            null,
+            null,
+            2.0,
+            "MEDIUM",
+            500.0,
+            2,
+            null,
+            "Recipient",
+            "+94771111111",
+            null,
+            3L,
+            now.minusSeconds(100),
+            now
+        );
+        when(parcelServiceClient.requeueParcel(eq(PARCEL_ID), eq("Retry tomorrow"), any()))
+            .thenReturn(requeuedResponse);
+
+        RequeueResponse requeueResult = dispatchService.requeueParcel(PARCEL_ID, "Retry tomorrow", "dispatcher-1");
+        assertThat(requeueResult.parcelId()).isEqualTo(PARCEL_ID);
+        assertThat(requeueResult.status()).isEqualTo("CREATED");
+        assertThat(requeueResult.attemptCount()).isEqualTo(2);
+
+        // 4. Status change event emitted for re-queue (FAILED -> CREATED, courierId: null, seq 3)
+        String requeueEventId = UUID.randomUUID().toString();
+        EventEnvelope requeueEvent = new EventEnvelope(
+            requeueEventId,
+            "parcel.status-changed.v1",
+            Instant.now(),
+            3L,
+            PARCEL_ID,
+            "SD-20261028-IT",
+            "FAILED",
+            "CREATED",
+            null,
+            null,
+            null,
+            "cust-1",
+            "Retry tomorrow"
+        );
+        dispatchEventListener.onEvent(objectMapper.writeValueAsString(requeueEvent));
+
+        // Courier A activeCount is still 0 (no double-decrement below 0)
+        assertThat(courierWorkloadRepository.findByCourierId(COURIER_ID).get().getActiveCount()).isEqualTo(0);
+
+        // 5. Bulk re-assign parcel to Courier B
+        when(parcelServiceClient.assignCourier(eq(PARCEL_ID), eq(COURIER_B_ID), any()))
+            .thenReturn(mock(ParcelClientResponse.class));
+
+        BulkAssignResponse bulkResult = dispatchService.bulkAssignParcels(
+            new BulkAssignRequest(List.of(new AssignParcelRequest(PARCEL_ID, COURIER_B_ID))),
+            "dispatcher-1"
+        );
+        assertThat(bulkResult.successfulCount()).isEqualTo(1);
+        assertThat(bulkResult.failedCount()).isEqualTo(0);
+
+        // 6. Kafka event for new assignment arrives (seq 4)
+        String newAssignEventId = UUID.randomUUID().toString();
+        EventEnvelope newAssignEvent = new EventEnvelope(
+            newAssignEventId,
+            "parcel.assigned.v1",
+            Instant.now(),
+            4L,
+            PARCEL_ID,
+            "SD-20261028-IT",
+            "CREATED",
+            "ASSIGNED",
+            COURIER_B_ID,
+            null,
+            null,
+            "cust-1",
+            null
+        );
+        dispatchEventListener.onEvent(objectMapper.writeValueAsString(newAssignEvent));
+
+        // Courier B activeCount is incremented to 1; Courier A stays 0
+        assertThat(courierWorkloadRepository.findByCourierId(COURIER_B_ID).get().getActiveCount()).isEqualTo(1);
+        assertThat(courierWorkloadRepository.findByCourierId(COURIER_ID).get().getActiveCount()).isEqualTo(0);
     }
 }

@@ -3,8 +3,11 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import {
   AssignmentResult,
+  BulkAssignResponse,
   CourierWorkloadItem,
   DispatchParcelSummary,
+  FailedParcelsPage,
+  RequeueResponse,
   UnassignedParcelsPage,
 } from './dispatch.model';
 import { DispatchService } from './dispatch.service';
@@ -317,6 +320,113 @@ describe('DispatchService (Real API Integration)', () => {
 
       const found = service.couriers().find((c) => c.courierId === courierId);
       expect(found?.available).toBe(false);
+    });
+  });
+
+  describe('loadFailedParcels (GET /api/v1/dispatch/parcels/failed)', () => {
+    const mockFailedPage: FailedParcelsPage = {
+      content: [
+        {
+          parcelId: 'f1-parcel',
+          trackingNumber: 'SD-FAIL-01',
+          status: 'FAILED',
+          pickupZone: 'ZONE-COLOMBO-NORTH',
+          dropoffZone: 'ZONE-COLOMBO-SOUTH',
+          attemptCount: 1,
+          failureReason: 'Customer not home',
+          createdAt: '2026-10-25T10:00:00Z',
+        },
+      ],
+      totalElements: 1,
+      totalPages: 1,
+      page: 0,
+      size: 20,
+    };
+
+    it('should query failed parcels and update signals', () => {
+      let result: FailedParcelsPage | undefined;
+      service.loadFailedParcels('ZONE-COLOMBO-NORTH').subscribe((res) => {
+        result = res;
+      });
+
+      const req = httpMock.expectOne(
+        (r) =>
+          r.url === '/api/v1/dispatch/parcels/failed' &&
+          r.params.get('zone') === 'ZONE-COLOMBO-NORTH'
+      );
+      expect(req.request.method).toBe('GET');
+      req.flush(mockFailedPage);
+
+      expect(result).toEqual(mockFailedPage);
+      expect(service.failedParcels().length).toBe(1);
+      expect(service.totalFailedCount()).toBe(1);
+      expect(service.failedParcels()[0].status).toBe('FAILED');
+    });
+  });
+
+  describe('requeueParcel (POST /api/v1/dispatch/parcels/{id}/requeue)', () => {
+    it('should post requeue request and refresh failed and unassigned queues', () => {
+      const mockResponse: RequeueResponse = {
+        parcelId: 'f1-parcel',
+        status: 'CREATED',
+        attemptCount: 2,
+        requeuedAt: '2026-10-25T14:00:00Z',
+      };
+
+      let result: RequeueResponse | undefined;
+      service.requeueParcel('f1-parcel', 'Retry tomorrow').subscribe((res) => {
+        result = res;
+      });
+
+      const req = httpMock.expectOne('/api/v1/dispatch/parcels/f1-parcel/requeue');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ reason: 'Retry tomorrow' });
+      req.flush(mockResponse);
+
+      expect(result).toEqual(mockResponse);
+
+      // Verify triggered refreshes
+      const failedRefresh = httpMock.expectOne((r) => r.url === '/api/v1/dispatch/parcels/failed');
+      failedRefresh.flush({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 20 });
+
+      const queueRefresh = httpMock.expectOne((r) => r.url === '/api/v1/dispatch/parcels');
+      queueRefresh.flush({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 20 });
+    });
+  });
+
+  describe('bulkAssignParcels (POST /api/v1/dispatch/assignments/bulk)', () => {
+    it('should submit batch assignments and refresh queue and workload', () => {
+      const assignments = [
+        { parcelId: 'p1', courierId: 'c1' },
+        { parcelId: 'p2', courierId: 'c1' },
+      ];
+      const mockBulkResponse: BulkAssignResponse = {
+        totalRequested: 2,
+        successfulCount: 2,
+        failedCount: 0,
+        results: [
+          { parcelId: 'p1', courierId: 'c1', success: true },
+          { parcelId: 'p2', courierId: 'c1', success: true },
+        ],
+      };
+
+      let result: BulkAssignResponse | undefined;
+      service.bulkAssignParcels(assignments).subscribe((res) => {
+        result = res;
+      });
+
+      const req = httpMock.expectOne('/api/v1/dispatch/assignments/bulk');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({ assignments });
+      req.flush(mockBulkResponse);
+
+      expect(result).toEqual(mockBulkResponse);
+
+      const queueRefresh = httpMock.expectOne((r) => r.url === '/api/v1/dispatch/parcels');
+      queueRefresh.flush({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 20 });
+
+      const workloadRefresh = httpMock.expectOne((r) => r.url === '/api/v1/dispatch/couriers');
+      workloadRefresh.flush([]);
     });
   });
 });

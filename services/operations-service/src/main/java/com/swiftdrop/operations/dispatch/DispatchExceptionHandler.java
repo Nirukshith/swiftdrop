@@ -27,6 +27,18 @@ public class DispatchExceptionHandler {
         );
     }
 
+    @ExceptionHandler(ParcelNotEligibleForRequeueException.class)
+    public ResponseEntity<ErrorResponse> handleParcelNotEligibleForRequeue(ParcelNotEligibleForRequeueException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+            new ErrorResponse(
+                "PARCEL_NOT_FAILED",
+                ex.getMessage(),
+                getCorrelationId(),
+                Instant.now()
+            )
+        );
+    }
+
     @ExceptionHandler(CourierUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleCourierUnavailable(CourierUnavailableException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(

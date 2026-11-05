@@ -52,6 +52,33 @@ public class RestParcelServiceClient implements ParcelServiceClient {
     }
 
     @Override
+    public ParcelPageClientResponse queryFailedParcels(String zone, LocalDate date, int page, int size) {
+        return restClient.get()
+            .uri(uriBuilder -> {
+                uriBuilder.path("/internal/v1/parcels")
+                    .queryParam("status", "FAILED")
+                    .queryParam("page", page)
+                    .queryParam("size", size);
+                if (zone != null && !zone.isBlank()) {
+                    uriBuilder.queryParam("zone", zone);
+                }
+                if (date != null) {
+                    uriBuilder.queryParam("date", date.format(DateTimeFormatter.ISO_DATE));
+                }
+                return uriBuilder.build();
+            })
+            .accept(MediaType.APPLICATION_JSON)
+            .retrieve()
+            .onStatus(status -> status.isSameCodeAs(HttpStatus.NOT_FOUND), (req, resp) -> {
+                throw new ParcelNotFoundException("Parcels query returned not found");
+            })
+            .onStatus(status -> status.isError(), (req, resp) -> {
+                throw new ResponseStatusException(resp.getStatusCode(), "Failed to query failed parcels: " + resp.getStatusText());
+            })
+            .body(ParcelPageClientResponse.class);
+    }
+
+    @Override
     public ParcelClientResponse assignCourier(String parcelId, String courierId, String assignedBy) {
         return restClient.put()
             .uri("/internal/v1/parcels/{id}/assignment", parcelId)
@@ -67,6 +94,33 @@ public class RestParcelServiceClient implements ParcelServiceClient {
             })
             .onStatus(status -> status.isError(), (req, resp) -> {
                 throw new ResponseStatusException(resp.getStatusCode(), "Assignment failed: " + resp.getStatusText());
+            })
+            .body(ParcelClientResponse.class);
+    }
+
+    @Override
+    public ParcelClientResponse requeueParcel(String parcelId, String reason, String requeuedBy) {
+        return restClient.patch()
+            .uri("/internal/v1/parcels/{id}/status", parcelId)
+            .contentType(MediaType.APPLICATION_JSON)
+            .accept(MediaType.APPLICATION_JSON)
+            .body(new ParcelStatusUpdateClientRequest(
+                "CREATED",
+                "FAILED",
+                null,
+                reason != null && !reason.isBlank() ? reason : "Re-queued by dispatcher",
+                null,
+                null
+            ))
+            .retrieve()
+            .onStatus(status -> status.isSameCodeAs(HttpStatus.NOT_FOUND), (req, resp) -> {
+                throw new ParcelNotFoundException("Parcel not found with id: " + parcelId);
+            })
+            .onStatus(status -> status.isSameCodeAs(HttpStatus.CONFLICT) || status.isSameCodeAs(HttpStatus.BAD_REQUEST), (req, resp) -> {
+                throw new ParcelNotEligibleForRequeueException("Parcel is not in FAILED status and cannot be re-queued.");
+            })
+            .onStatus(status -> status.isError(), (req, resp) -> {
+                throw new ResponseStatusException(resp.getStatusCode(), "Re-queue failed: " + resp.getStatusText());
             })
             .body(ParcelClientResponse.class);
     }

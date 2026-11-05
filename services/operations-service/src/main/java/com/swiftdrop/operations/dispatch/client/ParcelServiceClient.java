@@ -6,5 +6,10 @@ public interface ParcelServiceClient {
 
     ParcelPageClientResponse queryUnassignedParcels(String zone, LocalDate date, int page, int size);
 
+    ParcelPageClientResponse queryFailedParcels(String zone, LocalDate date, int page, int size);
+
     ParcelClientResponse assignCourier(String parcelId, String courierId, String assignedBy);
+
+    ParcelClientResponse requeueParcel(String parcelId, String reason, String requeuedBy);
 }
+

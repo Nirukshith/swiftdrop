@@ -74,10 +74,28 @@ describe('DispatchComponent (Real API Integration)', () => {
     },
   ];
 
+  const mockFailedParcels: DispatchParcelSummary[] = [
+    {
+      parcelId: 'fail-101',
+      trackingNumber: 'SD-FAIL-001',
+      status: 'FAILED',
+      pickupZone: 'ZONE-COLOMBO-NORTH',
+      dropoffZone: 'ZONE-COLOMBO-SOUTH',
+      pickupAddress: '10 Main St, Colombo 03',
+      dropoffAddress: '20 Hill St, Colombo 05',
+      attemptCount: 1,
+      failureReason: 'Customer not reachable',
+      createdAt: '2026-10-25T10:00:00Z',
+    },
+  ];
+
   let dispatchServiceSpy: {
     loadUnassignedParcels: jest.Mock;
     loadCourierWorkload: jest.Mock;
+    loadFailedParcels: jest.Mock;
     assignParcel: jest.Mock;
+    bulkAssignParcels: jest.Mock;
+    requeueParcel: jest.Mock;
     updateCourierAvailability: jest.Mock;
     unassignedParcels: any;
     couriers: any;
@@ -85,10 +103,14 @@ describe('DispatchComponent (Real API Integration)', () => {
     unassignedCount: any;
     availableCouriersCount: any;
     totalWorkloadActive: any;
+    failedParcels: any;
+    totalFailedCount: any;
     isLoadingParcels: any;
     isLoadingCouriers: any;
+    isLoadingFailed: any;
     parcelsError: any;
     couriersError: any;
+    failedError: any;
     users: any;
   };
 
@@ -100,14 +122,27 @@ describe('DispatchComponent (Real API Integration)', () => {
     const unassignedCountSignal = jest.fn(() => mockParcels.length);
     const availableCouriersCountSignal = jest.fn(() => 1);
     const totalWorkloadActiveSignal = jest.fn(() => 3);
+    const failedParcelsSignal = jest.fn(() => mockFailedParcels);
+    const totalFailedCountSignal = jest.fn(() => mockFailedParcels.length);
     const isLoadingParcelsSignal = jest.fn(() => false);
     const isLoadingCouriersSignal = jest.fn(() => false);
+    const isLoadingFailedSignal = jest.fn(() => false);
     const parcelsErrorSignal = jest.fn(() => null);
     const couriersErrorSignal = jest.fn(() => null);
+    const failedErrorSignal = jest.fn(() => null);
 
     dispatchServiceSpy = {
       loadUnassignedParcels: jest.fn().mockReturnValue(of(mockParcelsPage)),
       loadCourierWorkload: jest.fn().mockReturnValue(of(mockCouriers)),
+      loadFailedParcels: jest.fn().mockReturnValue(
+        of({
+          content: mockFailedParcels,
+          totalElements: 1,
+          totalPages: 1,
+          page: 0,
+          size: 20,
+        })
+      ),
       assignParcel: jest.fn().mockReturnValue(
         of({
           parcelId: 'pcl-101',
@@ -115,6 +150,25 @@ describe('DispatchComponent (Real API Integration)', () => {
           assignedAt: '2026-10-25T12:00:00Z',
           status: 'ASSIGNED',
         } as AssignmentResult)
+      ),
+      bulkAssignParcels: jest.fn().mockReturnValue(
+        of({
+          totalRequested: 2,
+          successfulCount: 2,
+          failedCount: 0,
+          results: [
+            { parcelId: 'pcl-101', courierId: 'c1', success: true },
+            { parcelId: 'pcl-102', courierId: 'c1', success: true },
+          ],
+        })
+      ),
+      requeueParcel: jest.fn().mockReturnValue(
+        of({
+          parcelId: 'fail-101',
+          status: 'CREATED',
+          attemptCount: 2,
+          requeuedAt: '2026-10-25T15:00:00Z',
+        })
       ),
       updateCourierAvailability: jest.fn().mockReturnValue(
         of({
@@ -128,10 +182,14 @@ describe('DispatchComponent (Real API Integration)', () => {
       unassignedCount: unassignedCountSignal,
       availableCouriersCount: availableCouriersCountSignal,
       totalWorkloadActive: totalWorkloadActiveSignal,
+      failedParcels: failedParcelsSignal,
+      totalFailedCount: totalFailedCountSignal,
       isLoadingParcels: isLoadingParcelsSignal,
       isLoadingCouriers: isLoadingCouriersSignal,
+      isLoadingFailed: isLoadingFailedSignal,
       parcelsError: parcelsErrorSignal,
       couriersError: couriersErrorSignal,
+      failedError: failedErrorSignal,
       users: jest.fn(() => []),
     };
 
@@ -153,13 +211,15 @@ describe('DispatchComponent (Real API Integration)', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('#tab-queue-btn')).toBeTruthy();
     expect(compiled.querySelector('#tab-workload-btn')).toBeTruthy();
+    expect(compiled.querySelector('#tab-failed-btn')).toBeTruthy();
     expect(compiled.querySelector('#tab-zones-link')).toBeTruthy();
     expect(compiled.querySelector('#tab-pricing-link')).toBeTruthy();
   });
 
-  it('should call loadUnassignedParcels and loadCourierWorkload on initialization', () => {
+  it('should call loadUnassignedParcels, loadCourierWorkload, and loadFailedParcels on initialization', () => {
     expect(dispatchServiceSpy.loadUnassignedParcels).toHaveBeenCalled();
     expect(dispatchServiceSpy.loadCourierWorkload).toHaveBeenCalled();
+    expect(dispatchServiceSpy.loadFailedParcels).toHaveBeenCalled();
   });
 
   it('should switch tabs when clicking tab buttons', () => {
@@ -290,5 +350,144 @@ describe('DispatchComponent (Real API Integration)', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Loading unassigned dispatch queue...');
+  });
+
+  describe('Feature A & B: Failed Parcel List & Re-queue', () => {
+    it('should switch to failed tab when clicking failed tab button', () => {
+      component.activeTab.set('failed');
+      fixture.detectChanges();
+      expect(component.activeTab()).toBe('failed');
+
+      const compiled = fixture.nativeElement as HTMLElement;
+      expect(compiled.querySelector('#failed-search-input')).toBeTruthy();
+      expect(compiled.querySelector('#failed-zone-filter')).toBeTruthy();
+    });
+
+    it('should select failed tab when route has query param tab=failed', async () => {
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/?tab=failed');
+
+      const queryFixture = TestBed.createComponent(DispatchComponent);
+      const queryComponent = queryFixture.componentInstance;
+      queryFixture.detectChanges();
+
+      expect(queryComponent.activeTab()).toBe('failed');
+    });
+
+    it('should filter failed parcels by search query', () => {
+      component.failedSearchQuery.set('reachable');
+      const filtered = component.filteredFailedParcels();
+      expect(filtered.length).toBe(1);
+      expect(filtered[0].trackingNumber).toBe('SD-FAIL-001');
+
+      component.failedSearchQuery.set('nonexistent-query');
+      expect(component.filteredFailedParcels().length).toBe(0);
+    });
+
+    it('should trigger reload when zone filter changes in failed deliveries tab', () => {
+      dispatchServiceSpy.loadFailedParcels.mockClear();
+      component.onFailedZoneChange('ZONE-COLOMBO-NORTH');
+      expect(component.failedSelectedZone()).toBe('ZONE-COLOMBO-NORTH');
+      expect(dispatchServiceSpy.loadFailedParcels).toHaveBeenCalledWith('ZONE-COLOMBO-NORTH');
+    });
+
+    it('should open re-queue modal, accept optional reason, and confirm re-queue via API', () => {
+      const failedParcel = mockFailedParcels[0];
+      component.openRequeueModal(failedParcel);
+      fixture.detectChanges();
+
+      expect(component.selectedParcelForRequeue()).toEqual(failedParcel);
+      expect(component.requeueReason()).toBe('');
+
+      component.requeueReason.set('Customer requested redelivery tomorrow');
+      component.confirmRequeue();
+      fixture.detectChanges();
+
+      expect(dispatchServiceSpy.requeueParcel).toHaveBeenCalledWith(
+        failedParcel.parcelId,
+        'Customer requested redelivery tomorrow'
+      );
+      expect(component.selectedParcelForRequeue()).toBeNull();
+      expect(component.toastMessage()).toContain('successfully re-queued to CREATED (Attempt #2)!');
+      expect(component.toastType()).toBe('success');
+    });
+
+    it('should handle re-queue API errors gracefully', () => {
+      dispatchServiceSpy.requeueParcel.mockReturnValue(
+        throwError(() => ({
+          status: 400,
+          error: { message: 'Parcel is not in FAILED status' },
+        }))
+      );
+
+      const failedParcel = mockFailedParcels[0];
+      component.openRequeueModal(failedParcel);
+      component.confirmRequeue();
+      fixture.detectChanges();
+
+      expect(component.isSubmittingRequeue()).toBe(false);
+      expect(component.toastType()).toBe('error');
+      expect(component.toastMessage()).toContain('Parcel is not in FAILED status');
+    });
+  });
+
+  describe('Feature C: Bulk Assignment', () => {
+    it('should toggle individual parcel selection', () => {
+      const p1 = mockParcels[0].parcelId;
+      expect(component.isParcelSelected(p1)).toBe(false);
+
+      component.toggleSelectParcel(p1);
+      expect(component.isParcelSelected(p1)).toBe(true);
+
+      component.toggleSelectParcel(p1);
+      expect(component.isParcelSelected(p1)).toBe(false);
+    });
+
+    it('should toggle select all and clear selection', () => {
+      expect(component.isAllSelected()).toBe(false);
+
+      component.toggleSelectAll();
+      expect(component.selectedParcelIds().size).toBe(mockParcels.length);
+      expect(component.isAllSelected()).toBe(true);
+
+      component.toggleSelectAll();
+      expect(component.selectedParcelIds().size).toBe(0);
+      expect(component.isAllSelected()).toBe(false);
+    });
+
+    it('should submit bulk assignment and display outcome modal', () => {
+      const p1 = mockParcels[0].parcelId;
+      const p2 = mockParcels[1].parcelId;
+      component.toggleSelectParcel(p1);
+      component.toggleSelectParcel(p2);
+      component.bulkCourierId.set('c1');
+
+      component.submitBulkAssign();
+      fixture.detectChanges();
+
+      expect(dispatchServiceSpy.bulkAssignParcels).toHaveBeenCalledWith([
+        { parcelId: p1, courierId: 'c1' },
+        { parcelId: p2, courierId: 'c1' },
+      ]);
+      expect(component.bulkResult()).toBeTruthy();
+      expect(component.bulkResult()?.successfulCount).toBe(2);
+      expect(component.selectedParcelIds().size).toBe(0);
+      expect(component.toastType()).toBe('success');
+    });
+
+    it('should handle bulk assignment API failure', () => {
+      dispatchServiceSpy.bulkAssignParcels.mockReturnValue(
+        throwError(() => ({ error: { message: 'Bulk assignment network timeout' } }))
+      );
+
+      component.toggleSelectParcel(mockParcels[0].parcelId);
+      component.bulkCourierId.set('c1');
+      component.submitBulkAssign();
+      fixture.detectChanges();
+
+      expect(component.isSubmittingBulk()).toBe(false);
+      expect(component.toastType()).toBe('error');
+      expect(component.toastMessage()).toContain('Bulk assignment network timeout');
+    });
   });
 });
