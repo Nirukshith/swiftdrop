@@ -182,8 +182,10 @@ paths:
       summary: Download PDF receipt
       description: |
         Generates the parcel receipt as a PDF with OpenPDF (CU-05). Available to
-        the owner customer and ADMIN. Which statuses allow a receipt is open
-        question Q5.
+        the owner customer and ADMIN only; the assigned courier and DISPATCHER
+        get `403`. Only a `DELIVERED` parcel has a receipt; any other status
+        gets `409 PARCEL_NOT_DELIVERED` (resolves Q5 in docs/tracking-design.md).
+        The PDF is generated on request and never stored.
       operationId: downloadParcelReceipt
       security:
         - BearerAuth: []
@@ -208,6 +210,17 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: Parcel is not delivered yet, so it has no receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: "PARCEL_NOT_DELIVERED"
+                message: "A receipt is only available for delivered parcels; current status is OUT_FOR_DELIVERY"
+                correlationId: "5d0c6c2e-8a51-4f0e-9a43-2b6f1d7f3c10"
+                timestamp: "2026-10-26T12:00:00Z"
 
   /api/v1/parcels/{id}/rating:
     post:
