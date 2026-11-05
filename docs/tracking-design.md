@@ -251,7 +251,7 @@ For local development before M1 merges the implementation, M2 codes against this
 
 **Content:** SwiftDrop header, tracking number, parcel id, creation date, current status, pickup and drop-off address (owner only, so not masked), recipient name, size and weight, fee in LKR (M5's quote currency), and the generation time. No phone number, proof photo or courier data.
 
-**Access:** owner customer and ADMIN (`403` otherwise). Generated on request and streamed, never stored, with `Content-Disposition: attachment; filename="receipt-<trackingNumber>.pdf"`.
+**Access:** owner customer and ADMIN (`403` otherwise), and only for a `DELIVERED` parcel (`409 PARCEL_NOT_DELIVERED` otherwise). Generated on request and streamed, never stored, with `Content-Disposition: attachment; filename="receipt-<trackingNumber>.pdf"`.
 
 ---
 
@@ -287,7 +287,7 @@ The public page must work at 360 px width (NF-04).
 | Q2 | CU-05 asks for "history with filters", but M1's `GET /api/v1/parcels` only filters by `status`. Add `from` / `to` date filters and a tracking-number search there? | M1 |
 | Q3 | Recipient name mask format (`S*** S***` proposed). | Team |
 | Q4 | Show anything for `FAILED` on the public page, e.g. a fixed reason code like `RECIPIENT_UNAVAILABLE`, never free text? | Team |
-| Q5 | Which statuses allow a receipt download (all, or all except `CANCELLED`)? Can DISPATCHER download it too? | Team |
+| Q5 | ~~Which statuses allow a receipt download? Can DISPATCHER download it too?~~ **Resolved:** `DELIVERED` only (`409 PARCEL_NOT_DELIVERED` otherwise); owner customer and ADMIN only, DISPATCHER and courier get `403` (section 8). | Team |
 | Q6 | Rating body: is `score` 1-5 plus an optional comment enough? Does anyone (M5 reports) consume ratings? | Team, M5 |
 | Q7 | Is a private (authenticated) SSE stream needed, or is the public stream enough for signed-in pages (3.5)? | Team, M10 |
 | Q8 | One shared `processed_event` table in `parcel_db`, or separate idempotency per package? | M1 |
