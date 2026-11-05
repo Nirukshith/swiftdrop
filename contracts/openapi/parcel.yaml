@@ -294,6 +294,58 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /api/v1/parcels/quote:
+    get:
+      summary: Get delivery fee quote
+      description: |
+        Retrieves a calculated delivery fee quote based on pickup district, dropoff district,
+        weight, and size per ADR 003 formula. Delegates to operations-service pricing quote API.
+      operationId: getCustomerParcelQuote
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: pickupDistrict
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/District'
+        - name: dropoffDistrict
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/District'
+        - name: weightKg
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: 0.1
+            maximum: 50.0
+            example: 2.5
+        - name: size
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/ParcelSize'
+      responses:
+        '200':
+          description: Delivery fee quote calculated per ADR 003
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcelQuoteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: Pickup district is not an active served area
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/parcels/{id}:
     get:
       summary: Get parcel details
@@ -992,6 +1044,52 @@ components:
         size:
           type: integer
           example: 20
+
+    ParcelQuoteBreakdown:
+      type: object
+      required:
+        - dropoffZoneBaseFee
+        - weightBandCharge
+        - sizeCharge
+      properties:
+        dropoffZoneBaseFee:
+          type: number
+          format: double
+          example: 350.00
+        weightBandCharge:
+          type: number
+          format: double
+          example: 250.00
+        sizeCharge:
+          type: number
+          format: double
+          example: 250.00
+
+    ParcelQuoteResponse:
+      type: object
+      required:
+        - currency
+        - totalFee
+        - breakdown
+      properties:
+        currency:
+          type: string
+          enum: [LKR]
+          example: "LKR"
+        totalFee:
+          type: number
+          format: double
+          example: 850.00
+        breakdown:
+          $ref: '#/components/schemas/ParcelQuoteBreakdown'
+        pickupZone:
+          type: string
+          nullable: true
+          example: "Western"
+        dropoffZone:
+          type: string
+          nullable: true
+          example: "Central"
 
     # -----------------------------------------------------------------------
     # Shared Error Response (from common module)

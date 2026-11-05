@@ -9,5 +9,15 @@ import java.math.BigDecimal;
 public record PricingQuoteResponse(
         @JsonAlias({"totalFee", "totalFeeLkr", "fee"})
         BigDecimal totalFee,
-        String currency
-) {}
+        String currency,
+        QuoteBreakdown breakdown,
+        String pickupZone,
+        String dropoffZone
+) {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record QuoteBreakdown(
+            BigDecimal dropoffZoneBaseFee,
+            BigDecimal weightBandCharge,
+            BigDecimal sizeCharge
+    ) {}
+}

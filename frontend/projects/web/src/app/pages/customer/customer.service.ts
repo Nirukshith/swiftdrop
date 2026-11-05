@@ -1,19 +1,21 @@
-import { Injectable, signal } from '@angular/core';
-import { Observable, of } from 'rxjs';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Injectable, inject, signal } from '@angular/core';
+import { Observable, of, tap } from 'rxjs';
 import {
   CreateCustomerParcelRequest,
   CustomerAddress,
   CustomerParcel,
   District,
-  FeePreview,
   ParcelSize,
   ParcelStatus,
+  QuoteResponse,
 } from './customer.model';
 
 @Injectable({
   providedIn: 'root',
 })
 export class CustomerService {
+  private readonly http = inject(HttpClient);
   private readonly defaultCustomerId = 'c8b92410-189a-4128-98e2-481928410291';
 
   private addresses = signal<CustomerAddress[]>([
@@ -229,36 +231,26 @@ export class CustomerService {
   }
 
   // =========================================================================
-  // Fee Calculation & Quotes
+  // Fee Calculation & Quotes (Real Backend via parcel-service)
   // =========================================================================
 
-  calculateFeePreview(
+  getFeeQuote(
     pickupDistrict: District,
     dropoffDistrict: District,
     weightKg: number,
     size: ParcelSize
-  ): FeePreview {
-    const baseFee = 350.0;
-    const interDistrictFee = pickupDistrict !== dropoffDistrict ? 150.0 : 0.0;
-    const weightFee = weightKg > 1.0 ? Math.ceil(weightKg - 1.0) * 100.0 : 0.0;
-    const sizeTierFee = size === 'LARGE' ? 250.0 : size === 'MEDIUM' ? 100.0 : 0.0;
-    const totalFee = baseFee + interDistrictFee + weightFee + sizeTierFee;
+  ): Observable<QuoteResponse> {
+    const params = new HttpParams()
+      .set('pickupDistrict', pickupDistrict)
+      .set('dropoffDistrict', dropoffDistrict)
+      .set('weightKg', weightKg.toString())
+      .set('size', size);
 
-    return {
-      baseFee,
-      interDistrictFee,
-      weightFee,
-      sizeTierFee,
-      totalFee,
-      pickupDistrict,
-      dropoffDistrict,
-      weightKg,
-      size,
-    };
+    return this.http.get<QuoteResponse>('/api/v1/parcels/quote', { params });
   }
 
   // =========================================================================
-  // Parcel Operations
+  // Parcel Operations (Real Backend via parcel-service)
   // =========================================================================
 
   listParcels(statusFilter?: ParcelStatus): Observable<CustomerParcel[]> {
@@ -277,37 +269,11 @@ export class CustomerService {
   createParcel(
     request: CreateCustomerParcelRequest
   ): Observable<CustomerParcel> {
-    const quote = this.calculateFeePreview(
-      request.pickupAddress.district,
-      request.dropoffAddress.district,
-      request.weightKg,
-      request.size
+    return this.http.post<CustomerParcel>('/api/v1/parcels', request).pipe(
+      tap((created) => {
+        this.parcels.set([created, ...this.parcels()]);
+      })
     );
-
-    const now = new Date();
-    const yyyymmdd = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const randSuffix = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const trackingNumber = `SD-${yyyymmdd}-${randSuffix}`;
-
-    const newParcel: CustomerParcel = {
-      id: 'pcl-' + Math.random().toString(36).substring(2, 9),
-      trackingNumber,
-      status: 'CREATED',
-      pickupAddress: { ...request.pickupAddress },
-      dropoffAddress: { ...request.dropoffAddress },
-      weightKg: Number(request.weightKg),
-      size: request.size,
-      fee: quote.totalFee,
-      attemptCount: 0,
-      recipientName: request.recipientName.trim(),
-      recipientPhone: request.recipientPhone.trim(),
-      notes: request.notes?.trim() || null,
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    };
-
-    this.parcels.set([newParcel, ...this.parcels()]);
-    return of(newParcel);
   }
 
   cancelParcel(id: string, reason?: string): Observable<CustomerParcel> {
