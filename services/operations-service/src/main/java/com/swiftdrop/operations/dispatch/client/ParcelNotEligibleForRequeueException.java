@@ -5,3 +5,4 @@ public class ParcelNotEligibleForRequeueException extends RuntimeException {
         super(message);
     }
 }
+

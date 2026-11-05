@@ -9,3 +9,4 @@ public record FailedParcelsPage(
     int page,
     int size
 ) {}
+

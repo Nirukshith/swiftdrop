@@ -7,3 +7,4 @@ public record BulkAssignItemResult(
     String errorCode,
     String errorMessage
 ) {}
+

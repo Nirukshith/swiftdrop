@@ -9,3 +9,4 @@ public record BulkAssignRequest(
     @NotEmpty(message = "assignments list must not be empty")
     List<@Valid AssignParcelRequest> assignments
 ) {}
+

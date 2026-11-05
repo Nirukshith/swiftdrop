@@ -8,3 +8,4 @@ public record ParcelStatusUpdateClientRequest(
     String notes,
     String signatureUrl
 ) {}
+

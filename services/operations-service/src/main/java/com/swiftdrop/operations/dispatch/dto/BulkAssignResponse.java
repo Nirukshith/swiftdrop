@@ -8,3 +8,4 @@ public record BulkAssignResponse(
     int failedCount,
     List<BulkAssignItemResult> results
 ) {}
+
