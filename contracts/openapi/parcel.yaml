@@ -30,6 +30,13 @@ paths:
             type: string
             format: uuid
             example: "7e9b3a24-c189-4b68-b7c1-fa9e6a0d2f11"
+        - name: reassign
+          in: query
+          required: false
+          description: Explicit flag confirming reassignment intent if parcel is already assigned
+          schema:
+            type: boolean
+            default: false
       requestBody:
         required: true
         content:
@@ -803,6 +810,11 @@ components:
           nullable: true
           description: Dispatcher identifier who performed assignment
           example: "usr-dispatch-101"
+        reassign:
+          type: boolean
+          nullable: true
+          description: Explicit flag confirming reassignment intent if parcel is already assigned
+          example: true
 
     ParcelStatusUpdateRequest:
       type: object
