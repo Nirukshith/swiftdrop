@@ -17,7 +17,7 @@
   <nav class="flex flex-wrap gap-2" aria-label="Admin navigation">
     <a class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white" routerLink="/admin">Overview</a>
     <a routerLink="/admin/users" id="admin-staff-management-link" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:text-indigo-600">Staff management</a>
-    <span class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">Merchant approval</span>
+    <a routerLink="/admin/merchants" id="admin-merchant-approval-link" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:text-indigo-600">Merchant approval</a>
     <span class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">Audit log</span>
   </nav>
 
@@ -44,9 +44,9 @@
         <p class="text-sm text-slate-600">
           Review business registration documents and approve onboarding applications.
         </p>
-        <span class="inline-block text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
-          Planned Feature (Week 3)
-        </span>
+        <a routerLink="/admin/merchants" id="admin-card-merchant-approval-link" class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700">
+          Review pending merchants →
+        </a>
       </div>
     </ui-card>
 

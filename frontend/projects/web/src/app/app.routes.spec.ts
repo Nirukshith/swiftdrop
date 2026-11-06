@@ -90,6 +90,25 @@ describe('App Route Role Separation', () => {
     expect(router.url).toBe('/admin/users');
   });
 
+  it('allows ADMIN to access /admin/merchants', async () => {
+    (authServiceMock as any).setMockRole('ADMIN');
+
+    const canNavigate = await router.navigateByUrl('/admin/merchants');
+    expect(canNavigate).toBe(true);
+    expect(router.url).toBe('/admin/merchants');
+  });
+
+  it.each(['DISPATCHER', 'CUSTOMER', 'MERCHANT', 'COURIER'])(
+    'redirects %s away from /admin/merchants',
+    async (role) => {
+      (authServiceMock as any).setMockRole(role);
+
+      await router.navigateByUrl('/admin/merchants');
+
+      expect(router.url).not.toBe('/admin/merchants');
+    }
+  );
+
   it('redirects DISPATCHER away from /admin/users to /dispatcher (which redirects to /dispatch)', async () => {
     (authServiceMock as any).setMockRole('DISPATCHER');
 
