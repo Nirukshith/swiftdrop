@@ -29,6 +29,8 @@ describe('AdminComponent', () => {
     expect(element.textContent).toContain('Audit log');
     expect(element.querySelector('#admin-staff-management-link')).toBeTruthy();
     expect(element.querySelector('#admin-card-staff-link')).toBeTruthy();
+    expect(element.querySelector('#admin-merchant-approval-link')).toBeTruthy();
+    expect(element.querySelector('#admin-card-merchant-approval-link')).toBeTruthy();
   });
 
   it('does not contain the preview role dropdown or embedded dispatcher forms', () => {

@@ -32,6 +32,7 @@
       @if (authService.hasRole('ADMIN')) {
         <a routerLink="/admin" class="hover:underline">Admin</a>
         <a routerLink="/admin/users" class="hover:underline">Staff Management</a>
+        <a routerLink="/admin/merchants" class="hover:underline">Merchant Approval</a>
       }
       @if (authService.hasRole('DISPATCHER')) {
         <a routerLink="/dispatch" class="hover:underline">Dispatch</a>
