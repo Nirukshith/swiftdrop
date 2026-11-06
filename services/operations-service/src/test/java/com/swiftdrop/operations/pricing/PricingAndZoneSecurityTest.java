@@ -65,4 +65,10 @@ class PricingAndZoneSecurityTest {
         mockMvc.perform(get("/api/v1/admin/zones")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/admin/pricing-rules")).andExpect(status().isForbidden());
     }
+
+    @Test
+    void unauthenticatedCannotManageZonesOrPricingRules() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/zones")).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/admin/pricing-rules")).andExpect(status().isForbidden());
+    }
 }

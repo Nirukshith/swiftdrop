@@ -12,3 +12,8 @@ spring:
   mail:
     host: localhost
     port: 1025
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${JWKS_URL:http://localhost:8081/.well-known/jwks.json}

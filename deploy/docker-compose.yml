@@ -168,6 +168,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-swiftdrop}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-swiftdrop_password}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWKS_URL: http://auth-service:8081/.well-known/jwks.json
     ports:
       - "8082:8082"
     depends_on:
@@ -227,6 +228,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-swiftdrop}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-swiftdrop_password}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWKS_URL: http://auth-service:8081/.well-known/jwks.json
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
     ports:
