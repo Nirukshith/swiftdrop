@@ -15,6 +15,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 import java.security.interfaces.RSAPublicKey;
 import java.text.ParseException;
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -181,5 +182,70 @@ class JwtIssuerTest {
         // Ensures tokens minted by DevJwtTokenMinter can be verified using JwtKeyProvider
         assertThat(keyProvider.getRsaKey().getKeyID())
                 .isEqualTo(com.swiftdrop.common.security.dev.DevJwtTokenMinter.DEV_KEY_ID);
+    }
+
+    // ----------------------------------------------------------------
+    // Negative validation – tamper, expired, issuer mismatch
+    // ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("Tampered signature is rejected by decoder")
+    void tokenWithTamperedSignature_isRejected() {
+        String token = jwtIssuer.issueAccessToken("usr-010", "alice@example.com", Roles.CUSTOMER, null);
+        String[] parts = token.split("\\.");
+        // Modify the signature portion
+        String tamperedSig = parts[2].substring(0, parts[2].length() - 2) + "xx";
+        String tamperedToken = parts[0] + "." + parts[1] + "." + tamperedSig;
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.security.oauth2.jwt.BadJwtException.class,
+                () -> decoder.decode(tamperedToken));
+    }
+
+    @Test
+    @DisplayName("Expired token is rejected by decoder")
+    void expiredToken_isRejected() {
+        // Build token with past expiry (15 minutes in the past)
+        String expiredToken = jwtIssuer.buildToken(
+                "usr-011", "alice@example.com", Roles.CUSTOMER, null, java.time.Duration.ofMinutes(-15));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.security.oauth2.jwt.BadJwtException.class,
+                () -> decoder.decode(expiredToken));
+    }
+
+    @Test
+    @DisplayName("Token with incorrect issuer is rejected by issuer validator")
+    void tokenWithIncorrectIssuer_isRejected() {
+        NimbusJwtDecoder validatingDecoder = NimbusJwtDecoder.withPublicKey(keyProvider.getPublicKey())
+                .signatureAlgorithm(SignatureAlgorithm.RS256)
+                .build();
+        validatingDecoder.setJwtValidator(
+                org.springframework.security.oauth2.jwt.JwtValidators.createDefaultWithIssuer("https://auth.swiftdrop.local"));
+
+        // Mint token with wrong issuer using Nimbus directly
+        Instant now = Instant.now();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer("https://evil.issuer.com")
+                .subject("usr-012")
+                .issueTime(java.util.Date.from(now))
+                .expirationTime(java.util.Date.from(now.plusSeconds(300)))
+                .claim(JwtClaims.ROLE, Roles.CUSTOMER)
+                .build();
+
+        com.nimbusds.jose.JWSHeader header = new com.nimbusds.jose.JWSHeader.Builder(JWSAlgorithm.RS256)
+                .keyID(JwtKeyProvider.DEV_KEY_ID)
+                .build();
+        SignedJWT jwt = new SignedJWT(header, claims);
+        try {
+            jwt.sign(new com.nimbusds.jose.crypto.RSASSASigner(keyProvider.getPrivateKey()));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        String badIssuerToken = jwt.serialize();
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.security.oauth2.jwt.BadJwtException.class,
+                () -> validatingDecoder.decode(badIssuerToken));
     }
 }
