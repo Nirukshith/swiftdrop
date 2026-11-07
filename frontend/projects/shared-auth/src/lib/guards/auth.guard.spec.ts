@@ -6,6 +6,8 @@ import { AuthService } from '../services/auth.service';
 describe('Auth Guards', () => {
   let authServiceMock: {
     isAuthenticated: jest.Mock;
+    isInitialized: jest.Mock;
+    initializeSession: jest.Mock;
     hasAnyRole: jest.Mock;
     userRole: jest.Mock;
   };
@@ -17,6 +19,8 @@ describe('Auth Guards', () => {
   beforeEach(() => {
     authServiceMock = {
       isAuthenticated: jest.fn(),
+      isInitialized: jest.fn().mockReturnValue(true),
+      initializeSession: jest.fn().mockResolvedValue(true),
       hasAnyRole: jest.fn(),
       userRole: jest.fn(),
     };
@@ -34,17 +38,30 @@ describe('Auth Guards', () => {
   });
 
   describe('authGuard', () => {
-    it('should allow access when user is authenticated', () => {
+    it('should allow access when user is authenticated', async () => {
       authServiceMock.isAuthenticated.mockReturnValue(true);
 
-      const result = TestBed.runInInjectionContext(() => authGuard(dummyRoute, dummyState));
+      const result = await TestBed.runInInjectionContext(() => authGuard(dummyRoute, dummyState));
       expect(result).toBe(true);
     });
 
-    it('should redirect to /login with returnUrl query param when user is not authenticated', () => {
+    it('should wait for initializeSession if not initialized before checking auth', async () => {
+      authServiceMock.isInitialized.mockReturnValue(false);
+      authServiceMock.initializeSession.mockImplementation(async () => {
+        authServiceMock.isInitialized.mockReturnValue(true);
+        authServiceMock.isAuthenticated.mockReturnValue(true);
+        return true;
+      });
+
+      const result = await TestBed.runInInjectionContext(() => authGuard(dummyRoute, dummyState));
+      expect(authServiceMock.initializeSession).toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+
+    it('should redirect to /login with returnUrl query param when user is not authenticated', async () => {
       authServiceMock.isAuthenticated.mockReturnValue(false);
 
-      const result = TestBed.runInInjectionContext(() => authGuard(dummyRoute, dummyState));
+      const result = await TestBed.runInInjectionContext(() => authGuard(dummyRoute, dummyState));
       expect(router.createUrlTree).toHaveBeenCalledWith(['/login'], {
         queryParams: { returnUrl: '/merchant/dashboard' },
       });
@@ -53,11 +70,11 @@ describe('Auth Guards', () => {
   });
 
   describe('roleGuard', () => {
-    it('should redirect to /login when user is not authenticated', () => {
+    it('should redirect to /login when user is not authenticated', async () => {
       authServiceMock.isAuthenticated.mockReturnValue(false);
 
       const guard = roleGuard(['ADMIN', 'MERCHANT']);
-      const result = TestBed.runInInjectionContext(() => guard(dummyRoute, dummyState));
+      const result = await TestBed.runInInjectionContext(() => guard(dummyRoute, dummyState));
 
       expect(router.createUrlTree).toHaveBeenCalledWith(['/login'], {
         queryParams: { returnUrl: '/merchant/dashboard' },
@@ -65,36 +82,53 @@ describe('Auth Guards', () => {
       expect(result).toBeTruthy();
     });
 
-    it('should allow access when authenticated user has matching role', () => {
+    it('should restore session and allow access when valid session exists on reload', async () => {
+      authServiceMock.isInitialized.mockReturnValue(false);
+      authServiceMock.initializeSession.mockImplementation(async () => {
+        authServiceMock.isInitialized.mockReturnValue(true);
+        authServiceMock.isAuthenticated.mockReturnValue(true);
+        authServiceMock.hasAnyRole.mockReturnValue(true);
+        authServiceMock.userRole.mockReturnValue('MERCHANT');
+        return true;
+      });
+
+      const guard = roleGuard(['MERCHANT']);
+      const result = await TestBed.runInInjectionContext(() => guard(dummyRoute, dummyState));
+
+      expect(authServiceMock.initializeSession).toHaveBeenCalled();
+      expect(result).toBe(true);
+    });
+
+    it('should allow access when authenticated user has matching role', async () => {
       authServiceMock.isAuthenticated.mockReturnValue(true);
       authServiceMock.hasAnyRole.mockReturnValue(true);
 
       const guard = roleGuard(['ADMIN', 'MERCHANT']);
-      const result = TestBed.runInInjectionContext(() => guard(dummyRoute, dummyState));
+      const result = await TestBed.runInInjectionContext(() => guard(dummyRoute, dummyState));
 
       expect(result).toBe(true);
       expect(authServiceMock.hasAnyRole).toHaveBeenCalledWith(['ADMIN', 'MERCHANT']);
     });
 
-    it('should redirect to user role dashboard when user role does not match', () => {
+    it('should redirect to user role dashboard when user role does not match', async () => {
       authServiceMock.isAuthenticated.mockReturnValue(true);
       authServiceMock.hasAnyRole.mockReturnValue(false);
       authServiceMock.userRole.mockReturnValue('CUSTOMER');
 
       const guard = roleGuard(['ADMIN']);
-      const result = TestBed.runInInjectionContext(() => guard(dummyRoute, dummyState));
+      const result = await TestBed.runInInjectionContext(() => guard(dummyRoute, dummyState));
 
       expect(router.createUrlTree).toHaveBeenCalledWith(['/customer']);
       expect(result).toBeTruthy();
     });
 
-    it('should redirect to /login when unauthorized user has no role defined', () => {
+    it('should redirect to /login when unauthorized user has no role defined', async () => {
       authServiceMock.isAuthenticated.mockReturnValue(true);
       authServiceMock.hasAnyRole.mockReturnValue(false);
       authServiceMock.userRole.mockReturnValue(undefined);
 
       const guard = roleGuard(['ADMIN']);
-      const result = TestBed.runInInjectionContext(() => guard(dummyRoute, dummyState));
+      const result = await TestBed.runInInjectionContext(() => guard(dummyRoute, dummyState));
 
       expect(router.createUrlTree).toHaveBeenCalledWith(['/login']);
       expect(result).toBeTruthy();
@@ -102,23 +136,25 @@ describe('Auth Guards', () => {
   });
 
   describe('dataRoleGuard', () => {
-    it('should delegate to authGuard when route.data has no roles', () => {
+    it('should fall back to authGuard when route.data has no roles', async () => {
       authServiceMock.isAuthenticated.mockReturnValue(true);
-      const routeWithoutRoles = { data: {} } as ActivatedRouteSnapshot;
 
-      const result = TestBed.runInInjectionContext(() => dataRoleGuard(routeWithoutRoles, dummyState));
+      const emptyRoute = { data: {} } as ActivatedRouteSnapshot;
+      const result = await TestBed.runInInjectionContext(() => dataRoleGuard(emptyRoute, dummyState));
+
       expect(result).toBe(true);
     });
 
-    it('should enforce roles when specified in route.data', () => {
+    it('should enforce role when route.data specifies roles', async () => {
       authServiceMock.isAuthenticated.mockReturnValue(true);
-      authServiceMock.hasAnyRole.mockReturnValue(true);
+      authServiceMock.hasAnyRole.mockReturnValue(false);
+      authServiceMock.userRole.mockReturnValue('COURIER');
 
-      const routeWithRoles = { data: { roles: ['ADMIN'] } } as unknown as ActivatedRouteSnapshot;
+      const adminRoute = { data: { roles: ['ADMIN'] } } as unknown as ActivatedRouteSnapshot;
+      const result = await TestBed.runInInjectionContext(() => dataRoleGuard(adminRoute, dummyState));
 
-      const result = TestBed.runInInjectionContext(() => dataRoleGuard(routeWithRoles, dummyState));
-      expect(result).toBe(true);
-      expect(authServiceMock.hasAnyRole).toHaveBeenCalledWith(['ADMIN']);
+      expect(router.createUrlTree).toHaveBeenCalledWith(['/courier']);
+      expect(result).toBeTruthy();
     });
   });
 });

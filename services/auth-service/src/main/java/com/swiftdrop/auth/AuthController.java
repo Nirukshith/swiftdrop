@@ -12,6 +12,7 @@ import com.swiftdrop.auth.security.AccountLockedException;
 import com.swiftdrop.auth.security.AuthRateLimiter;
 import com.swiftdrop.auth.security.LoginGuard;
 import com.swiftdrop.auth.security.jwt.JwtIssuer;
+import com.swiftdrop.auth.security.jwt.JwtKeyProvider;
 import com.swiftdrop.auth.token.RefreshToken;
 import com.swiftdrop.auth.token.RefreshTokenRepository;
 import com.swiftdrop.auth.user.User;
@@ -22,16 +23,23 @@ import com.swiftdrop.common.Roles;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -64,7 +72,10 @@ public class AuthController {
     private final AuditService auditService;
     private final AuthRateLimiter authRateLimiter;
     private final AuthEventPublisher authEventPublisher;
+    private final ObjectProvider<JwtDecoder> jwtDecoderProvider;
+    private final JwtKeyProvider jwtKeyProvider;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public AuthController(UserRepository userRepository,
                           RefreshTokenRepository refreshTokenRepository,
                           PasswordEncoder passwordEncoder,
@@ -72,7 +83,9 @@ public class AuthController {
                           LoginGuard loginGuard,
                           AuditService auditService,
                           AuthRateLimiter authRateLimiter,
-                          AuthEventPublisher authEventPublisher) {
+                          AuthEventPublisher authEventPublisher,
+                          ObjectProvider<JwtDecoder> jwtDecoderProvider,
+                          JwtKeyProvider jwtKeyProvider) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
@@ -81,6 +94,8 @@ public class AuthController {
         this.auditService = auditService;
         this.authRateLimiter = authRateLimiter;
         this.authEventPublisher = authEventPublisher;
+        this.jwtDecoderProvider = jwtDecoderProvider;
+        this.jwtKeyProvider = jwtKeyProvider;
     }
 
     /**
@@ -307,7 +322,38 @@ public class AuthController {
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, newCookie.toString())
-                .body(new TokenRefreshResponse(accessToken, "Bearer", JwtIssuer.ACCESS_TOKEN_TTL.toSeconds()));
+                .body(new TokenRefreshResponse(accessToken, "Bearer", JwtIssuer.ACCESS_TOKEN_TTL.toSeconds(), toUserSummary(user)));
+    }
+
+    /**
+     * Retrieves current authenticated user profile from bearer token.
+     */
+    @GetMapping("/me")
+    public ResponseEntity<UserSummary> getCurrentUser(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing or invalid Authorization header");
+        }
+        String token = authorizationHeader.substring(7).trim();
+        JwtDecoder decoder = jwtDecoderProvider != null ? jwtDecoderProvider.getIfAvailable() : null;
+        if (decoder == null && jwtKeyProvider != null) {
+            decoder = NimbusJwtDecoder.withPublicKey(jwtKeyProvider.getPublicKey()).build();
+        }
+        if (decoder == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "JwtDecoder not available");
+        }
+        try {
+            Jwt jwt = decoder.decode(token);
+            String userId = jwt.getSubject();
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+            if (!user.isEnabled()) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User account is disabled");
+            }
+            return ResponseEntity.ok(toUserSummary(user));
+        } catch (JwtException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid access token", e);
+        }
     }
 
     /**
@@ -400,5 +446,9 @@ public class AuthController {
             correlationId = request.getHeader(CorrelationIdFilter.CORRELATION_ID_HEADER);
         }
         return correlationId != null ? correlationId : "N/A";
+    }
+
+    private UserSummary toUserSummary(User user) {
+        return new UserSummary(user.getId(), user.getEmail(), user.getFullName(), user.getRole(), user.getMerchantId());
     }
 }

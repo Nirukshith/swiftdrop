@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, catchError, throwError } from 'rxjs';
+import { Observable, tap, catchError, throwError, shareReplay, finalize, of, switchMap, map } from 'rxjs';
 import {
   AuthResponse,
   ForgotPasswordRequest,
@@ -20,6 +20,8 @@ import {
  * - Access token stored IN MEMORY ONLY via Angular Signals.
  * - NEVER persisted in localStorage, sessionStorage, or IndexedDB.
  * - Refresh token is managed via httpOnly, Secure, SameSite cookie by auth-service.
+ * - Provides single-flight token refresh to prevent token-family revocation on concurrency.
+ * - Restores user session and role on application startup via initializeSession().
  */
 @Injectable({
   providedIn: 'root',
@@ -31,12 +33,49 @@ export class AuthService {
   // In-memory token storage (ADR 004)
   private readonly _accessToken = signal<string | null>(null);
   private readonly _currentUser = signal<User | null>(null);
+  private readonly _isInitialized = signal<boolean>(false);
 
   readonly accessToken = this._accessToken.asReadonly();
   readonly currentUser = this._currentUser.asReadonly();
+  readonly isInitialized = this._isInitialized.asReadonly();
 
   readonly isAuthenticated = computed(() => !!this._accessToken());
   readonly userRole = computed(() => this._currentUser()?.role ?? null);
+
+  // In-flight refresh coordination (single-flight)
+  private refreshInProgress$: Observable<TokenRefreshResponse> | null = null;
+  private initPromise: Promise<boolean> | null = null;
+
+  /**
+   * Restores session during Angular startup using httpOnly refresh cookie.
+   * Ensures single execution and caches the initialization promise.
+   */
+  initializeSession(): Promise<boolean> {
+    if (this._isInitialized()) {
+      return Promise.resolve(this.isAuthenticated());
+    }
+
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+
+    this.initPromise = new Promise<boolean>((resolve) => {
+      this.refreshToken().subscribe({
+        next: () => {
+          this._isInitialized.set(true);
+          this.initPromise = null;
+          resolve(true);
+        },
+        error: () => {
+          this._isInitialized.set(true);
+          this.initPromise = null;
+          resolve(false);
+        },
+      });
+    });
+
+    return this.initPromise;
+  }
 
   /**
    * Authenticates user with credentials.
@@ -50,6 +89,7 @@ export class AuthService {
         tap((response) => {
           this._accessToken.set(response.accessToken);
           this._currentUser.set(response.user);
+          this._isInitialized.set(true);
         })
       );
   }
@@ -66,6 +106,7 @@ export class AuthService {
         tap((response) => {
           this._accessToken.set(response.accessToken);
           this._currentUser.set(response.user);
+          this._isInitialized.set(true);
         })
       );
   }
@@ -85,10 +126,29 @@ export class AuthService {
   }
 
   /**
+   * Retrieves current authenticated user profile from /api/v1/auth/me.
+   */
+  getCurrentUser(token?: string): Observable<User> {
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+    return this.http
+      .get<User>(`${this.baseUrl}/me`, { headers, withCredentials: true })
+      .pipe(
+        tap((user) => {
+          this._currentUser.set(user);
+        })
+      );
+  }
+
+  /**
    * Performs silent token rotation via httpOnly cookie.
+   * Deduplicates concurrent callers into a single in-flight request.
    */
   refreshToken(): Observable<TokenRefreshResponse> {
-    return this.http
+    if (this.refreshInProgress$) {
+      return this.refreshInProgress$;
+    }
+
+    this.refreshInProgress$ = this.http
       .post<TokenRefreshResponse>(
         `${this.baseUrl}/refresh`,
         {},
@@ -97,12 +157,30 @@ export class AuthService {
       .pipe(
         tap((response) => {
           this._accessToken.set(response.accessToken);
+          if (response.user) {
+            this._currentUser.set(response.user);
+          }
+        }),
+        switchMap((response) => {
+          if (response.user) {
+            return of(response);
+          }
+          return this.getCurrentUser(response.accessToken).pipe(
+            map(() => response),
+            catchError(() => of(response))
+          );
         }),
         catchError((err) => {
           this.clearAuth();
           return throwError(() => err);
-        })
+        }),
+        finalize(() => {
+          this.refreshInProgress$ = null;
+        }),
+        shareReplay(1)
       );
+
+    return this.refreshInProgress$;
   }
 
   /**
@@ -126,6 +204,7 @@ export class AuthService {
   setSession(token: string, user: User): void {
     this._accessToken.set(token);
     this._currentUser.set(user);
+    this._isInitialized.set(true);
   }
 
   /**
@@ -134,6 +213,8 @@ export class AuthService {
   clearAuth(): void {
     this._accessToken.set(null);
     this._currentUser.set(null);
+    this.refreshInProgress$ = null;
+    this.initPromise = null;
   }
 
   hasRole(role: string): boolean {

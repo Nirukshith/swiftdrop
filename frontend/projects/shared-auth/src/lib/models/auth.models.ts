@@ -29,6 +29,7 @@ export interface TokenRefreshResponse {
   accessToken: string;
   tokenType: string;
   expiresIn: number;
+  user?: User;
 }
 
 export interface ForgotPasswordRequest {

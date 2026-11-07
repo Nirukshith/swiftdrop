@@ -9,6 +9,8 @@ describe('App Route Role Separation', () => {
   let router: Router;
   let authServiceMock: {
     isAuthenticated: jest.Mock;
+    isInitialized: jest.Mock;
+    initializeSession: jest.Mock;
     hasAnyRole: jest.Mock;
     userRole: jest.Mock;
   };
@@ -17,6 +19,8 @@ describe('App Route Role Separation', () => {
     let currentRole: string | null = null;
     authServiceMock = {
       isAuthenticated: jest.fn().mockReturnValue(true),
+      isInitialized: jest.fn().mockReturnValue(true),
+      initializeSession: jest.fn().mockResolvedValue(true),
       hasAnyRole: jest.fn().mockImplementation((roles: string[]) =>
         currentRole ? roles.includes(currentRole) : false
       ),

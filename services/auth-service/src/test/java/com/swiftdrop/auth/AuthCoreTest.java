@@ -274,6 +274,9 @@ class AuthCoreTest {
                             .cookie(cookie))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.accessToken", notNullValue()))
+                    .andExpect(jsonPath("$.user.email", is("rotate@swiftdrop.com")))
+                    .andExpect(jsonPath("$.user.fullName", is("Rotate User")))
+                    .andExpect(jsonPath("$.user.role", is(Roles.CUSTOMER)))
                     .andExpect(header().string("Set-Cookie", containsString("refresh_token=")))
                     .andReturn();
 
@@ -435,6 +438,67 @@ class AuthCoreTest {
             mockMvc.perform(post("/api/v1/auth/refresh")
                             .cookie(cookie))
                     .andExpect(status().isUnauthorized());
+        }
+    }
+
+    @Nested
+    @DisplayName("Current User (/api/v1/auth/me) Tests")
+    class GetCurrentUserTests {
+
+        @Test
+        @DisplayName("Valid bearer token returns 200 with user profile")
+        void validTokenReturnsProfile() throws Exception {
+            RegisterRequest reg = new RegisterRequest("me@swiftdrop.com", "Secret123!", "Me User", "+94771112233");
+            MvcResult regResult = mockMvc.perform(post("/api/v1/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(reg)))
+                    .andExpect(status().isCreated())
+                    .andReturn();
+
+            String jwt = objectMapper.readTree(regResult.getResponse().getContentAsString()).get("accessToken").asText();
+
+            mockMvc.perform(get("/api/v1/auth/me")
+                            .header("Authorization", "Bearer " + jwt))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.email", is("me@swiftdrop.com")))
+                    .andExpect(jsonPath("$.fullName", is("Me User")))
+                    .andExpect(jsonPath("$.role", is(Roles.CUSTOMER)));
+        }
+
+        @Test
+        @DisplayName("Missing bearer token returns 401 Unauthorized")
+        void missingTokenReturns401() throws Exception {
+            mockMvc.perform(get("/api/v1/auth/me"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("Invalid bearer token returns 401 Unauthorized")
+        void invalidTokenReturns401() throws Exception {
+            mockMvc.perform(get("/api/v1/auth/me")
+                            .header("Authorization", "Bearer invalid.jwt.token"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("Disabled user returns 403 Forbidden")
+        void disabledUserReturns403() throws Exception {
+            RegisterRequest reg = new RegisterRequest("disabled.me@swiftdrop.com", "Secret123!", "Disabled Me", null);
+            MvcResult regResult = mockMvc.perform(post("/api/v1/auth/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(reg)))
+                    .andExpect(status().isCreated())
+                    .andReturn();
+
+            String jwt = objectMapper.readTree(regResult.getResponse().getContentAsString()).get("accessToken").asText();
+
+            User user = userRepository.findByEmailIgnoreCase("disabled.me@swiftdrop.com").orElseThrow();
+            user.setEnabled(false);
+            userRepository.save(user);
+
+            mockMvc.perform(get("/api/v1/auth/me")
+                            .header("Authorization", "Bearer " + jwt))
+                    .andExpect(status().isForbidden());
         }
     }
 }

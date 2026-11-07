@@ -19,6 +19,14 @@ describe('AuthService', () => {
     merchantId: null,
   };
 
+  const mockMerchantUser: User = {
+    id: 'usr-2',
+    email: 'merchant@daraz.lk',
+    fullName: 'Daraz Store Manager',
+    role: 'MERCHANT',
+    merchantId: 'mch-5501',
+  };
+
   const mockAuthResponse: AuthResponse = {
     accessToken: 'mock-jwt-token-abc',
     tokenType: 'Bearer',
@@ -48,13 +56,14 @@ describe('AuthService', () => {
     sessionStorage.clear();
   });
 
-  it('should initialize with no in-memory token and unauthenticated', () => {
+  it('should initialize with no in-memory token, unauthenticated, and uninitialized', () => {
     expect(service.accessToken()).toBeNull();
     expect(service.currentUser()).toBeNull();
     expect(service.isAuthenticated()).toBe(false);
+    expect(service.isInitialized()).toBe(false);
   });
 
-  it('login should store access token in memory only and set currentUser', () => {
+  it('login should store access token in memory only and set currentUser and isInitialized', () => {
     service.login({ email: 'test@swiftdrop.lk', password: 'Password123!' }).subscribe((res) => {
       expect(res).toEqual(mockAuthResponse);
     });
@@ -68,6 +77,7 @@ describe('AuthService', () => {
     expect(service.accessToken()).toBe('mock-jwt-token-abc');
     expect(service.currentUser()).toEqual(mockUser);
     expect(service.isAuthenticated()).toBe(true);
+    expect(service.isInitialized()).toBe(true);
     expect(service.hasRole('CUSTOMER')).toBe(true);
 
     // ADR 004 verification: MUST NOT be in localStorage or sessionStorage
@@ -93,16 +103,15 @@ describe('AuthService', () => {
 
     expect(service.accessToken()).toBe('mock-jwt-token-abc');
     expect(service.isAuthenticated()).toBe(true);
+    expect(service.isInitialized()).toBe(true);
   });
 
-  it('refreshToken should rotate in-memory access token', () => {
-    // Initial login
-    service.setSession('old-token', mockUser);
-
+  it('refreshToken should rotate in-memory access token and restore user from response', () => {
     const refreshResponse: TokenRefreshResponse = {
       accessToken: 'new-rotated-token-xyz',
       tokenType: 'Bearer',
       expiresIn: 900,
+      user: mockUser,
     };
 
     service.refreshToken().subscribe((res) => {
@@ -115,6 +124,31 @@ describe('AuthService', () => {
     req.flush(refreshResponse);
 
     expect(service.accessToken()).toBe('new-rotated-token-xyz');
+    expect(service.currentUser()).toEqual(mockUser);
+    expect(service.isAuthenticated()).toBe(true);
+  });
+
+  it('refreshToken should fallback to /api/v1/auth/me if user is not in refresh payload', () => {
+    const refreshResponse: TokenRefreshResponse = {
+      accessToken: 'new-rotated-token-xyz',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+    };
+
+    service.refreshToken().subscribe((res) => {
+      expect(res.accessToken).toBe('new-rotated-token-xyz');
+    });
+
+    const req = httpTesting.expectOne('/api/v1/auth/refresh');
+    req.flush(refreshResponse);
+
+    // Expect fallback call to /me
+    const meReq = httpTesting.expectOne('/api/v1/auth/me');
+    expect(meReq.request.headers.get('Authorization')).toBe('Bearer new-rotated-token-xyz');
+    meReq.flush(mockUser);
+
+    expect(service.accessToken()).toBe('new-rotated-token-xyz');
+    expect(service.currentUser()).toEqual(mockUser);
     expect(service.isAuthenticated()).toBe(true);
   });
 
@@ -133,6 +167,78 @@ describe('AuthService', () => {
     expect(service.accessToken()).toBeNull();
     expect(service.currentUser()).toBeNull();
     expect(service.isAuthenticated()).toBe(false);
+  });
+
+  it('concurrent refreshToken calls should share single in-flight HTTP request', () => {
+    let res1: TokenRefreshResponse | undefined;
+    let res2: TokenRefreshResponse | undefined;
+
+    // Trigger two refreshes simultaneously
+    service.refreshToken().subscribe((r) => (res1 = r));
+    service.refreshToken().subscribe((r) => (res2 = r));
+
+    // Exactly one HTTP request should be dispatched
+    const req = httpTesting.expectOne('/api/v1/auth/refresh');
+    req.flush({
+      accessToken: 'single-flight-token',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      user: mockUser,
+    });
+
+    expect(res1?.accessToken).toBe('single-flight-token');
+    expect(res2?.accessToken).toBe('single-flight-token');
+  });
+
+  it('initializeSession should restore user session on startup', async () => {
+    const initPromise = service.initializeSession();
+
+    const req = httpTesting.expectOne('/api/v1/auth/refresh');
+    req.flush({
+      accessToken: 'startup-token',
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      user: mockUser,
+    });
+
+    const result = await initPromise;
+    expect(result).toBe(true);
+    expect(service.isInitialized()).toBe(true);
+    expect(service.isAuthenticated()).toBe(true);
+    expect(service.accessToken()).toBe('startup-token');
+    expect(service.currentUser()).toEqual(mockUser);
+  });
+
+  it('initializeSession should resolve false and set isInitialized on 401 without throwing', async () => {
+    const initPromise = service.initializeSession();
+
+    const req = httpTesting.expectOne('/api/v1/auth/refresh');
+    req.flush('No cookie', { status: 401, statusText: 'Unauthorized' });
+
+    const result = await initPromise;
+    expect(result).toBe(false);
+    expect(service.isInitialized()).toBe(true);
+    expect(service.isAuthenticated()).toBe(false);
+    expect(service.accessToken()).toBeNull();
+  });
+
+  it('account switching should completely replace previous user session and role', () => {
+    // 1. Initial login as Customer
+    service.setSession('token-cust', mockUser);
+    expect(service.userRole()).toBe('CUSTOMER');
+
+    // 2. Logout
+    service.clearAuth();
+    expect(service.accessToken()).toBeNull();
+    expect(service.currentUser()).toBeNull();
+
+    // 3. New login as Merchant
+    service.setSession('token-mch', mockMerchantUser);
+    expect(service.accessToken()).toBe('token-mch');
+    expect(service.currentUser()?.email).toBe('merchant@daraz.lk');
+    expect(service.userRole()).toBe('MERCHANT');
+    expect(service.hasRole('CUSTOMER')).toBe(false);
+    expect(service.hasRole('MERCHANT')).toBe(true);
   });
 
   it('logout should call backend endpoint and clear in-memory credentials', () => {
