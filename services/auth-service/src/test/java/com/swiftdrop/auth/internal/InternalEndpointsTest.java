@@ -61,6 +61,16 @@ class InternalEndpointsTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    /** Header name required by InternalServiceSecurityFilter. */
+    private static final String INTERNAL_TOKEN_HEADER = "X-Internal-Service-Token";
+    /** Notification-service token (matches default in application.yml). */
+    private static final String NOTIF_TOKEN = "swiftdrop-internal-notif-secret-2026";
+    /** Merchant-service token (matches default in application.yml). */
+    private static final String MERCHANT_TOKEN = "swiftdrop-internal-merchant-secret-2026";
+
+    /** Expected token TTL in seconds — must match JwtIssuer.CLIENT_CREDENTIALS_TTL (15 min). */
+    private static final int EXPECTED_EXPIRES_IN = 900;
+
     @BeforeEach
     void setUp() {
         clientCredentialRepository.deleteAll();
@@ -78,7 +88,8 @@ class InternalEndpointsTest {
                     "+94771234567", Roles.CUSTOMER, true, null);
             userRepository.save(user);
 
-            mockMvc.perform(get("/internal/v1/users/{id}/contact", "usr-12345"))
+            mockMvc.perform(get("/internal/v1/users/{id}/contact", "usr-12345")
+                            .header(INTERNAL_TOKEN_HEADER, NOTIF_TOKEN))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.userId", is("usr-12345")))
                     .andExpect(jsonPath("$.fullName", is("Kasun Perera")))
@@ -90,7 +101,8 @@ class InternalEndpointsTest {
         @Test
         @DisplayName("Returns 404 when user does not exist")
         void returns404WhenUserNotFound() throws Exception {
-            mockMvc.perform(get("/internal/v1/users/{id}/contact", "non-existent-user"))
+            mockMvc.perform(get("/internal/v1/users/{id}/contact", "non-existent-user")
+                            .header(INTERNAL_TOKEN_HEADER, NOTIF_TOKEN))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.code", notNullValue()))
                     .andExpect(jsonPath("$.message", notNullValue()));
@@ -115,6 +127,7 @@ class InternalEndpointsTest {
             );
 
             MvcResult result = mockMvc.perform(post("/internal/v1/users")
+                            .header(INTERNAL_TOKEN_HEADER, MERCHANT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
@@ -152,6 +165,7 @@ class InternalEndpointsTest {
             );
 
             mockMvc.perform(post("/internal/v1/users")
+                            .header(INTERNAL_TOKEN_HEADER, MERCHANT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isConflict())
@@ -172,6 +186,7 @@ class InternalEndpointsTest {
             );
 
             mockMvc.perform(post("/internal/v1/users")
+                            .header(INTERNAL_TOKEN_HEADER, MERCHANT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest());
@@ -191,6 +206,7 @@ class InternalEndpointsTest {
             );
 
             mockMvc.perform(post("/internal/v1/users")
+                            .header(INTERNAL_TOKEN_HEADER, MERCHANT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest());
@@ -208,7 +224,8 @@ class InternalEndpointsTest {
                     "+94112223344", Roles.MERCHANT, false, "mch-9901");
             userRepository.save(pending);
 
-            mockMvc.perform(post("/internal/v1/users/{id}/activate", "usr-merchant-pending"))
+            mockMvc.perform(post("/internal/v1/users/{id}/activate", "usr-merchant-pending")
+                            .header(INTERNAL_TOKEN_HEADER, MERCHANT_TOKEN))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id", is("usr-merchant-pending")))
                     .andExpect(jsonPath("$.enabled", is(true)));
@@ -220,7 +237,8 @@ class InternalEndpointsTest {
         @Test
         @DisplayName("Returns 404 when activating non-existent user")
         void returns404WhenActivatingNonExistent() throws Exception {
-            mockMvc.perform(post("/internal/v1/users/{id}/activate", "usr-unknown"))
+            mockMvc.perform(post("/internal/v1/users/{id}/activate", "usr-unknown")
+                            .header(INTERNAL_TOKEN_HEADER, MERCHANT_TOKEN))
                     .andExpect(status().isNotFound());
         }
     }
@@ -244,6 +262,7 @@ class InternalEndpointsTest {
             );
 
             MvcResult createResult = mockMvc.perform(post("/internal/v1/clients")
+                            .header(INTERNAL_TOKEN_HEADER, MERCHANT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(createRequest)))
                     .andExpect(status().isCreated())
@@ -264,19 +283,20 @@ class InternalEndpointsTest {
             assertThat(credential.getClientSecretHash()).isNotEqualTo(clientSecret);
             assertThat(passwordEncoder.matches(clientSecret, credential.getClientSecretHash())).isTrue();
 
-            // Now exchange for client credentials token
+            // Exchange for client credentials token through internal endpoint
             ClientTokenRequest tokenRequest = new ClientTokenRequest(clientId, clientSecret);
             MvcResult tokenResult = mockMvc.perform(post("/internal/v1/clients/token")
+                            .header(INTERNAL_TOKEN_HEADER, MERCHANT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(tokenRequest)))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.accessToken", notNullValue()))
-                    .andExpect(jsonPath("$.tokenType", is("Bearer")))
-                    .andExpect(jsonPath("$.expiresIn", is(3600)))
+                    .andExpect(jsonPath("$.access_token", notNullValue()))
+                    .andExpect(jsonPath("$.token_type", is("Bearer")))
+                    .andExpect(jsonPath("$.expires_in", is(EXPECTED_EXPIRES_IN)))
                     .andReturn();
 
             String tokenResponse = tokenResult.getResponse().getContentAsString();
-            String jwt = objectMapper.readTree(tokenResponse).get("accessToken").asText();
+            String jwt = objectMapper.readTree(tokenResponse).get("access_token").asText();
 
             // Verify token claims
             SignedJWT signedJWT = SignedJWT.parse(jwt);
@@ -297,6 +317,7 @@ class InternalEndpointsTest {
             );
 
             mockMvc.perform(post("/internal/v1/clients")
+                            .header(INTERNAL_TOKEN_HEADER, MERCHANT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound())
@@ -321,6 +342,7 @@ class InternalEndpointsTest {
 
             ClientTokenRequest request = new ClientTokenRequest("sd_live_client_test", "wrong-secret");
             mockMvc.perform(post("/internal/v1/clients/token")
+                            .header(INTERNAL_TOKEN_HEADER, MERCHANT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isUnauthorized());
@@ -344,6 +366,7 @@ class InternalEndpointsTest {
 
             ClientTokenRequest request = new ClientTokenRequest("sd_live_client_disabled", "secret");
             mockMvc.perform(post("/internal/v1/clients/token")
+                            .header(INTERNAL_TOKEN_HEADER, MERCHANT_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isForbidden());

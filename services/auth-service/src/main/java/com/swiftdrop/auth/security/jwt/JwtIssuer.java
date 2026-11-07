@@ -26,7 +26,7 @@ import java.util.List;
  * <p>Token lifetimes (ADR-004):
  * <ul>
  *   <li>Access token  – 15 minutes ({@link #ACCESS_TOKEN_TTL})</li>
- *   <li>Client-credentials token – 1 hour ({@link #CLIENT_CREDENTIALS_TTL})</li>
+ *   <li>Client-credentials token – 15 minutes ({@link #CLIENT_CREDENTIALS_TTL})</li>
  * </ul>
  *
  * <p>Owner: M10 (com.swiftdrop.auth.security.jwt).
