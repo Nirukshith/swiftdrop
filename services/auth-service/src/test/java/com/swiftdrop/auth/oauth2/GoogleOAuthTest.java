@@ -248,3 +248,4 @@ class GoogleOAuthTest {
         verify(refreshTokenRepository, never()).save(any());
     }
 }
+

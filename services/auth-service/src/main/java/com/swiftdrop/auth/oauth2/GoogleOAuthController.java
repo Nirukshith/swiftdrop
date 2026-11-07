@@ -50,7 +50,7 @@ public class GoogleOAuthController {
 
     @Autowired
     public GoogleOAuthController(GoogleOAuthProperties properties,
-                                 GoogleOAuthClient googleOAuthClient,
+                                 @Autowired(required = false) GoogleOAuthClient googleOAuthClient,
                                  UserRepository userRepository,
                                  RefreshTokenRepository refreshTokenRepository,
                                  AuditService auditService,
@@ -140,6 +140,10 @@ public class GoogleOAuthController {
 
         if (code == null || code.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing authorization code");
+        }
+
+        if (googleOAuthClient == null) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Google OAuth client is not available");
         }
 
         // Exchange authorization code for verified Google identity

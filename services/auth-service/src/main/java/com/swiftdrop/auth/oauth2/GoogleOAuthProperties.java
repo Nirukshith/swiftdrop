@@ -62,3 +62,4 @@ public class GoogleOAuthProperties {
         this.frontendCallbackUrl = frontendCallbackUrl;
     }
 }
+

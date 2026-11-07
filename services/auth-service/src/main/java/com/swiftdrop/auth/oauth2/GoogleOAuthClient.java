@@ -10,3 +10,4 @@ public interface GoogleOAuthClient {
      */
     GoogleUserInfo exchangeCodeAndGetUserInfo(String code);
 }
+

@@ -6,7 +6,6 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -19,7 +18,6 @@ import java.util.Date;
 import java.util.List;
 
 @Component
-@ConditionalOnMissingBean(GoogleOAuthClient.class)
 public class DefaultGoogleOAuthClient implements GoogleOAuthClient {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultGoogleOAuthClient.class);
@@ -125,3 +123,4 @@ public class DefaultGoogleOAuthClient implements GoogleOAuthClient {
         }
     }
 }
+

@@ -118,3 +118,4 @@ describe('CallbackComponent', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 });
+
