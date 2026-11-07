@@ -41,7 +41,10 @@ import { AuthService } from '../../services/auth.service';
           </div>
 
           <div class="form-group">
-            <label for="password">Password</label>
+            <div class="password-label-container">
+              <label for="password">Password</label>
+              <a routerLink="/forgot-password" class="forgot-password-link">Forgot password?</a>
+            </div>
             <input
               id="password"
               type="password"
@@ -157,6 +160,22 @@ import { AuthService } from '../../services/auth.service';
       font-size: 0.875rem;
       font-weight: 500;
       color: #cbd5e1;
+    }
+
+    .password-label-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .forgot-password-link {
+      font-size: 0.8125rem;
+      color: #60a5fa;
+      text-decoration: none;
+    }
+
+    .forgot-password-link:hover {
+      text-decoration: underline;
     }
 
     .form-group input {

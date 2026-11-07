@@ -31,6 +31,23 @@ export interface TokenRefreshResponse {
   expiresIn: number;
 }
 
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  message: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
+}
+
+export interface ResetPasswordResponse {
+  message: string;
+}
+
 export interface AuthError {
   code: string;
   message: string;

@@ -9,6 +9,13 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+
+app:
+  frontend:
+    base-url: ${FRONTEND_BASE_URL:http://localhost:4200}
 
 management:
   endpoints:

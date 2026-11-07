@@ -149,4 +149,34 @@ describe('AuthService', () => {
     expect(service.currentUser()).toBeNull();
     expect(service.isAuthenticated()).toBe(false);
   });
+
+  it('forgotPassword should post to /api/v1/auth/password/forgot', () => {
+    const responsePayload = {
+      message: 'If an account exists with this email, password reset instructions have been sent.',
+    };
+
+    service.forgotPassword({ email: 'user@example.com' }).subscribe((res) => {
+      expect(res.message).toBe(responsePayload.message);
+    });
+
+    const req = httpTesting.expectOne('/api/v1/auth/password/forgot');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ email: 'user@example.com' });
+    req.flush(responsePayload);
+  });
+
+  it('resetPassword should post to /api/v1/auth/password/reset', () => {
+    const responsePayload = {
+      message: 'Password has been successfully reset. Please log in with your new password.',
+    };
+
+    service.resetPassword({ token: 'tok-123', newPassword: 'NewP@ssword1!' }).subscribe((res) => {
+      expect(res.message).toBe(responsePayload.message);
+    });
+
+    const req = httpTesting.expectOne('/api/v1/auth/password/reset');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ token: 'tok-123', newPassword: 'NewP@ssword1!' });
+    req.flush(responsePayload);
+  });
 });

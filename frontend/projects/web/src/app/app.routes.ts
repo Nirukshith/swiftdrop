@@ -18,6 +18,16 @@ export const routes: Routes = [
       import('shared-auth').then((m) => m.RegisterComponent),
   },
   {
+    path: 'forgot-password',
+    loadComponent: () =>
+      import('shared-auth').then((m) => m.ForgotPasswordComponent),
+  },
+  {
+    path: 'reset-password',
+    loadComponent: () =>
+      import('shared-auth').then((m) => m.ResetPasswordComponent),
+  },
+  {
     path: 'merchant-registration',
     loadComponent: () =>
       import('./pages/merchant/merchant-registration.component').then((m) => m.MerchantRegistrationComponent),
