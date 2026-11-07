@@ -17,8 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,7 +31,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class ClientTokenServiceTest {
 
     @Mock
@@ -86,14 +83,21 @@ class ClientTokenServiceTest {
                 true, // enabled
                 MERCHANT_ID
         );
+    }
 
+    private void stubActiveClient() {
         when(clientCredentialRepository.findByClientId(CLIENT_ID)).thenReturn(Optional.of(activeClient));
+    }
+
+    private void stubActiveClientAndMerchant() {
+        stubActiveClient();
         when(userRepository.findFirstByMerchantId(MERCHANT_ID)).thenReturn(Optional.of(activeMerchantUser));
     }
 
     @Test
     @DisplayName("Valid client credentials exchange returns RS256 token valid for 15 minutes (900 seconds)")
     void validClientCredentials_succeeds() throws Exception {
+        stubActiveClientAndMerchant();
         ClientTokenRequest request = new ClientTokenRequest(CLIENT_ID, RAW_SECRET, "client_credentials", null);
 
         ClientTokenResponse response = clientTokenService.exchangeToken(request, null);
@@ -117,6 +121,7 @@ class ClientTokenServiceTest {
     @Test
     @DisplayName("HTTP Basic Auth header succeeds when body credentials are null")
     void httpBasicAuth_succeeds() {
+        stubActiveClientAndMerchant();
         String basicAuth = "Basic " + Base64.getEncoder().encodeToString((CLIENT_ID + ":" + RAW_SECRET).getBytes());
 
         ClientTokenResponse response = clientTokenService.exchangeToken(null, basicAuth);
@@ -140,6 +145,7 @@ class ClientTokenServiceTest {
     @Test
     @DisplayName("Wrong client secret returns 401 Unauthorized")
     void wrongSecret_throws401() {
+        stubActiveClient();
         ClientTokenRequest request = new ClientTokenRequest(CLIENT_ID, "wrong_secret");
 
         assertThatThrownBy(() -> clientTokenService.exchangeToken(request, null))
@@ -151,6 +157,7 @@ class ClientTokenServiceTest {
     @DisplayName("Disabled client returns 403 Forbidden")
     void disabledClient_throws403() {
         activeClient.setStatus("DISABLED");
+        stubActiveClient();
         ClientTokenRequest request = new ClientTokenRequest(CLIENT_ID, RAW_SECRET);
 
         assertThatThrownBy(() -> clientTokenService.exchangeToken(request, null))
@@ -162,6 +169,7 @@ class ClientTokenServiceTest {
     @DisplayName("Revoked client returns 403 Forbidden")
     void revokedClient_throws403() {
         activeClient.setStatus("REVOKED");
+        stubActiveClient();
         ClientTokenRequest request = new ClientTokenRequest(CLIENT_ID, RAW_SECRET);
 
         assertThatThrownBy(() -> clientTokenService.exchangeToken(request, null))
@@ -173,6 +181,7 @@ class ClientTokenServiceTest {
     @DisplayName("Pending/disabled merchant user returns 403 Forbidden")
     void pendingMerchantUser_throws403() {
         activeMerchantUser.setEnabled(false);
+        stubActiveClientAndMerchant();
         ClientTokenRequest request = new ClientTokenRequest(CLIENT_ID, RAW_SECRET);
 
         assertThatThrownBy(() -> clientTokenService.exchangeToken(request, null))
@@ -193,6 +202,7 @@ class ClientTokenServiceTest {
     @Test
     @DisplayName("Requesting allowed scope subset issues token with only requested scopes")
     void scopeSubset_succeeds() throws Exception {
+        stubActiveClientAndMerchant();
         ClientTokenRequest request = new ClientTokenRequest(CLIENT_ID, RAW_SECRET, "client_credentials", "parcels:create parcels:read");
 
         ClientTokenResponse response = clientTokenService.exchangeToken(request, null);
@@ -205,6 +215,7 @@ class ClientTokenServiceTest {
     @Test
     @DisplayName("Scope escalation (requesting unassigned scope) returns 400 Bad Request")
     void scopeEscalation_throws400() {
+        stubActiveClientAndMerchant();
         ClientTokenRequest request = new ClientTokenRequest(CLIENT_ID, RAW_SECRET, "client_credentials", "parcels:create admin:all");
 
         assertThatThrownBy(() -> clientTokenService.exchangeToken(request, null))

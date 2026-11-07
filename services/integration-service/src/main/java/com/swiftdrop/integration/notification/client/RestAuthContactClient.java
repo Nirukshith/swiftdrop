@@ -43,12 +43,8 @@ public class RestAuthContactClient implements AuthContactClient {
         this.fallbackEnabled = fallbackEnabled;
     }
 
-    public RestAuthContactClient(String authBaseUrl, boolean fallbackEnabled) {
-        this(authBaseUrl, fallbackEnabled, "swiftdrop-internal-notif-secret-2026");
-    }
-
     // Constructor for testing / customization
-    public RestAuthContactClient(RestClient restClient, boolean fallbackEnabled) {
+    RestAuthContactClient(RestClient restClient, boolean fallbackEnabled) {
         this.restClient = restClient;
         this.fallbackEnabled = fallbackEnabled;
     }
