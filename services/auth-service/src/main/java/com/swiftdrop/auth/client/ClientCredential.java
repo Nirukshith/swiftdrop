@@ -32,6 +32,9 @@ public class ClientCredential {
     @Column(name = "scopes", length = 512, nullable = false)
     private String scopes;
 
+    @Column(name = "status", length = 32, nullable = false)
+    private String status = "ACTIVE";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -43,11 +46,17 @@ public class ClientCredential {
 
     public ClientCredential(String clientId, String clientSecretHash, String merchantId,
                             String clientName, String scopes) {
+        this(clientId, clientSecretHash, merchantId, clientName, scopes, "ACTIVE");
+    }
+
+    public ClientCredential(String clientId, String clientSecretHash, String merchantId,
+                            String clientName, String scopes, String status) {
         this.clientId = clientId;
         this.clientSecretHash = clientSecretHash;
         this.merchantId = merchantId;
         this.clientName = clientName;
         this.scopes = scopes;
+        this.status = status != null ? status : "ACTIVE";
     }
 
     @PrePersist
@@ -122,6 +131,18 @@ public class ClientCredential {
         } else {
             this.scopes = String.join(",", scopeList);
         }
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public boolean isActive() {
+        return "ACTIVE".equalsIgnoreCase(this.status);
     }
 
     public Instant getCreatedAt() {

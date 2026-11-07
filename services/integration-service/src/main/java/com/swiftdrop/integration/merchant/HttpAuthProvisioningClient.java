@@ -11,8 +11,22 @@ public class HttpAuthProvisioningClient implements AuthProvisioningClient {
 
     private final RestClient restClient;
 
-    public HttpAuthProvisioningClient(@Value("${services.auth.base-url:http://localhost:8081}") String baseUrl) {
-        this.restClient = RestClient.builder().baseUrl(baseUrl).build();
+    public HttpAuthProvisioningClient(
+            @Value("${services.auth.base-url:http://localhost:8081}") String baseUrl,
+            @Value("${swiftdrop.security.internal.tokens.merchant-service:${INTERNAL_MERCHANT_SERVICE_TOKEN:swiftdrop-internal-merchant-secret-2026}}") String internalToken) {
+        this.restClient = RestClient.builder()
+                .baseUrl(baseUrl)
+                .defaultHeader("X-Internal-Service-Token", internalToken)
+                .build();
+    }
+
+    public HttpAuthProvisioningClient(String baseUrl) {
+        this(baseUrl, "swiftdrop-internal-merchant-secret-2026");
+    }
+
+    // Constructor for testing / customization
+    public HttpAuthProvisioningClient(RestClient restClient) {
+        this.restClient = restClient;
     }
 
     @Override

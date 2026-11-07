@@ -142,6 +142,8 @@ services:
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:4200}
+      INTERNAL_NOTIFICATIONS_SERVICE_TOKEN: ${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:-swiftdrop-internal-notif-secret-2026}
+      INTERNAL_MERCHANT_SERVICE_TOKEN: ${INTERNAL_MERCHANT_SERVICE_TOKEN:-swiftdrop-internal-merchant-secret-2026}
     ports:
       - "8081:8081"
     depends_on:
@@ -234,6 +236,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-swiftdrop_password}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWKS_URL: http://auth-service:8081/.well-known/jwks.json
+      INTERNAL_NOTIFICATIONS_SERVICE_TOKEN: ${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:-swiftdrop-internal-notif-secret-2026}
+      INTERNAL_MERCHANT_SERVICE_TOKEN: ${INTERNAL_MERCHANT_SERVICE_TOKEN:-swiftdrop-internal-merchant-secret-2026}
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
     ports:

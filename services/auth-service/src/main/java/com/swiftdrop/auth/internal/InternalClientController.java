@@ -2,12 +2,11 @@ package com.swiftdrop.auth.internal;
 
 import com.swiftdrop.auth.client.ClientCredential;
 import com.swiftdrop.auth.client.ClientCredentialRepository;
+import com.swiftdrop.auth.client.ClientTokenService;
 import com.swiftdrop.auth.internal.dto.ClientTokenRequest;
 import com.swiftdrop.auth.internal.dto.ClientTokenResponse;
 import com.swiftdrop.auth.internal.dto.InternalClientCredentialsResponse;
 import com.swiftdrop.auth.internal.dto.InternalCreateClientRequest;
-import com.swiftdrop.auth.security.jwt.JwtIssuer;
-import com.swiftdrop.auth.user.User;
 import com.swiftdrop.auth.user.UserRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -15,12 +14,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -37,16 +36,16 @@ public class InternalClientController {
     private final ClientCredentialRepository clientCredentialRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final JwtIssuer jwtIssuer;
+    private final ClientTokenService clientTokenService;
 
     public InternalClientController(ClientCredentialRepository clientCredentialRepository,
                                     UserRepository userRepository,
                                     PasswordEncoder passwordEncoder,
-                                    JwtIssuer jwtIssuer) {
+                                    ClientTokenService clientTokenService) {
         this.clientCredentialRepository = clientCredentialRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.jwtIssuer = jwtIssuer;
+        this.clientTokenService = clientTokenService;
     }
 
     /**
@@ -93,33 +92,12 @@ public class InternalClientController {
     }
 
     /**
-     * Exchanges OAuth2 client credentials for a signed 1-hour RS256 machine-to-machine JWT token.
+     * Exchanges OAuth2 client credentials for a signed RS256 machine-to-machine JWT token.
      */
     @PostMapping("/token")
-    public ResponseEntity<ClientTokenResponse> issueClientToken(@Valid @RequestBody ClientTokenRequest request) {
-        ClientCredential client = clientCredentialRepository.findByClientId(request.clientId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid client credentials"));
-
-        if (!passwordEncoder.matches(request.clientSecret(), client.getClientSecretHash())) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid client credentials");
-        }
-
-        // Check if the associated merchant user is enabled
-        Optional<User> merchantUser = userRepository.findFirstByMerchantId(client.getMerchantId());
-        if (merchantUser.isPresent() && !merchantUser.get().isEnabled()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Merchant account is disabled or pending approval");
-        }
-
-        String token = jwtIssuer.issueClientCredentialsToken(
-                client.getClientId(),
-                client.getMerchantId(),
-                client.getScopesList()
-        );
-
-        return ResponseEntity.ok(new ClientTokenResponse(
-                token,
-                "Bearer",
-                JwtIssuer.CLIENT_CREDENTIALS_TTL.toSeconds()
-        ));
+    public ResponseEntity<ClientTokenResponse> issueClientToken(
+            @Valid @RequestBody(required = false) ClientTokenRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
+        return ResponseEntity.ok(clientTokenService.exchangeToken(request, authorizationHeader));
     }
 }
