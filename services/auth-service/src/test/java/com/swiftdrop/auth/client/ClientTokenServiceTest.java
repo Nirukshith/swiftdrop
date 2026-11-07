@@ -14,6 +14,9 @@ import com.swiftdrop.common.security.JwtClaims;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,13 +28,17 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class ClientTokenServiceTest {
 
+    @Mock
     private ClientCredentialRepository clientCredentialRepository;
+
+    @Mock
     private UserRepository userRepository;
+
     private PasswordEncoder passwordEncoder;
     private JwtIssuer jwtIssuer;
     private JwtKeyProvider keyProvider;
@@ -46,8 +53,6 @@ class ClientTokenServiceTest {
 
     @BeforeEach
     void setUp() {
-        clientCredentialRepository = mock(ClientCredentialRepository.class);
-        userRepository = mock(UserRepository.class);
         passwordEncoder = new BCryptPasswordEncoder();
         keyProvider = new JwtKeyProvider("", "", JwtKeyProvider.DEV_KEY_ID);
         jwtIssuer = new JwtIssuer(keyProvider);
@@ -121,6 +126,7 @@ class ClientTokenServiceTest {
     @Test
     @DisplayName("Unknown client ID returns 401 Unauthorized")
     void unknownClientId_throws401() {
+        when(clientCredentialRepository.findByClientId("unknown_client")).thenReturn(Optional.empty());
         ClientTokenRequest request = new ClientTokenRequest("unknown_client", RAW_SECRET);
 
         assertThatThrownBy(() -> clientTokenService.exchangeToken(request, null))
