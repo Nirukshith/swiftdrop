@@ -1,6 +1,7 @@
 package com.swiftdrop.integration.merchant;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -22,6 +23,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.web.client.RestClientException;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -88,6 +90,17 @@ class MerchantOnboardingIntegrationTest {
     }
 
     @Test
+    void unauthenticatedCallerCannotApproveMerchant() throws Exception {
+        Merchant merchant = register("unauthenticated-approve@example.test");
+
+        mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/approve", merchant.getId()))
+                .andExpect(status().isForbidden());
+
+        org.assertj.core.api.Assertions.assertThat(merchantRepository.findById(merchant.getId()).orElseThrow().getStatus())
+                .isEqualTo(MerchantStatus.PENDING);
+    }
+
+    @Test
     @WithMockUser(roles = "ADMIN")
     void approvalProvisionsUserActivatesAndReturnsSecretOnce() throws Exception {
         Merchant merchant = register("approve@example.test");
@@ -109,9 +122,48 @@ class MerchantOnboardingIntegrationTest {
 
         verify(authProvisioningClient).createMerchantUser(any(AuthCreateUserRequest.class));
         verify(authProvisioningClient).activateUser("usr-123");
-        verify(authProvisioningClient).createClient(any(AuthCreateClientRequest.class));
+        verify(authProvisioningClient, times(1)).createClient(any(AuthCreateClientRequest.class));
         org.assertj.core.api.Assertions.assertThat(merchantRepository.findById(merchant.getId()).orElseThrow().getStatus())
                 .isEqualTo(MerchantStatus.APPROVED);
+
+        mockMvc.perform(get("/api/v1/admin/merchants").param("status", "APPROVED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].clientSecret").doesNotExist());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void repeatedApprovalDoesNotProvisionAnotherClient() throws Exception {
+        Merchant merchant = register("repeat-approve@example.test");
+        stubSuccessfulProvisioning(merchant, "usr-repeat", "sd_live_repeat", "one-time-secret");
+
+        mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/approve", merchant.getId()))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/approve", merchant.getId()))
+                .andExpect(status().isConflict());
+
+        verify(authProvisioningClient, times(1)).createClient(any(AuthCreateClientRequest.class));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void failedClientProvisioningDoesNotMarkMerchantApproved() throws Exception {
+        Merchant merchant = register("provision-failure@example.test");
+        when(authProvisioningClient.createMerchantUser(any(AuthCreateUserRequest.class)))
+                .thenReturn(new AuthUserResponse("usr-failure", merchant.getEmail(), merchant.getContactName(),
+                        merchant.getPhoneNumber(), "MERCHANT", merchant.getId().toString(), false));
+        when(authProvisioningClient.activateUser("usr-failure"))
+                .thenReturn(new AuthUserResponse("usr-failure", merchant.getEmail(), merchant.getContactName(),
+                        merchant.getPhoneNumber(), "MERCHANT", merchant.getId().toString(), true));
+        when(authProvisioningClient.createClient(any(AuthCreateClientRequest.class)))
+                .thenThrow(new RestClientException("auth service unavailable"));
+
+        mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/approve", merchant.getId()))
+                .andExpect(status().isBadGateway());
+
+        Merchant persisted = merchantRepository.findById(merchant.getId()).orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(persisted.getStatus()).isEqualTo(MerchantStatus.PENDING);
+        org.assertj.core.api.Assertions.assertThat(persisted.getAuthUserId()).isEqualTo("usr-failure");
     }
 
     @Test
@@ -134,6 +186,18 @@ class MerchantOnboardingIntegrationTest {
     private Merchant register(String email) throws Exception {
         return merchantRepository.saveAndFlush(new Merchant(java.util.UUID.randomUUID(), "Store", "Contact",
                 email.toLowerCase(), "+94771234567", null, java.time.Instant.now()));
+    }
+
+    private void stubSuccessfulProvisioning(Merchant merchant, String userId, String clientId, String clientSecret) {
+        when(authProvisioningClient.createMerchantUser(any(AuthCreateUserRequest.class)))
+                .thenReturn(new AuthUserResponse(userId, merchant.getEmail(), merchant.getContactName(),
+                        merchant.getPhoneNumber(), "MERCHANT", merchant.getId().toString(), false));
+        when(authProvisioningClient.activateUser(userId))
+                .thenReturn(new AuthUserResponse(userId, merchant.getEmail(), merchant.getContactName(),
+                        merchant.getPhoneNumber(), "MERCHANT", merchant.getId().toString(), true));
+        when(authProvisioningClient.createClient(any(AuthCreateClientRequest.class)))
+                .thenReturn(new AuthClientCredentialsResponse(clientId, clientSecret,
+                        merchant.getId().toString(), merchant.getBusinessName(), java.util.List.of("parcels:create")));
     }
 
     private String registrationJson(String email) {
