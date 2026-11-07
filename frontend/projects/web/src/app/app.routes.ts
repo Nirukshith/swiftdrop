@@ -28,6 +28,11 @@ export const routes: Routes = [
       import('shared-auth').then((m) => m.ResetPasswordComponent),
   },
   {
+    path: 'auth/callback',
+    loadComponent: () =>
+      import('shared-auth').then((m) => m.CallbackComponent),
+  },
+  {
     path: 'merchant-registration',
     loadComponent: () =>
       import('./pages/merchant/merchant-registration.component').then((m) => m.MerchantRegistrationComponent),

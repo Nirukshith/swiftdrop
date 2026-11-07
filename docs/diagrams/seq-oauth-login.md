@@ -53,13 +53,13 @@ sequenceDiagram
         %% Step 6: Session Issuance & SPA Handoff
         AS->>AS: Generate 7-day Refresh Token (UUID)
         AS->>AuthDB: INSERT INTO refresh_tokens (user_id, token_hash, expires_at: +7d)
-        AS->>AS: Generate 15-minute RS256 JWT Access Token (claims: sub, email, role, roles)
-        AS-->>Customer: 302 Found (Location: http://localhost:4200/auth/callback?token=<accessToken>)<br/>Set-Cookie: refresh_token=<refreshToken>; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth; Max-Age=604800
+        AS-->>Customer: 302 Found (Location: http://localhost:4200/auth/callback)<br/>Set-Cookie: refresh_token=<refreshToken>; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth; Max-Age=604800
 
         %% Step 7: SPA Finalization
-        Customer->>Customer: Angular Route /auth/callback receives query token
+        Customer->>Customer: Angular Route /auth/callback triggers initializeSession()
+        Customer->>AS: POST /api/v1/auth/refresh (with refresh cookie)
+        AS-->>Customer: 200 OK { accessToken, user }
         Customer->>Customer: Store Access Token in-memory (Signal Store)
-        Customer->>Customer: Clean browser address bar (history.replaceState)
         Customer->>Customer: Redirect to Customer Dashboard (/customer)
     end
 ```

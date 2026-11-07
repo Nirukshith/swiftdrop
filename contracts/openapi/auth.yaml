@@ -257,31 +257,37 @@ paths:
         Receives authorization code and state from Google. Exchanges the code with Google for tokens,
         retrieves user profile info, creates a user account if first-time login (with CUSTOMER role)
         or matches existing account, sets the httpOnly refresh token cookie, and redirects the browser
-        back to the Angular SPA (`/auth/callback?token=<access_token>`).
+        back to the Angular SPA (`/auth/callback`) without exposing credentials in the URL.
       operationId: handleGoogleCallback
       tags:
         - Authentication
       parameters:
         - name: code
           in: query
-          required: true
+          required: false
           schema:
             type: string
           description: Single-use authorization code from Google.
         - name: state
           in: query
-          required: true
+          required: false
           schema:
             type: string
           description: CSRF verification state token generated during initiation.
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Error parameter returned by Google if authorization was denied or failed.
       responses:
         '302':
-          description: Redirects browser back to Angular SPA with access token or temporary session code.
+          description: Redirects browser back to Angular SPA with secure httpOnly session refresh cookie.
           headers:
             Location:
               schema:
                 type: string
-                example: http://localhost:4200/auth/callback?token=eyJhbGciOiJSUzI1Ni...
+                example: http://localhost:4200/auth/callback
             Set-Cookie:
               schema:
                 type: string

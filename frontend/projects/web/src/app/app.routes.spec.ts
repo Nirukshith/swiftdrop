@@ -135,4 +135,12 @@ describe('App Route Role Separation', () => {
     expect(canNavigate).toBe(true);
     expect(router.url).toBe('/reset-password?token=test-token');
   });
+
+  it('allows public access to /auth/callback', async () => {
+    (authServiceMock as any).setMockRole(null);
+
+    const canNavigate = await router.navigateByUrl('/auth/callback');
+    expect(canNavigate).toBe(true);
+    expect(router.url).toBe('/auth/callback');
+  });
 });

@@ -208,6 +208,20 @@ export class AuthService {
   }
 
   /**
+   * Initiates Google OAuth 2.0 Authorization Code flow.
+   * Redirects browser to backend initiation endpoint which issues CSRF state and redirects to Google.
+   */
+  loginWithGoogle(): void {
+    this.navigateTo(`${this.baseUrl}/oauth2/google`);
+  }
+
+  protected navigateTo(url: string): void {
+    if (typeof window !== 'undefined') {
+      window.location.href = url;
+    }
+  }
+
+  /**
    * Clears in-memory session state.
    */
   clearAuth(): void {

@@ -285,4 +285,10 @@ describe('AuthService', () => {
     expect(req.request.body).toEqual({ token: 'tok-123', newPassword: 'NewP@ssword1!' });
     req.flush(responsePayload);
   });
+
+  it('loginWithGoogle should navigate to /api/v1/auth/oauth2/google', () => {
+    const navSpy = jest.spyOn(service as any, 'navigateTo').mockImplementation(() => {});
+    service.loginWithGoogle();
+    expect(navSpy).toHaveBeenCalledWith('/api/v1/auth/oauth2/google');
+  });
 });

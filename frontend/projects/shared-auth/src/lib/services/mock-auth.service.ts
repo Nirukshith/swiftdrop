@@ -152,6 +152,10 @@ export class MockAuthService {
     return of(undefined).pipe(delay(100));
   }
 
+  loginWithGoogle(): void {
+    // Stub for mock
+  }
+
   hasRole(role: string): boolean {
     return this.userRole()?.toUpperCase() === role.toUpperCase();
   }
