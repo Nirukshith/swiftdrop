@@ -30,14 +30,15 @@ public class DefaultGoogleOAuthClient implements GoogleOAuthClient {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public DefaultGoogleOAuthClient(GoogleOAuthProperties properties,
                                    ObjectMapper objectMapper) {
         this(properties, RestClient.builder().build(), objectMapper);
     }
 
-    public DefaultGoogleOAuthClient(GoogleOAuthProperties properties,
-                                   RestClient restClient,
-                                   ObjectMapper objectMapper) {
+    DefaultGoogleOAuthClient(GoogleOAuthProperties properties,
+                            RestClient restClient,
+                            ObjectMapper objectMapper) {
         this.properties = properties;
         this.restClient = restClient;
         this.objectMapper = objectMapper;
