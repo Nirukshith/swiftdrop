@@ -1,5 +1,6 @@
 package com.swiftdrop.auth.security;
 
+import com.swiftdrop.auth.internal.security.InternalServiceSecurityFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -8,6 +9,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -22,20 +24,26 @@ import java.util.List;
  *   <li>{@code /.well-known/jwks.json}      – JWKS public key set (consumed by other services)</li>
  *   <li>{@code /api/v1/auth/register}        – Self-service customer registration</li>
  *   <li>{@code /api/v1/auth/login}           – Credential login</li>
+ *   <li>{@code /api/v1/auth/token}           – OAuth 2.0 client-credentials token exchange</li>
  *   <li>{@code /api/v1/auth/refresh}         – Refresh token rotation</li>
  *   <li>{@code /api/v1/auth/logout}          – User logout and token revocation</li>
  *   <li>{@code /api/v1/auth/oauth2/**}       – Google OAuth flow (initiate + callback)</li>
  *   <li>{@code /api/v1/auth/password/**}     – Password reset (M3)</li>
- *   <li>{@code /internal/v1/**}              – Service-to-service internal APIs (blocked at Gateway)</li>
  *   <li>{@code /actuator/health/**}          – Health probe</li>
  * </ul>
  *
- * <p>All other paths require a valid bearer token.
- * LoginGuard (M7) and AuditService (M8) are wired in as in-process interfaces.
+ * <p>Internal endpoints ({@code /internal/v1/**}) require an authenticated internal service token
+ * with least-privilege operation authorization enforced by {@link InternalServiceSecurityFilter}.
  */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private final InternalServiceSecurityFilter internalServiceSecurityFilter;
+
+    public SecurityConfig(InternalServiceSecurityFilter internalServiceSecurityFilter) {
+        this.internalServiceSecurityFilter = internalServiceSecurityFilter;
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -61,6 +69,7 @@ public class SecurityConfig {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .addFilterBefore(internalServiceSecurityFilter, AuthorizationFilter.class)
             .authorizeHttpRequests(auth -> auth
                 // Public endpoints – no bearer token required
                 .requestMatchers("/.well-known/jwks.json").permitAll()
@@ -68,12 +77,14 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/v1/auth/register",
                     "/api/v1/auth/login",
+                    "/api/v1/auth/token",
                     "/api/v1/auth/refresh",
                     "/api/v1/auth/logout",
                     "/api/v1/auth/oauth2/**",
-                    "/api/v1/auth/password/**",
-                    "/internal/v1/**"
+                    "/api/v1/auth/password/**"
                 ).permitAll()
+                // Internal endpoints protected by InternalServiceSecurityFilter
+                .requestMatchers("/internal/v1/**").hasAuthority("ROLE_INTERNAL_SERVICE")
                 // Everything else (admin, etc.) requires authentication
                 .anyRequest().authenticated()
             );

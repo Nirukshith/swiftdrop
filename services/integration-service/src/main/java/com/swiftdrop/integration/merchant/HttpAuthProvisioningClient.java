@@ -2,6 +2,7 @@ package com.swiftdrop.integration.merchant;
 
 import static com.swiftdrop.integration.merchant.AuthProvisioningClient.*;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -11,8 +12,19 @@ public class HttpAuthProvisioningClient implements AuthProvisioningClient {
 
     private final RestClient restClient;
 
-    public HttpAuthProvisioningClient(@Value("${services.auth.base-url:http://localhost:8081}") String baseUrl) {
-        this.restClient = RestClient.builder().baseUrl(baseUrl).build();
+    @Autowired
+    public HttpAuthProvisioningClient(
+            @Value("${services.auth.base-url:${swiftdrop.auth.base-url:http://localhost:8081}}") String baseUrl,
+            @Value("${swiftdrop.security.internal.tokens.merchant-service:${INTERNAL_MERCHANT_SERVICE_TOKEN:swiftdrop-internal-merchant-secret-2026}}") String internalToken) {
+        this.restClient = RestClient.builder()
+                .baseUrl(baseUrl)
+                .defaultHeader("X-Internal-Service-Token", internalToken)
+                .build();
+    }
+
+    /** Package-private constructor for unit tests that supply a pre-built RestClient. */
+    HttpAuthProvisioningClient(RestClient restClient) {
+        this.restClient = restClient;
     }
 
     @Override

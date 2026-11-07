@@ -157,6 +157,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/auth/token:
+    post:
+      summary: OAuth 2.0 client credentials token exchange
+      description: |
+        Exchanges merchant OAuth 2.0 client credentials (`client_id` and `client_secret`) for a short-lived
+        (15-minute) RS256 machine-to-machine JWT access token. Routed through the public API gateway.
+        No refresh token is issued for client credentials.
+      operationId: issueClientToken
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientTokenRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ClientTokenRequest'
+      responses:
+        '200':
+          description: Access token issued successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientTokenResponse'
+        '400':
+          description: Unsupported grant type, missing required fields, or unauthorized scope requested.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid client ID or secret, or revoked client.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Client is disabled or associated merchant is pending/disabled/rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/auth/oauth2/google:
     get:
       summary: Initiate Google OAuth 2.0 login
@@ -510,6 +555,51 @@ components:
         expiresIn:
           type: integer
           example: 900
+
+    ClientTokenRequest:
+      type: object
+      required:
+        - client_id
+        - client_secret
+      properties:
+        grant_type:
+          type: string
+          enum: [client_credentials]
+          default: client_credentials
+          example: client_credentials
+        client_id:
+          type: string
+          example: sd_live_client_abc123456789
+        client_secret:
+          type: string
+          example: sd_sec_987654321fedcba0
+        scope:
+          type: string
+          example: parcels:create parcels:read
+          description: Optional space-separated list of requested scopes.
+
+    ClientTokenResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+        - expires_in
+      properties:
+        access_token:
+          type: string
+          description: Signed RS256 JWT access token.
+          example: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          example: 900
+          description: Token lifetime in seconds (15 minutes).
+        scope:
+          type: string
+          example: parcels:create parcels:read
+          nullable: true
 
     UserSummary:
       type: object

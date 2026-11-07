@@ -29,20 +29,22 @@ public class RestAuthContactClient implements AuthContactClient {
     @Autowired
     public RestAuthContactClient(
             @Value("${swiftdrop.auth.base-url:http://localhost:8081}") String authBaseUrl,
-            @Value("${swiftdrop.auth.contact-fallback-enabled:true}") boolean fallbackEnabled) {
+            @Value("${swiftdrop.auth.contact-fallback-enabled:true}") boolean fallbackEnabled,
+            @Value("${swiftdrop.security.internal.tokens.notifications-service:${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:swiftdrop-internal-notif-secret-2026}}") String internalToken) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(2000);
         requestFactory.setReadTimeout(2000);
 
         this.restClient = RestClient.builder()
                 .baseUrl(authBaseUrl)
+                .defaultHeader("X-Internal-Service-Token", internalToken)
                 .requestFactory(requestFactory)
                 .build();
         this.fallbackEnabled = fallbackEnabled;
     }
 
     // Constructor for testing / customization
-    public RestAuthContactClient(RestClient restClient, boolean fallbackEnabled) {
+    RestAuthContactClient(RestClient restClient, boolean fallbackEnabled) {
         this.restClient = restClient;
         this.fallbackEnabled = fallbackEnabled;
     }

@@ -26,7 +26,7 @@ import java.util.List;
  * <p>Token lifetimes (ADR-004):
  * <ul>
  *   <li>Access token  – 15 minutes ({@link #ACCESS_TOKEN_TTL})</li>
- *   <li>Client-credentials token – 1 hour ({@link #CLIENT_CREDENTIALS_TTL})</li>
+ *   <li>Client-credentials token – 15 minutes ({@link #CLIENT_CREDENTIALS_TTL})</li>
  * </ul>
  *
  * <p>Owner: M10 (com.swiftdrop.auth.security.jwt).
@@ -38,8 +38,8 @@ public class JwtIssuer {
     /** 15-minute lifetime for browser access tokens (ADR-004). */
     public static final Duration ACCESS_TOKEN_TTL = Duration.ofMinutes(15);
 
-    /** 1-hour lifetime for OAuth2 client-credentials (machine-to-machine). */
-    public static final Duration CLIENT_CREDENTIALS_TTL = Duration.ofHours(1);
+    /** 15-minute lifetime for OAuth2 client-credentials (machine-to-machine, matching SRS & merchant-design.md). */
+    public static final Duration CLIENT_CREDENTIALS_TTL = Duration.ofMinutes(15);
 
     /** Standard issuer URI – matches DevJwtTokenMinter.DEV_ISSUER in common. */
     public static final String ISSUER = "https://auth.swiftdrop.local";
