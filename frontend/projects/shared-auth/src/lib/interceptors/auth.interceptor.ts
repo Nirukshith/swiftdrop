@@ -11,7 +11,8 @@ import { AuthService } from '../services/auth.service';
  * 1. Attaches the in-memory access token to outgoing requests (Bearer <token>).
  * 2. Ensures withCredentials: true on auth endpoints for httpOnly refresh cookie transit.
  * 3. On 401 Unauthorized, automatically triggers a silent refresh ONCE and retries the original request.
- * 4. If refresh fails, clears in-memory credentials and redirects to login.
+ * 4. Deduplicates concurrent 401 refreshes through AuthService.refreshToken() (single-flight).
+ * 5. If refresh fails, clears in-memory credentials and redirects to login.
  */
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
@@ -42,7 +43,8 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
         error.status === 401 &&
         !req.url.includes('/api/v1/auth/login') &&
         !req.url.includes('/api/v1/auth/register') &&
-        !req.url.includes('/api/v1/auth/refresh')
+        !req.url.includes('/api/v1/auth/refresh') &&
+        !req.url.includes('/api/v1/auth/logout')
       ) {
         return authService.refreshToken().pipe(
           switchMap((refreshRes) => {

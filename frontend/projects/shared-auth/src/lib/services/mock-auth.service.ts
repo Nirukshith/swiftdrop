@@ -49,12 +49,26 @@ export const MOCK_USERS: Record<string, User> = {
 export class MockAuthService {
   private readonly _accessToken = signal<string | null>(null);
   private readonly _currentUser = signal<User | null>(null);
+  private readonly _isInitialized = signal<boolean>(false);
 
   readonly accessToken = this._accessToken.asReadonly();
   readonly currentUser = this._currentUser.asReadonly();
+  readonly isInitialized = this._isInitialized.asReadonly();
 
   readonly isAuthenticated = computed(() => !!this._accessToken());
   readonly userRole = computed(() => this._currentUser()?.role ?? null);
+
+  initializeSession(): Promise<boolean> {
+    this._isInitialized.set(true);
+    return Promise.resolve(this.isAuthenticated());
+  }
+
+  getCurrentUser(): Observable<User> {
+    if (!this._currentUser()) {
+      return throwError(() => ({ status: 401, error: 'Not authenticated' }));
+    }
+    return of(this._currentUser()!).pipe(delay(50));
+  }
 
   login(credentials: LoginRequest): Observable<AuthResponse> {
     const emailKey = Object.keys(MOCK_USERS).find(

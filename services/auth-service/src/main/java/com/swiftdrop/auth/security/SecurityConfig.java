@@ -80,6 +80,7 @@ public class SecurityConfig {
                     "/api/v1/auth/token",
                     "/api/v1/auth/refresh",
                     "/api/v1/auth/logout",
+                    "/api/v1/auth/me",
                     "/api/v1/auth/oauth2/**",
                     "/api/v1/auth/password/**"
                 ).permitAll()

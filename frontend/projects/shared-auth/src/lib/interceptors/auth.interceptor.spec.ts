@@ -80,6 +80,32 @@ describe('authInterceptor', () => {
     retryReq.flush({ success: true });
   });
 
+  it('should coordinate concurrent 401 requests and retry all waiting requests with refreshed token', () => {
+    let resA: any;
+    let resB: any;
+
+    http.get('/api/v1/parcels/call-a').subscribe((r) => (resA = r));
+    http.get('/api/v1/parcels/call-b').subscribe((r) => (resB = r));
+
+    // Both initial requests fail with 401
+    const reqA = httpTesting.expectOne('/api/v1/parcels/call-a');
+    const reqB = httpTesting.expectOne('/api/v1/parcels/call-b');
+    reqA.flush('Unauthorized', { status: 401, statusText: 'Unauthorized' });
+    reqB.flush('Unauthorized', { status: 401, statusText: 'Unauthorized' });
+
+    // Both retries must happen with refreshed-token-456
+    const retryA = httpTesting.expectOne('/api/v1/parcels/call-a');
+    const retryB = httpTesting.expectOne('/api/v1/parcels/call-b');
+    expect(retryA.request.headers.get('Authorization')).toBe('Bearer refreshed-token-456');
+    expect(retryB.request.headers.get('Authorization')).toBe('Bearer refreshed-token-456');
+
+    retryA.flush({ data: 'A' });
+    retryB.flush({ data: 'B' });
+
+    expect(resA).toEqual({ data: 'A' });
+    expect(resB).toEqual({ data: 'B' });
+  });
+
   it('should clear auth and navigate to /login when refresh fails on 401', () => {
     (authServiceMock.refreshToken as jest.Mock).mockReturnValue(
       throwError(() => new Error('Refresh failed'))

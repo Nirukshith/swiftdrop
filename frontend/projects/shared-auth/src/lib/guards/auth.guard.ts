@@ -3,11 +3,25 @@ import { CanActivateFn, Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 
 /**
- * Ensures user is authenticated before allowing route activation.
+ * Ensures authentication initialization has completed before route activation.
  */
-export const authGuard: CanActivateFn = (route, state) => {
+async function ensureInitialized(authService: AuthService): Promise<void> {
+  if (typeof authService?.isInitialized === 'function') {
+    if (!authService.isInitialized() && typeof authService?.initializeSession === 'function') {
+      await authService.initializeSession();
+    }
+  }
+}
+
+/**
+ * Ensures user is authenticated before allowing route activation.
+ * Waits for session restoration on reload before making authorization decisions.
+ */
+export const authGuard: CanActivateFn = async (route, state) => {
   const authService = inject(AuthService);
   const router = inject(Router);
+
+  await ensureInitialized(authService);
 
   if (authService.isAuthenticated()) {
     return true;
@@ -20,13 +34,16 @@ export const authGuard: CanActivateFn = (route, state) => {
 
 /**
  * Restricts route access to users with specified role(s).
+ * Waits for session restoration on reload to ensure user role is restored.
  *
  * @param allowedRoles List of roles permitted to access the route
  */
 export const roleGuard = (allowedRoles: string[]): CanActivateFn => {
-  return (route, state) => {
+  return async (route, state) => {
     const authService = inject(AuthService);
     const router = inject(Router);
+
+    await ensureInitialized(authService);
 
     if (!authService.isAuthenticated()) {
       return router.createUrlTree(['/login'], {
