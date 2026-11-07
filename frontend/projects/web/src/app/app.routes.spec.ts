@@ -115,4 +115,20 @@ describe('App Route Role Separation', () => {
     await router.navigateByUrl('/admin/users');
     expect(router.url).toBe('/dispatch');
   });
+
+  it('allows public access to /forgot-password', async () => {
+    (authServiceMock as any).setMockRole(null);
+
+    const canNavigate = await router.navigateByUrl('/forgot-password');
+    expect(canNavigate).toBe(true);
+    expect(router.url).toBe('/forgot-password');
+  });
+
+  it('allows public access to /reset-password with query parameter', async () => {
+    (authServiceMock as any).setMockRole(null);
+
+    const canNavigate = await router.navigateByUrl('/reset-password?token=test-token');
+    expect(canNavigate).toBe(true);
+    expect(router.url).toBe('/reset-password?token=test-token');
+  });
 });

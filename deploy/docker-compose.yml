@@ -139,10 +139,15 @@ services:
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-swiftdrop}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-swiftdrop_password}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: 1025
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:4200}
     ports:
       - "8081:8081"
     depends_on:
       postgres:
+        condition: service_healthy
+      mailpit:
         condition: service_healthy
       kafka-init:
         condition: service_completed_successfully

@@ -3,8 +3,12 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, tap, catchError, throwError } from 'rxjs';
 import {
   AuthResponse,
+  ForgotPasswordRequest,
+  ForgotPasswordResponse,
   LoginRequest,
   RegisterRequest,
+  ResetPasswordRequest,
+  ResetPasswordResponse,
   TokenRefreshResponse,
   User,
 } from '../models/auth.models';
@@ -64,6 +68,20 @@ export class AuthService {
           this._currentUser.set(response.user);
         })
       );
+  }
+
+  /**
+   * Request password reset instructions via email (M3).
+   */
+  forgotPassword(data: ForgotPasswordRequest): Observable<ForgotPasswordResponse> {
+    return this.http.post<ForgotPasswordResponse>(`${this.baseUrl}/password/forgot`, data);
+  }
+
+  /**
+   * Reset password with token (M3).
+   */
+  resetPassword(data: ResetPasswordRequest): Observable<ResetPasswordResponse> {
+    return this.http.post<ResetPasswordResponse>(`${this.baseUrl}/password/reset`, data);
   }
 
   /**

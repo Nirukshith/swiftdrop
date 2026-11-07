@@ -2,8 +2,12 @@ import { Injectable, computed, signal } from '@angular/core';
 import { Observable, delay, of, throwError } from 'rxjs';
 import {
   AuthResponse,
+  ForgotPasswordRequest,
+  ForgotPasswordResponse,
   LoginRequest,
   RegisterRequest,
+  ResetPasswordRequest,
+  ResetPasswordResponse,
   TokenRefreshResponse,
   User,
 } from '../models/auth.models';
@@ -94,6 +98,24 @@ export class MockAuthService {
       tokenType: 'Bearer',
       expiresIn: 900,
       user: newUser,
+    }).pipe(delay(200));
+  }
+
+  forgotPassword(data: ForgotPasswordRequest): Observable<ForgotPasswordResponse> {
+    return of({
+      message: 'If an account exists with this email, password reset instructions have been sent.',
+    }).pipe(delay(200));
+  }
+
+  resetPassword(data: ResetPasswordRequest): Observable<ResetPasswordResponse> {
+    if (!data.token || data.token === 'invalid-token') {
+      return throwError(() => ({
+        status: 400,
+        error: { code: 'INVALID_RESET_TOKEN', message: 'Invalid, expired, or already-used reset token.' },
+      })).pipe(delay(200));
+    }
+    return of({
+      message: 'Password has been successfully reset. Please log in with your new password.',
     }).pipe(delay(200));
   }
 
