@@ -161,12 +161,12 @@ When an administrator disables a user (via M4's `PATCH /api/v1/admin/users/{id}`
                                                                         │ (5) Find/create user
                                                                         │     Issue refresh cookie
                                                                         │
-[Browser / SPA]  ◄── (6) 302 to /auth/callback?token=<jwt> ─────────────┘
+[Browser / SPA]  ◄── (6) 302 to /auth/callback (with Set-Cookie) ─────────┘
   (/auth/callback)
       │
-      ├── (7) Extract JWT access token from URL fragment/query
-      ├── (8) Store access token in memory (Signal store)
-      └── (9) Clean URL with window.history.replaceState()
+      ├── (7) Route activates and triggers session restoration (POST /api/v1/auth/refresh)
+      ├── (8) Browser sends HttpOnly refresh cookie; backend issues access token & user profile
+      └── (9) Store access token in memory (Signal store) and navigate to /customer
 ```
 
 ### Handoff Details
@@ -181,16 +181,16 @@ When an administrator disables a user (via M4's `PATCH /api/v1/admin/users/{id}`
    - Checks `auth_db`:
      - If user exists, retrieves user details.
      - If user does not exist, registers a new user with role `CUSTOMER` and publishes `user.registered.v1`.
-6. **Session Handoff to SPA:**
-   - `auth-service` creates a 7-day refresh token and sets the `Set-Cookie: refresh_token=...; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth`.
-   - Generates a 15-minute RS256 access token.
-   - Returns a 302 redirect to the Angular SPA:
-     `Location: http://localhost:4200/auth/callback?token=<access_token>`
+6. **Session Handoff to SPA (ADR 004 & Issue #122 compliant):**
+   - `auth-service` creates a 7-day refresh token and sets `Set-Cookie: refresh_token=...; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth; Max-Age=604800`.
+   - Returns a 302 redirect to the Angular SPA without credentials in the URL:
+     `Location: http://localhost:4200/auth/callback`
 7. **SPA Reception:**
    - Angular route `/auth/callback` activates.
-   - Extracts the access token parameter into the in-memory Signal store.
-   - Cleans the browser history using `history.replaceState()` so the access token does not remain in the browser address bar.
-   - Navigates the customer directly to their dashboard.
+   - Triggers `initializeSession()` which calls `POST /api/v1/auth/refresh` with credentials.
+   - Browser automatically includes the httpOnly refresh cookie.
+   - Access token is held purely in-memory in the Angular Signal store.
+   - Navigates the customer directly to `/customer`.
 
 ---
 

@@ -11,6 +11,7 @@ describe('LoginComponent', () => {
   let fixture: ComponentFixture<LoginComponent>;
   let authServiceMock: {
     login: jest.Mock;
+    loginWithGoogle: jest.Mock;
   };
   let router: Router;
 
@@ -30,6 +31,7 @@ describe('LoginComponent', () => {
   beforeEach(async () => {
     authServiceMock = {
       login: jest.fn(),
+      loginWithGoogle: jest.fn(),
     };
 
     await TestBed.configureTestingModule({
@@ -142,5 +144,10 @@ describe('LoginComponent', () => {
 
     expect(component.errorMessage()).toContain('Too many login attempts');
     expect(component.isLoading()).toBe(false);
+  });
+
+  it('should trigger loginWithGoogle when Google sign in button is clicked', () => {
+    component.onGoogleLogin();
+    expect(authServiceMock.loginWithGoogle).toHaveBeenCalled();
   });
 });
