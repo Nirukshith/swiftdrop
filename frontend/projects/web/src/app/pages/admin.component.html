@@ -18,6 +18,7 @@
     <a class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white" routerLink="/admin">Overview</a>
     <a routerLink="/admin/users" id="admin-staff-management-link" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:text-indigo-600">Staff management</a>
     <a routerLink="/admin/merchants" id="admin-merchant-approval-link" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:text-indigo-600">Merchant approval</a>
+    <a routerLink="/admin/reports" id="admin-reports-link" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:text-indigo-600">Reports</a>
     <span class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">Audit log</span>
   </nav>
 
@@ -58,6 +59,15 @@
         <span class="inline-block text-xs font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
           Planned Feature (Week 3)
         </span>
+      </div>
+    </ui-card>
+
+    <ui-card title="Delivery reports">
+      <div class="space-y-3">
+        <p class="text-sm text-slate-600">Review daily totals, successful deliveries, failed attempts, and success rates.</p>
+        <a routerLink="/admin/reports" id="admin-card-reports-link" class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700">
+          View reports →
+        </a>
       </div>
     </ui-card>
   </div>
