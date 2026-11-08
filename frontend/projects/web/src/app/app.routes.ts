@@ -87,6 +87,12 @@ export const routes: Routes = [
       import('./pages/admin/merchant-approval.component').then((m) => m.MerchantApprovalComponent),
   },
   {
+    path: 'admin/reports',
+    canActivate: [roleGuard(['ADMIN'])],
+    loadComponent: () =>
+      import('./pages/admin/reports.component').then((m) => m.ReportsComponent),
+  },
+  {
     path: 'dispatch',
     canActivate: [roleGuard(['DISPATCHER'])],
     loadComponent: () =>
