@@ -39,4 +39,30 @@ describe('ReportsService', () => {
     expect(service.error()).toBe('forbidden');
     expect(service.loading()).toBe(false);
   });
+
+  it('requests CSV export with the selected date parameters', () => {
+    service.exportCsv('2026-11-01', '2026-11-07').subscribe();
+    const request = httpMock.expectOne('/api/v1/admin/reports/daily.csv?from=2026-11-01&to=2026-11-07');
+    expect(request.request.method).toBe('GET');
+    expect(request.request.responseType).toBe('blob');
+    expect(service.exporting()).toBe(true);
+
+    request.flush(new Blob(['report']), {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'Content-Disposition': 'attachment; filename="daily-report.csv"' },
+    });
+
+    expect(service.exporting()).toBe(false);
+    expect(service.exportError()).toBeNull();
+  });
+
+  it('exposes CSV export errors and clears the export loading state', () => {
+    service.exportCsv('2026-11-01', '2026-11-07').subscribe({ error: () => undefined });
+    const request = httpMock.expectOne('/api/v1/admin/reports/daily.csv?from=2026-11-01&to=2026-11-07');
+    request.flush(new Blob(['forbidden']), { status: 403, statusText: 'Forbidden' });
+
+    expect(service.exportError()).toBe('Failed to export delivery reports.');
+    expect(service.exporting()).toBe(false);
+  });
 });

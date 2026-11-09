@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { HttpResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { CardComponent } from 'ui';
@@ -59,6 +60,19 @@ export class ReportsComponent implements OnInit {
     this.reportsService.load(from, to).subscribe({ error: () => undefined });
   }
 
+  exportCsv(): void {
+    const { from, to } = this.filterForm.getRawValue();
+    this.invalidRange.set(!from || !to || from > to);
+    if (this.invalidRange() || this.reportsService.exporting()) {
+      return;
+    }
+
+    this.reportsService.exportCsv(from, to).subscribe({
+      next: (response) => this.downloadCsv(response),
+      error: () => undefined,
+    });
+  }
+
   dailyBarWidth(total: number): string {
     return `${(total / this.maxDailyTotal()) * 100}%`;
   }
@@ -77,5 +91,26 @@ export class ReportsComponent implements OnInit {
 
   private toDateInput(date: Date): string {
     return date.toISOString().slice(0, 10);
+  }
+
+  private downloadCsv(response: HttpResponse<Blob>): void {
+    if (!response.body) {
+      return;
+    }
+
+    const filename = this.filenameFrom(response.headers.get('Content-Disposition'));
+    const url = URL.createObjectURL(response.body);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  private filenameFrom(contentDisposition: string | null): string {
+    const match = contentDisposition?.match(/filename="?([^";]+)"?/i);
+    return match?.[1] || 'daily-report.csv';
   }
 }

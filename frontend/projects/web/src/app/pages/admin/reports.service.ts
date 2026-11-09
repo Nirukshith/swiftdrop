@@ -1,4 +1,4 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { catchError, finalize, Observable, tap, throwError } from 'rxjs';
 import { DailyReportRow } from './reports.model';
@@ -13,6 +13,8 @@ export class ReportsService {
   readonly rows = this.rowsSignal.asReadonly();
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+  readonly exporting = signal(false);
+  readonly exportError = signal<string | null>(null);
 
   load(from: string, to: string): Observable<DailyReportRow[]> {
     this.loading.set(true);
@@ -26,6 +28,24 @@ export class ReportsService {
         return throwError(() => err);
       }),
       finalize(() => this.loading.set(false))
+    );
+  }
+
+  exportCsv(from: string, to: string): Observable<HttpResponse<Blob>> {
+    this.exporting.set(true);
+    this.exportError.set(null);
+    const params = new HttpParams().set('from', from).set('to', to);
+
+    return this.http.get('/api/v1/admin/reports/daily.csv', {
+      params,
+      observe: 'response',
+      responseType: 'blob',
+    }).pipe(
+      catchError((err) => {
+        this.exportError.set('Failed to export delivery reports.');
+        return throwError(() => err);
+      }),
+      finalize(() => this.exporting.set(false))
     );
   }
 }
