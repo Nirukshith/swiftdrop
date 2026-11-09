@@ -1,6 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Signal, signal } from '@angular/core';
+import { HttpHeaders, HttpResponse } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
 import { ReportsComponent } from './reports.component';
 import { ReportsService } from './reports.service';
 
@@ -16,7 +18,10 @@ describe('ReportsComponent', () => {
     }>>;
     loading: Signal<boolean>;
     error: Signal<string | null>;
+    exporting: Signal<boolean>;
+    exportError: Signal<string | null>;
     load: jest.Mock;
+    exportCsv: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -30,7 +35,10 @@ describe('ReportsComponent', () => {
       }]),
       loading: signal(false),
       error: signal(null),
+      exporting: signal(false),
+      exportError: signal(null),
       load: jest.fn().mockReturnValue({ subscribe: jest.fn() }),
+      exportCsv: jest.fn().mockReturnValue({ subscribe: jest.fn() }),
     };
     await TestBed.configureTestingModule({
       imports: [ReportsComponent],
@@ -57,5 +65,61 @@ describe('ReportsComponent', () => {
     component.loadReport();
     expect(component.invalidRange()).toBe(true);
     expect(reportsService.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the Export CSV button', () => {
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Export CSV');
+  });
+
+  it('exports the selected date range', () => {
+    const component = fixture.componentInstance;
+    component.filterForm.setValue({ from: '2026-11-01', to: '2026-11-07' });
+
+    component.exportCsv();
+
+    expect(reportsService.exportCsv).toHaveBeenCalledWith('2026-11-01', '2026-11-07');
+  });
+
+  it('does not export an invalid date range', () => {
+    const component = fixture.componentInstance;
+    component.filterForm.setValue({ from: '2026-11-07', to: '2026-11-01' });
+
+    component.exportCsv();
+
+    expect(reportsService.exportCsv).not.toHaveBeenCalled();
+    expect(component.invalidRange()).toBe(true);
+  });
+
+  it('does not export while an export is already in progress', () => {
+    reportsService.exporting = signal(true);
+    const component = fixture.componentInstance;
+
+    component.exportCsv();
+
+    expect(reportsService.exportCsv).not.toHaveBeenCalled();
+  });
+
+  it('downloads the Blob with the server-provided filename', () => {
+    const click = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      expect(this.download).toBe('report-2026-11.csv');
+    });
+    const createObjectUrl = jest.fn().mockReturnValue('blob:url');
+    const revokeObjectUrl = jest.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl });
+    reportsService.exportCsv.mockReturnValue(of(new HttpResponse({
+      body: new Blob(['report']),
+      headers: new HttpHeaders({
+        'Content-Disposition': 'attachment; filename="report-2026-11.csv"',
+      }),
+    })));
+
+    fixture.componentInstance.exportCsv();
+
+    expect(createObjectUrl).toHaveBeenCalled();
+    expect(click).toHaveBeenCalled();
+    click.mockRestore();
+    delete (URL as { createObjectURL?: unknown }).createObjectURL;
+    delete (URL as { revokeObjectURL?: unknown }).revokeObjectURL;
   });
 });
