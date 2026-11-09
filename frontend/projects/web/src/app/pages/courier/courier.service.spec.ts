@@ -7,6 +7,8 @@ import {
   CourierDeliveryDetail,
   CourierStatusUpdateResponse,
   ProofUploadResponse,
+  CourierProfile,
+  CourierDailySummary,
 } from './courier.model';
 
 describe('CourierService', () => {
@@ -232,21 +234,52 @@ describe('CourierService', () => {
     expect(stats.delivered).toBe(0);
   });
 
-  it('should generate a contract-shaped daily summary for M9 compatibility', () => {
-    service.getDeliveries().subscribe();
-    httpMock.expectOne('/api/v1/courier/deliveries').flush(mockDeliveriesResponse);
-
-    const summary = service.getDailySummary('2026-10-28');
-    expect(summary.date).toBe('2026-10-28');
-    expect(summary.totalDeliveries).toBe(2);
-    expect(summary.pendingCount).toBe(2);
-    expect(summary.completedCount).toBe(0);
-    expect(summary.deliveries.length).toBe(2);
+  it('should load the authenticated courier profile', () => {
+    const profile: CourierProfile = { userId: 'courier-1', name: 'Kamal Perera', phone: '+94771234567', zone: 'Colombo', availability: true, vehicle: 'MOTORBIKE' };
+    service.getProfile().subscribe((res) => expect(res).toEqual(profile));
+    const req = httpMock.expectOne('/api/v1/courier/me');
+    expect(req.request.method).toBe('GET');
+    req.flush(profile);
+    expect(service.profile()).toEqual(profile);
   });
 
-  it('should toggle courier availability for M9 compatibility', () => {
-    const initial = service.profile().availability;
-    service.toggleAvailability();
-    expect(service.profile().availability).toBe(!initial);
+  it('should persist only server-confirmed availability', () => {
+    service.getProfile().subscribe();
+    httpMock.expectOne('/api/v1/courier/me').flush({ userId: 'courier-1', name: 'Kamal', phone: null, zone: null, availability: true, vehicle: null });
+    service.setAvailability(false).subscribe((profile) => expect(profile.availability).toBe(false));
+    const req = httpMock.expectOne('/api/v1/courier/availability');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ available: false });
+    req.flush({ userId: 'courier-1', name: 'Kamal', phone: null, zone: null, availability: false, vehicle: null });
+  });
+
+  it('should request the backend summary and omit date when not supplied', () => {
+    const summary: CourierDailySummary = { date: '2026-10-29', totalDeliveries: 0, pendingCount: 0, completedCount: 0, deliveries: [] };
+    service.getDailySummary().subscribe((res) => expect(res).toEqual(summary));
+    const req = httpMock.expectOne('/api/v1/courier/summary');
+    expect(req.request.method).toBe('GET');
+    expect(req.request.params.has('date')).toBe(false);
+    req.flush(summary);
+  });
+
+  it('should pass an explicit Asia/Colombo business date unchanged', () => {
+    service.getDailySummary('2026-10-29').subscribe();
+    const req = httpMock.expectOne((r) => r.url === '/api/v1/courier/summary' && r.params.get('date') === '2026-10-29');
+    req.flush({ date: '2026-10-29', totalDeliveries: 1, pendingCount: 1, completedCount: 0, deliveries: [] });
+  });
+
+  it('should validate OTHER before making a failure request', () => {
+    service.reportFailedDelivery('parcel-1', { reasonCode: 'OTHER' }).subscribe({ error: (error) => expect(error.message).toContain('note is required') });
+    httpMock.expectNone('/api/v1/courier/deliveries/parcel-1/fail');
+  });
+
+  it.each(['RECIPIENT_UNAVAILABLE', 'INCORRECT_ADDRESS', 'CUSTOMER_REJECTED', 'ACCESS_RESTRICTED', 'OTHER'] as const)('should submit allowed failure reason %s', (reasonCode) => {
+    service.reportFailedDelivery('parcel-1', { reasonCode, note: reasonCode === 'OTHER' ? 'No safe access' : undefined }).subscribe();
+    const fail = httpMock.expectOne('/api/v1/courier/deliveries/parcel-1/fail');
+    expect(fail.request.method).toBe('POST');
+    expect(fail.request.body.reasonCode).toBe(reasonCode);
+    fail.flush(null, { status: 202, statusText: 'Accepted' });
+    const refresh = httpMock.expectOne('/api/v1/courier/deliveries');
+    refresh.flush(mockDeliveriesResponse);
   });
 });

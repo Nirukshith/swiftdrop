@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, catchError, finalize, map, of, tap, throwError } from 'rxjs';
+import { Observable, catchError, finalize, map, switchMap, tap, throwError } from 'rxjs';
 import {
   CourierDailySummary,
   CourierDeliveriesResponse,
@@ -13,8 +13,10 @@ import {
   CourierStatusUpdateResponse,
   DeliveryProof,
   DeliveryStatus,
+  FailedDeliveryRequest,
   ProofUploadPayload,
   ProofUploadResponse,
+  isValidFailedDeliveryRequest,
 } from './courier.model';
 
 @Injectable({
@@ -33,13 +35,16 @@ export class CourierService {
   private readonly isLoadingSignal = signal<boolean>(false);
   private readonly errorSignal = signal<string | null>(null);
 
+  // The execution page reads this signal synchronously during its initial render.
+  // Empty values are only a render-safe placeholder; authenticated profile data is
+  // populated by GET /api/v1/courier/me before the M9 profile screen displays it.
   private readonly profileSignal = signal<CourierProfile>({
-    userId: this.defaultCourierId,
-    name: 'Harsha Kumarasamy',
-    phone: '+94 77 123 4567',
-    zone: 'Colombo Central Zone',
-    availability: true,
-    vehicle: 'MOTORBIKE',
+    userId: '',
+    name: '',
+    phone: null,
+    zone: null,
+    availability: false,
+    vehicle: null,
   });
 
   // Public readonly signals
@@ -129,6 +134,36 @@ export class CourierService {
     return this.deliveriesSignal().find((d) => d.parcelId === parcelId);
   }
 
+  getProfile(): Observable<CourierProfile> {
+    return this.http.get<CourierProfile>('/api/v1/courier/me').pipe(
+      tap((profile) => this.profileSignal.set(profile))
+    );
+  }
+
+  setAvailability(available: boolean): Observable<CourierProfile> {
+    return this.http.put<CourierProfile>('/api/v1/courier/availability', { available }).pipe(
+      tap((profile) => this.profileSignal.set(profile))
+    );
+  }
+
+  toggleAvailability(): Observable<CourierProfile> {
+    const current = this.profileSignal();
+    return current
+      ? this.setAvailability(!current.availability)
+      : this.getProfile().pipe(switchMap((profile) => this.setAvailability(!profile.availability)));
+  }
+
+  reportFailedDelivery(parcelId: string, request: FailedDeliveryRequest): Observable<void> {
+    const normalized = { ...request, note: request.note?.trim() || undefined };
+    if (!isValidFailedDeliveryRequest(normalized)) {
+      return throwError(() => new Error('A note is required when reasonCode is OTHER'));
+    }
+
+    return this.http.post<void>(`/api/v1/courier/deliveries/${encodeURIComponent(parcelId)}/fail`, normalized).pipe(
+      switchMap(() => this.loadDeliveries().pipe(map(() => void 0)))
+    );
+  }
+
   /**
    * Update status via PATCH /api/v1/courier/deliveries/{parcelId}/status
    */
@@ -204,37 +239,12 @@ export class CourierService {
   // M9 Compatibility
   // -------------------------------------------------------------------------
 
-  getDailySummary(date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date())): CourierDailySummary {
-    const list = this.deliveriesSignal();
-    const deliveries: CourierDeliveryCard[] = list.map((d, index) => ({
-      parcelId: d.parcelId,
-      trackingNumber: d.trackingNumber,
-      status: d.status,
-      recipientName: d.recipientName,
-      recipientPhone: d.recipientPhone,
-      dropoffAddress: d.dropoffAddress || (d.recipientAddress ? `${d.recipientAddress.line1}, ${d.recipientAddress.city}` : ''),
-      googleMapsUrl: d.googleMapsUrl || null,
-      weightKg: d.weightKg,
-      attemptCount: d.attemptCount ?? 1,
-      sequenceOrder: d.sequenceOrder ?? index + 1,
-      completedAt: d.status === 'DELIVERED' ? d.updatedAt || null : null,
-    }));
-
-    const pendingStatuses = new Set(['CREATED', 'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY']);
-    const completedStatuses = new Set(['DELIVERED', 'FAILED', 'FAILED_DELIVERY']);
-
-    return {
-      date,
-      totalDeliveries: deliveries.length,
-      pendingCount: deliveries.filter((d) => pendingStatuses.has(d.status)).length,
-      completedCount: deliveries.filter((d) => completedStatuses.has(d.status)).length,
-      deliveries,
-    };
-  }
-
-  toggleAvailability(): CourierProfile {
-    this.profileSignal.update((profile) => ({ ...profile, availability: !profile.availability }));
-    return this.profileSignal();
+  getDailySummary(date?: string): Observable<CourierDailySummary> {
+    let params = new HttpParams();
+    if (date?.trim()) {
+      params = params.set('date', date.trim());
+    }
+    return this.http.get<CourierDailySummary>('/api/v1/courier/summary', { params });
   }
 
   // -------------------------------------------------------------------------
