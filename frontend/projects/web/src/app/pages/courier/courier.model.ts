@@ -16,6 +16,23 @@ export type FailureReasonCode =
   | 'ACCESS_RESTRICTED'
   | 'OTHER';
 
+export const FAILURE_REASON_CODES = [
+  'RECIPIENT_UNAVAILABLE',
+  'INCORRECT_ADDRESS',
+  'CUSTOMER_REJECTED',
+  'ACCESS_RESTRICTED',
+  'OTHER',
+] as const satisfies readonly FailureReasonCode[];
+
+export interface FailedDeliveryRequest {
+  reasonCode: FailureReasonCode;
+  note?: string;
+}
+
+export function isValidFailedDeliveryRequest(request: FailedDeliveryRequest): boolean {
+  return request.reasonCode !== 'OTHER' || Boolean(request.note?.trim());
+}
+
 export interface CourierProfile {
   userId: string;
   name: string;
