@@ -1,16 +1,19 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MerchantApprovalService } from './merchant-approval.service';
 import { MerchantSummary } from './merchant-approval.model';
+import { MerchantCredentialsComponent } from '../merchant/merchant-credentials.component';
+import { MerchantApiCredentials } from '../merchant/merchant.model';
 
 type Action = 'approve' | 'reject';
 
 @Component({
   selector: 'app-merchant-approval',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, MerchantCredentialsComponent],
   template: `
     <main class="mx-auto max-w-7xl space-y-6 pb-16">
       <header class="rounded-2xl bg-slate-900 p-6 text-white shadow-sm">
@@ -39,6 +42,16 @@ type Action = 'approve' | 'reject';
 
       @if (feedback(); as message) {
         <div role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{{ message }}</div>
+      }
+
+      @if (handoff(); as credentials) {
+        <section aria-label="One-time merchant credential handoff">
+          <p class="mb-3 text-sm font-semibold text-slate-800">Credentials for {{ handoffBusinessName() }}</p>
+          <app-merchant-credentials [credentials]="credentials" (secretSaved)="clearHandoff()" />
+          @if (!credentials.clientSecret) {
+            <button id="dismiss-merchant-handoff" type="button" class="mt-3 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700" (click)="clearHandoff()">Close</button>
+          }
+        </section>
       }
 
       @if (merchantService.error() && !merchantService.loading()) {
@@ -87,7 +100,7 @@ type Action = 'approve' | 'reject';
                     <td class="px-5 py-4">
                       <div class="flex justify-end gap-2">
                         <button type="button" class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-indigo-300 hover:text-indigo-600" (click)="selected.set(merchant)">Details</button>
-                        <button type="button" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50" [disabled]="isSubmitting()" (click)="openApprove(merchant)">Approve</button>
+                        <button type="button" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50" [disabled]="isSubmitting() || handoff() !== null" (click)="openApprove(merchant)">Approve</button>
                         <button type="button" class="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50" [disabled]="isSubmitting()" (click)="openReject(merchant)">Reject</button>
                       </div>
                     </td>
@@ -148,8 +161,8 @@ type Action = 'approve' | 'reject';
               <label for="rejection-reason" class="mt-5 block text-sm font-semibold text-slate-700">Rejection reason</label>
               <textarea id="rejection-reason" class="mt-2 min-h-28 w-full rounded-lg border border-slate-300 p-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" maxlength="1000" [ngModel]="reason()" (ngModelChange)="reason.set($event)" aria-describedby="rejection-help"></textarea>
               <p id="rejection-help" class="mt-1 text-xs text-slate-500">{{ reason().length }}/1000 characters. A reason is required.</p>
-              @if (reasonError()) { <p class="mt-1 text-xs text-rose-600" role="alert">{{ reasonError() }}</p> }
             }
+            @if (reasonError()) { <p class="mt-1 text-xs text-rose-600" role="alert">{{ reasonError() }}</p> }
             <div class="mt-6 flex justify-end gap-2">
               <button type="button" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700" [disabled]="isSubmitting()" (click)="closeAction()">Cancel</button>
               <button type="button" class="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" [class.bg-emerald-600]="currentAction === 'approve'" [class.bg-rose-600]="currentAction === 'reject'" [disabled]="isSubmitting()" (click)="confirmAction()">{{ isSubmitting() ? 'Submitting…' : (currentAction === 'approve' ? 'Confirm approval' : 'Confirm rejection') }}</button>
@@ -160,7 +173,8 @@ type Action = 'approve' | 'reject';
     }
   `,
 })
-export class MerchantApprovalComponent implements OnInit {
+export class MerchantApprovalComponent implements OnInit, OnDestroy {
+  private readonly destroyRef = inject(DestroyRef);
   readonly merchantService = inject(MerchantApprovalService);
   readonly selected = signal<MerchantSummary | null>(null);
   readonly action = signal<Action | null>(null);
@@ -168,23 +182,34 @@ export class MerchantApprovalComponent implements OnInit {
   readonly reasonError = signal<string | null>(null);
   readonly isSubmitting = signal(false);
   readonly feedback = signal<string | null>(null);
+  readonly handoff = signal<MerchantApiCredentials | null>(null);
+  readonly handoffBusinessName = signal('');
 
   ngOnInit(): void {
     this.reload();
   }
 
+  ngOnDestroy(): void {
+    this.clearHandoff();
+  }
+
+  clearHandoff(): void {
+    this.handoff.set(null);
+    this.handoffBusinessName.set('');
+  }
+
   reload(): void {
-    this.merchantService.refresh().subscribe();
+    this.merchantService.refresh().subscribe({ error: () => undefined });
   }
 
   goToPage(page: number): void {
     if (page >= 0 && page < this.merchantService.totalPages()) {
-      this.merchantService.loadMerchants(page, this.merchantService.pageSize()).subscribe();
+      this.merchantService.loadMerchants(page, this.merchantService.pageSize()).subscribe({ error: () => undefined });
     }
   }
 
   openApprove(merchant: MerchantSummary): void {
-    if (merchant.status !== 'PENDING') return;
+    if (merchant.status !== 'PENDING' || this.isSubmitting() || this.handoff()) return;
     this.selected.set(merchant);
     this.action.set('approve');
     this.reasonError.set(null);
@@ -216,8 +241,18 @@ export class MerchantApprovalComponent implements OnInit {
     this.isSubmitting.set(true);
     this.reasonError.set(null);
     if (currentAction === 'approve') {
-      this.merchantService.approve(merchant.id).subscribe({
-        next: (result) => this.completeAction(result.merchant),
+      this.merchantService.approve(merchant.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: (result) => {
+          this.handoffBusinessName.set(result.merchant.businessName);
+          this.handoff.set({
+            merchantId: result.merchant.id,
+            status: 'APPROVED',
+            clientId: result.clientId,
+            clientSecret: result.clientSecret ?? null,
+            secretAvailableOnce: !!result.clientSecret,
+          });
+          this.completeAction(result.merchant);
+        },
         error: (error: unknown) => this.failAction(error),
       });
       return;

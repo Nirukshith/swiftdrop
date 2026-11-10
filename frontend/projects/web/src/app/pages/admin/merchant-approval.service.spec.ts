@@ -37,7 +37,7 @@ describe('MerchantApprovalService', () => {
     expect(service.merchants()).toEqual([merchant]);
   });
 
-  it('posts approval without a body and discards the one-time secret', () => {
+  it('forwards the one-time approval response for the admin handoff without caching it', () => {
     const response: MerchantApprovalResponse = {
       merchant: { ...merchant, status: 'APPROVED' },
       clientId: 'client-1',
@@ -45,8 +45,8 @@ describe('MerchantApprovalService', () => {
     };
 
     service.approve(merchant.id).subscribe((result) => {
-      expect(result).toEqual({ merchant: response.merchant, clientId: response.clientId });
-      expect(result).not.toHaveProperty('clientSecret');
+      expect(result).toEqual(response);
+      expect(service.merchants()).toEqual([]);
     });
     const request = httpMock.expectOne('/api/v1/admin/merchants/m-1/approve');
     expect(request.request.method).toBe('POST');

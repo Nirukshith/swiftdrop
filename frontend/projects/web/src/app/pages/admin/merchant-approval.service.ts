@@ -1,13 +1,12 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable, signal } from '@angular/core';
-import { catchError, finalize, map, Observable, tap, throwError } from 'rxjs';
+import { catchError, finalize, Observable, tap, throwError } from 'rxjs';
 import {
   MerchantApprovalResponse,
   MerchantPage,
   MerchantRejectionRequest,
   MerchantStatus,
   MerchantSummary,
-  SafeMerchantApprovalResult,
 } from './merchant-approval.model';
 
 @Injectable({
@@ -67,10 +66,8 @@ export class MerchantApprovalService {
     return this.loadMerchants(this.lastPage, this.lastSize);
   }
 
-  approve(merchantId: string): Observable<SafeMerchantApprovalResult> {
-    return this.http.post<MerchantApprovalResponse>(`${this.baseUrl}/${merchantId}/approve`, {}).pipe(
-      map(({ merchant, clientId }) => ({ merchant, clientId })),
-    );
+  approve(merchantId: string): Observable<MerchantApprovalResponse> {
+    return this.http.post<MerchantApprovalResponse>(`${this.baseUrl}/${merchantId}/approve`, {});
   }
 
   reject(merchantId: string, request: MerchantRejectionRequest): Observable<MerchantSummary> {

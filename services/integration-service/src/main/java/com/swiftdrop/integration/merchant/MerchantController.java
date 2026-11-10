@@ -2,6 +2,7 @@ package com.swiftdrop.integration.merchant;
 
 import jakarta.validation.Valid;
 import java.util.UUID;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -40,9 +41,10 @@ public class MerchantController {
     }
 
     @PostMapping("/api/v1/admin/merchants/{merchantId}/approve")
-    public MerchantApprovalResponse approve(@PathVariable UUID merchantId, Authentication authentication) {
+    public ResponseEntity<MerchantApprovalResponse> approve(@PathVariable UUID merchantId, Authentication authentication) {
         requireAdmin(authentication);
-        return merchantService.approve(merchantId);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(merchantService.approve(merchantId));
     }
 
     @PostMapping("/api/v1/admin/merchants/{merchantId}/reject")

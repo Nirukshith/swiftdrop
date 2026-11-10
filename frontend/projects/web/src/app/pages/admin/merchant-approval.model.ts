@@ -28,8 +28,3 @@ export interface MerchantApprovalResponse {
   clientId: string;
   clientSecret?: string;
 }
-
-export interface SafeMerchantApprovalResult {
-  merchant: MerchantSummary;
-  clientId: string;
-}

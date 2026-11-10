@@ -3,7 +3,6 @@ import { Observable, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
 import {
   MerchantOrder,
-  MerchantApiCredentials,
   OrderCounts,
   TestWebhookResult,
   WebhookDeliveryItem,
@@ -15,7 +14,6 @@ import {
 })
 export class MerchantService {
   private readonly defaultMerchantId = '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d';
-  private mockClientSecretAvailable = true;
 
   private orders = signal<MerchantOrder[]>([
     {
@@ -268,18 +266,6 @@ export class MerchantService {
       cancelled: list.filter((o) => o.status === 'CANCELLED').length,
     };
     return of(counts);
-  }
-
-  getApiCredentials(): Observable<MerchantApiCredentials> {
-    const clientSecret = this.mockClientSecretAvailable ? 'swd_test_secret_once_7f3a9c2e' : null;
-    this.mockClientSecretAvailable = false;
-    return of({
-      merchantId: this.defaultMerchantId,
-      status: 'APPROVED',
-      clientId: 'swd_test_client_merchant_01',
-      clientSecret,
-      secretAvailableOnce: clientSecret !== null,
-    });
   }
 
   getWebhookSettings(): Observable<WebhookSettings> {
