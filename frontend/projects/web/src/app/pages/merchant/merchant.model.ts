@@ -15,16 +15,35 @@ export type WebhookDeliveryStatus =
   | 'PENDING';
 
 export interface MerchantOrder {
-  merchantId: string;
   orderId: string;
   parcelId: string;
   trackingNumber: string;
-  externalReference?: string;
   status: ParcelLifecycleStatus;
-  recipientName: string;
-  recipientAddress: string;
-  weightKg?: number;
+  recipientName?: string | null;
+  recipientAddress?: string | null;
+  fee?: number | null;
+  weightKg?: number | null;
   createdAt: string;
+  updatedAt?: string | null;
+  merchantId?: string;
+  externalReference?: string;
+}
+
+export interface MerchantOrderListPage {
+  content: MerchantOrder[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  size: number;
+}
+
+export interface MerchantOrderFilterParams {
+  status?: string;
+  trackingNumber?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  size?: number;
 }
 
 export interface MerchantApiCredentials {
@@ -38,7 +57,9 @@ export interface MerchantApiCredentials {
 export interface OrderCounts {
   total: number;
   created: number;
+  pickedUp?: number;
   inTransit: number;
+  outForDelivery?: number;
   delivered: number;
   failed: number;
   cancelled: number;

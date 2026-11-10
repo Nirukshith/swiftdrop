@@ -2,7 +2,14 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
+  EmptyStateComponent,
+  ErrorStateComponent,
+  LoadingStateComponent,
+  PaginationComponent,
+} from 'ui';
+import {
   MerchantOrder,
+  MerchantOrderFilterParams,
   OrderCounts,
   ParcelLifecycleStatus,
   TestWebhookResult,
@@ -18,7 +25,15 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
 @Component({
   selector: 'app-merchant',
   standalone: true,
-  imports: [CommonModule, FormsModule, MerchantCredentialsComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    MerchantCredentialsComponent,
+    PaginationComponent,
+    LoadingStateComponent,
+    EmptyStateComponent,
+    ErrorStateComponent,
+  ],
   template: `
     <div class="max-w-7xl mx-auto space-y-6">
       <!-- Portal Header -->
@@ -106,7 +121,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
           </div>
           <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <span class="text-xs font-semibold uppercase tracking-wider text-amber-600">Active In-Transit</span>
-            <div class="text-3xl font-bold text-amber-600 mt-2">{{ counts().inTransit }}</div>
+            <div class="text-3xl font-bold text-amber-600 mt-2">{{ (counts().pickedUp || 0) + (counts().inTransit || 0) + (counts().outForDelivery || 0) }}</div>
             <span class="text-xs text-slate-400 mt-1 block">Picked up & Out for delivery</span>
           </div>
           <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
@@ -122,13 +137,13 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
         </div>
 
         <!-- Filter & Search Toolbar -->
-        <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
-          <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+        <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col gap-4">
+          <div class="flex flex-wrap items-center gap-2">
             <span class="text-xs font-semibold text-slate-500 mr-1">Status:</span>
             <button
               *ngFor="let s of statusFilterOptions"
               type="button"
-              (click)="selectedStatusFilter.set(s.value); loadOrders()"
+              (click)="onStatusFilterChange(s.value)"
               [class.bg-indigo-600]="selectedStatusFilter() === s.value"
               [class.text-white]="selectedStatusFilter() === s.value"
               [class.bg-slate-100]="selectedStatusFilter() !== s.value"
@@ -139,27 +154,79 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
             </button>
           </div>
 
-          <div class="w-full md:w-72">
-            <input
-              type="text"
-              placeholder="Search by tracking # or recipient..."
-              [(ngModel)]="searchQuery"
-              (input)="loadOrders()"
-              class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+          <div class="flex flex-col sm:flex-row gap-3 items-center justify-between pt-2 border-t border-slate-100">
+            <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+              <div class="flex items-center gap-1.5 text-xs text-slate-600">
+                <label for="fromDate" class="font-medium">From:</label>
+                <input
+                  id="fromDate"
+                  type="date"
+                  [(ngModel)]="fromDate"
+                  (change)="onDateFilterChange()"
+                  class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              <div class="flex items-center gap-1.5 text-xs text-slate-600">
+                <label for="toDate" class="font-medium">To:</label>
+                <input
+                  id="toDate"
+                  type="date"
+                  [(ngModel)]="toDate"
+                  (change)="onDateFilterChange()"
+                  class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              <button
+                *ngIf="selectedStatusFilter() !== 'ALL' || searchQuery || fromDate || toDate"
+                type="button"
+                (click)="resetFilters()"
+                class="text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 underline"
+              >
+                Clear filters
+              </button>
+            </div>
+
+            <div class="w-full sm:w-72">
+              <input
+                type="text"
+                placeholder="Search by tracking number..."
+                [(ngModel)]="searchQuery"
+                (input)="onSearchChange()"
+                class="w-full text-xs sm:text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
           </div>
         </div>
 
-        <!-- Orders Table -->
+        <!-- Orders Table / States -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="overflow-x-auto">
+          <div *ngIf="isLoadingOrders()" class="p-8">
+            <ui-loading-state message="Loading merchant orders..." />
+          </div>
+
+          <div *ngIf="!isLoadingOrders() && orderError()" class="p-8">
+            <ui-error-state
+              title="Unable to load orders"
+              [message]="orderError()!"
+              (retry)="loadOrders()"
+            />
+          </div>
+
+          <div *ngIf="!isLoadingOrders() && !orderError() && orders().length === 0" class="p-8">
+            <ui-empty-state
+              title="No orders found"
+              message="No parcel orders match your selected filters. Try clearing your search or status filter."
+            />
+          </div>
+
+          <div *ngIf="!isLoadingOrders() && !orderError() && orders().length > 0" class="overflow-x-auto">
             <table class="w-full text-left text-sm text-slate-600">
               <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
                 <tr>
                   <th class="px-6 py-3">Tracking Number</th>
                   <th class="px-6 py-3">Reference</th>
                   <th class="px-6 py-3">Recipient & Address</th>
-                  <th class="px-6 py-3">Weight</th>
+                  <th class="px-6 py-3">Fee</th>
                   <th class="px-6 py-3">Status</th>
                   <th class="px-6 py-3">Created</th>
                 </tr>
@@ -173,11 +240,11 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
                     {{ o.externalReference || '—' }}
                   </td>
                   <td class="px-6 py-4">
-                    <div class="font-medium text-slate-900">{{ o.recipientName }}</div>
-                    <div class="text-xs text-slate-400 mt-0.5">{{ o.recipientAddress }}</div>
+                    <div class="font-medium text-slate-900">{{ o.recipientName || '—' }}</div>
+                    <div *ngIf="o.recipientAddress" class="text-xs text-slate-400 mt-0.5">{{ o.recipientAddress }}</div>
                   </td>
-                  <td class="px-6 py-4">
-                    {{ o.weightKg ? o.weightKg + ' kg' : '—' }}
+                  <td class="px-6 py-4 font-mono text-xs text-slate-700">
+                    {{ o.fee != null ? 'LKR ' + (o.fee | number:'1.2-2') : '—' }}
                   </td>
                   <td class="px-6 py-4">
                     <span [ngClass]="getStatusBadgeClass(o.status)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold">
@@ -188,13 +255,17 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
                     {{ o.createdAt | date: 'MMM d, y, h:mm a' }}
                   </td>
                 </tr>
-                <tr *ngIf="orders().length === 0">
-                  <td colspan="6" class="px-6 py-8 text-center text-slate-400">
-                    No orders found matching the selected filter.
-                  </td>
-                </tr>
               </tbody>
             </table>
+          </div>
+
+          <div *ngIf="!isLoadingOrders() && !orderError() && totalElements() > 0" class="p-4 border-t border-slate-200 bg-slate-50">
+            <ui-pagination
+              [page]="currentPage()"
+              [size]="pageSize()"
+              [totalElements]="totalElements()"
+              (pageChange)="onPageChange($event)"
+            />
           </div>
         </div>
       </div>
@@ -528,14 +599,26 @@ export class MerchantComponent implements OnInit {
   counts = signal<OrderCounts>({ total: 0, created: 0, inTransit: 0, delivered: 0, failed: 0, cancelled: 0 });
   selectedStatusFilter = signal<string>('ALL');
   searchQuery = '';
+  fromDate = '';
+  toDate = '';
+
+  // Pagination & Loading States
+  currentPage = signal<number>(0);
+  pageSize = signal<number>(20);
+  totalElements = signal<number>(0);
+  totalPages = signal<number>(0);
+  isLoadingOrders = signal<boolean>(false);
+  orderError = signal<string | null>(null);
 
   statusFilterOptions = [
     { label: 'All', value: 'ALL' },
+    { label: 'Created', value: 'CREATED' },
+    { label: 'Picked Up', value: 'PICKED_UP' },
     { label: 'In Transit', value: 'IN_TRANSIT' },
     { label: 'Out for Delivery', value: 'OUT_FOR_DELIVERY' },
     { label: 'Delivered', value: 'DELIVERED' },
     { label: 'Failed', value: 'FAILED' },
-    { label: 'Created', value: 'CREATED' },
+    { label: 'Cancelled', value: 'CANCELLED' },
   ];
 
   // Settings State
@@ -569,13 +652,64 @@ export class MerchantComponent implements OnInit {
     this.loadDeliveries();
   }
 
-  loadOrders(): void {
-    this.merchantService.getOrders(this.selectedStatusFilter(), this.searchQuery).subscribe((data) => {
-      this.orders.set(data);
+  loadOrders(page: number = this.currentPage()): void {
+    this.currentPage.set(page);
+    this.isLoadingOrders.set(true);
+    this.orderError.set(null);
+
+    const params: MerchantOrderFilterParams = {
+      status: this.selectedStatusFilter() !== 'ALL' ? this.selectedStatusFilter() : undefined,
+      trackingNumber: this.searchQuery?.trim() || undefined,
+      from: this.fromDate ? new Date(this.fromDate).toISOString() : undefined,
+      to: this.toDate ? new Date(this.toDate + 'T23:59:59.999Z').toISOString() : undefined,
+      page,
+      size: this.pageSize(),
+    };
+
+    this.merchantService.getOrders(params).subscribe({
+      next: (res) => {
+        this.orders.set(res.content);
+        this.totalElements.set(res.totalElements);
+        this.totalPages.set(res.totalPages);
+        this.isLoadingOrders.set(false);
+      },
+      error: () => {
+        this.orderError.set('Unable to load merchant orders. Please check network connection and retry.');
+        this.isLoadingOrders.set(false);
+      },
     });
-    this.merchantService.getOrderCounts().subscribe((c) => {
-      this.counts.set(c);
+
+    this.merchantService.getOrderCounts().subscribe({
+      next: (c) => {
+        this.counts.set(c);
+      },
+      error: () => {},
     });
+  }
+
+  onStatusFilterChange(status: string): void {
+    this.selectedStatusFilter.set(status);
+    this.loadOrders(0);
+  }
+
+  onSearchChange(): void {
+    this.loadOrders(0);
+  }
+
+  onDateFilterChange(): void {
+    this.loadOrders(0);
+  }
+
+  resetFilters(): void {
+    this.selectedStatusFilter.set('ALL');
+    this.searchQuery = '';
+    this.fromDate = '';
+    this.toDate = '';
+    this.loadOrders(0);
+  }
+
+  onPageChange(newPage: number): void {
+    this.loadOrders(newPage);
   }
 
   loadSettings(): void {
