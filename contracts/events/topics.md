@@ -23,13 +23,23 @@ To ensure resilient message processing without blocking broker partitions, consu
 | :--- | :--- | :--- | :--- |
 | `parcel.created.v1` | `parcel.created.v1.retry` | `parcel.created.v1.dlt` | `integration-service` |
 | `parcel.assigned.v1` | `parcel.assigned.v1.retry` | `parcel.assigned.v1.dlt` | `integration-service`, `operations-service` |
-| `parcel.status-changed.v1` | `parcel.status-changed.v1.retry` | `parcel.status-changed.v1.dlt` | `integration-service`, `operations-service` |
+| `parcel.status-changed.v1` | `parcel.status-changed.v1.retry` | `parcel.status-changed.v1.dlt` | Existing non-webhook consumers, including M3 notifications (`integration-notification`); unchanged for parcel tracking and operations |
+| `parcel.status-changed.v1` | `parcel.status-changed.v1.webhook.retry` | `parcel.status-changed.v1.webhook.dlt` | M7 webhooks (`integration-webhook`) |
 | `user.registered.v1` | `user.registered.v1.retry` | `user.registered.v1.dlt` | `integration-service`, `operations-service` |
 
+For `parcel.status-changed.v1`, M3 and M7 consume the same main topic in independent groups. M3 retains its existing `.retry` and `.dlt` topics. M7 uses dedicated `.webhook.retry` and `.webhook.dlt` topics; webhook failures must not be consumed as notification or tracking failures. Parcel tracking's existing use of `parcel.status-changed.v1.dlt` is unchanged.
+
+With five total attempts and exponential backoff, Spring Kafka creates four physical retry topics per pipeline:
+
+| Consumer | Retry topics (delay in milliseconds) | DLT |
+| :--- | :--- | :--- |
+| M3 notifications | `parcel.status-changed.v1.retry-1000`, `parcel.status-changed.v1.retry-2000`, `parcel.status-changed.v1.retry-4000`, `parcel.status-changed.v1.retry-8000` | `parcel.status-changed.v1.dlt` |
+| M7 webhooks | `parcel.status-changed.v1.webhook.retry-1000`, `parcel.status-changed.v1.webhook.retry-2000`, `parcel.status-changed.v1.webhook.retry-4000`, `parcel.status-changed.v1.webhook.retry-8000` | `parcel.status-changed.v1.webhook.dlt` |
+
 ### Retry Policy
-- **Maximum Attempts**: 5 attempts.
-- **Backoff Strategy**: Exponential backoff with initial interval `1000ms`, multiplier `2.0`, max delay `16000ms` (1s, 2s, 4s, 8s, 16s).
-- **Dead Letter Behavior**: Messages failing after 5 attempts are committed and forwarded to the corresponding `.dlt` topic with failure headers (`x-exception-message`, `x-exception-stacktrace`, `x-original-topic`) for operational alerting and manual inspection.
+- **Maximum Attempts**: 5 total delivery attempts (the initial attempt and four retries).
+- **Backoff Strategy**: Exponential backoff with initial interval `1000ms`, multiplier `2.0`, max delay `16000ms`. The four waits are 1s, 2s, 4s, and 8s; the 16s cap is not a fifth wait.
+- **Dead Letter Behavior**: Messages failing after the configured attempts are committed and forwarded to their pipeline's DLT. Existing failure headers (`x-exception-message`, `x-exception-stacktrace`, `x-original-topic`) remain available for operational inspection. M7 webhook DLT records additionally carry `x-delivery-id` and `x-merchant-id`, preserve the original event envelope, and update only webhook delivery state.
 
 ---
 
