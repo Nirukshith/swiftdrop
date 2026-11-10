@@ -1,8 +1,10 @@
-import { Injectable, signal } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Injectable, inject, signal } from '@angular/core';
 import { Observable, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
 import {
-  MerchantOrder,
+  MerchantOrderFilterParams,
+  MerchantOrderListPage,
   OrderCounts,
   TestWebhookResult,
   WebhookDeliveryItem,
@@ -13,94 +15,8 @@ import {
   providedIn: 'root',
 })
 export class MerchantService {
+  private readonly http = inject(HttpClient);
   private readonly defaultMerchantId = '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d';
-
-  private orders = signal<MerchantOrder[]>([
-    {
-      orderId: 'ord-802101',
-      merchantId: this.defaultMerchantId,
-      parcelId: 'pcl-55102',
-      trackingNumber: 'SD-20261027-802101',
-      externalReference: 'PO-2026-904',
-      status: 'IN_TRANSIT',
-      recipientName: 'Alice Johnson',
-      recipientAddress: '42 Galle Road, Colombo 03',
-      weightKg: 2.4,
-      createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-    },
-    {
-      orderId: 'ord-802102',
-      merchantId: this.defaultMerchantId,
-      parcelId: 'pcl-55103',
-      trackingNumber: 'SD-20261027-802102',
-      externalReference: 'PO-2026-905',
-      status: 'OUT_FOR_DELIVERY',
-      recipientName: 'Kasun Perera',
-      recipientAddress: '15 Kandy Road, Kiribathgoda',
-      weightKg: 0.8,
-      createdAt: new Date(Date.now() - 3600000 * 6).toISOString(),
-    },
-    {
-      orderId: 'ord-802103',
-      merchantId: this.defaultMerchantId,
-      parcelId: 'pcl-55104',
-      trackingNumber: 'SD-20261027-802103',
-      externalReference: 'PO-2026-906',
-      status: 'DELIVERED',
-      recipientName: 'Fathima Rizwan',
-      recipientAddress: '88 Main Street, Negombo',
-      weightKg: 5.1,
-      createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-    },
-    {
-      orderId: 'ord-802104',
-      merchantId: this.defaultMerchantId,
-      parcelId: 'pcl-55105',
-      trackingNumber: 'SD-20261026-802104',
-      externalReference: 'PO-2026-907',
-      status: 'DELIVERED',
-      recipientName: 'Nimal Fernando',
-      recipientAddress: '10 Flower Road, Colombo 07',
-      weightKg: 1.2,
-      createdAt: new Date(Date.now() - 3600000 * 30).toISOString(),
-    },
-    {
-      orderId: 'ord-802105',
-      merchantId: this.defaultMerchantId,
-      parcelId: 'pcl-55106',
-      trackingNumber: 'SD-20261025-802105',
-      externalReference: 'PO-2026-908',
-      status: 'FAILED',
-      recipientName: 'Dinesh Silva',
-      recipientAddress: '23 Beach Road, Mount Lavinia',
-      weightKg: 3.5,
-      createdAt: new Date(Date.now() - 3600000 * 48).toISOString(),
-    },
-    {
-      orderId: 'ord-802106',
-      merchantId: this.defaultMerchantId,
-      parcelId: 'pcl-55107',
-      trackingNumber: 'SD-20261025-802106',
-      externalReference: 'PO-2026-909',
-      status: 'CREATED',
-      recipientName: 'Sunil Wickramasinghe',
-      recipientAddress: '104 High Level Road, Nugegoda',
-      weightKg: 1.0,
-      createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    },
-    {
-      orderId: 'ord-other-merchant-1',
-      merchantId: 'a2fd0a58-24fc-4e93-9862-02a20dd7b461',
-      parcelId: 'pcl-other-merchant-1',
-      trackingNumber: 'SD-20261027-OTHER1',
-      externalReference: 'OTHER-STORE-01',
-      status: 'CREATED',
-      recipientName: 'Private sample recipient',
-      recipientAddress: '1 Other Road, Colombo',
-      weightKg: 0.5,
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-    },
-  ]);
 
   private settings = signal<WebhookSettings>({
     merchantId: this.defaultMerchantId,
@@ -233,39 +149,45 @@ export class MerchantService {
     },
   ]);
 
-  getOrders(statusFilter?: string, search?: string): Observable<MerchantOrder[]> {
-    let list = this.orders().filter((order) => order.merchantId === this.defaultMerchantId);
-    if (statusFilter && statusFilter !== 'ALL') {
-      list = list.filter((o) => o.status === statusFilter);
+  getOrders(
+    paramsOrStatus?: MerchantOrderFilterParams | string,
+    search?: string
+  ): Observable<MerchantOrderListPage> {
+    let params = new HttpParams();
+
+    if (typeof paramsOrStatus === 'object' && paramsOrStatus !== null) {
+      if (paramsOrStatus.status && paramsOrStatus.status !== 'ALL') {
+        params = params.set('status', paramsOrStatus.status);
+      }
+      if (paramsOrStatus.trackingNumber && paramsOrStatus.trackingNumber.trim()) {
+        params = params.set('trackingNumber', paramsOrStatus.trackingNumber.trim());
+      }
+      if (paramsOrStatus.from && paramsOrStatus.from.trim()) {
+        params = params.set('from', paramsOrStatus.from.trim());
+      }
+      if (paramsOrStatus.to && paramsOrStatus.to.trim()) {
+        params = params.set('to', paramsOrStatus.to.trim());
+      }
+      if (paramsOrStatus.page !== undefined && paramsOrStatus.page !== null) {
+        params = params.set('page', paramsOrStatus.page.toString());
+      }
+      if (paramsOrStatus.size !== undefined && paramsOrStatus.size !== null) {
+        params = params.set('size', paramsOrStatus.size.toString());
+      }
+    } else if (typeof paramsOrStatus === 'string') {
+      if (paramsOrStatus !== 'ALL') {
+        params = params.set('status', paramsOrStatus);
+      }
+      if (search && search.trim()) {
+        params = params.set('trackingNumber', search.trim());
+      }
     }
-    if (search && search.trim().length > 0) {
-      const q = search.trim().toLowerCase();
-      list = list.filter(
-        (o) =>
-          o.trackingNumber.toLowerCase().includes(q) ||
-          o.recipientName.toLowerCase().includes(q) ||
-          (o.externalReference && o.externalReference.toLowerCase().includes(q))
-      );
-    }
-    return of(list);
+
+    return this.http.get<MerchantOrderListPage>('/api/v1/merchant/orders', { params });
   }
 
   getOrderCounts(): Observable<OrderCounts> {
-    const list = this.orders().filter((order) => order.merchantId === this.defaultMerchantId);
-    const counts: OrderCounts = {
-      total: list.length,
-      created: list.filter((o) => o.status === 'CREATED').length,
-      inTransit: list.filter(
-        (o) =>
-          o.status === 'IN_TRANSIT' ||
-          o.status === 'PICKED_UP' ||
-          o.status === 'OUT_FOR_DELIVERY'
-      ).length,
-      delivered: list.filter((o) => o.status === 'DELIVERED').length,
-      failed: list.filter((o) => o.status === 'FAILED').length,
-      cancelled: list.filter((o) => o.status === 'CANCELLED').length,
-    };
-    return of(counts);
+    return this.http.get<OrderCounts>('/api/v1/merchant/orders/counts');
   }
 
   getWebhookSettings(): Observable<WebhookSettings> {

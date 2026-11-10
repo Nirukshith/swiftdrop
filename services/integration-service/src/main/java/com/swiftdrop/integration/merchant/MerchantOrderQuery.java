@@ -15,6 +15,12 @@ public interface MerchantOrderQuery {
     /** Lists orders belonging to one merchant, optionally filtered by status. */
     Page<MerchantOrder> findByMerchantId(UUID merchantId, MerchantOrderStatus status, Pageable pageable);
 
+    /** Lists orders belonging to one merchant with optional filters on status, tracking number, and creation date range. */
+    Page<MerchantOrder> findOrders(UUID merchantId, MerchantOrderStatus status, String trackingNumber, Instant from, Instant to, Pageable pageable);
+
+    /** Retrieves aggregated status counts for a merchant's orders. */
+    MerchantOrderStatusCounts countOrdersByStatus(UUID merchantId);
+
     /** Finds an order only when it belongs to the specified merchant. */
     Optional<MerchantOrder> findByIdAndMerchantId(UUID orderId, UUID merchantId);
 

@@ -61,7 +61,7 @@ public class MerchantOrderEntity {
 
     public MerchantOrder toReadModel() {
         return new MerchantOrder(orderId, merchantId, parcelId, trackingNumber,
-                externalReference, status, createdAt);
+                externalReference, status, fee, createdAt, updatedAt);
     }
 
     public void updateStatus(MerchantOrderStatus status, Instant updatedAt) {
