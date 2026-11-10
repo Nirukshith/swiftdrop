@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { MerchantApprovalComponent } from './merchant-approval.component';
 import { MerchantApprovalService } from './merchant-approval.service';
 import { MerchantSummary } from './merchant-approval.model';
@@ -64,6 +64,64 @@ describe('MerchantApprovalComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('PENDING');
   });
 
+  it('displays approval credentials once, retains them across list refresh, and clears them on acknowledgement', () => {
+    service.approve.mockReturnValueOnce(of({ merchant: { ...merchant, status: 'APPROVED' },
+      clientId: 'client-1', clientSecret: 'one-time-test-secret' }));
+    component.openApprove(merchant);
+    component.confirmAction();
+    fixture.detectChanges();
+    expect(component.feedback()).toContain('APPROVED');
+    expect(fixture.nativeElement.textContent).toContain('one-time-test-secret');
+    expect(fixture.nativeElement.textContent).toContain('Credentials for North Star Stores');
+    component.reload();
+    component.openApprove({ ...merchant, id: 'm-2' });
+    expect(component.action()).toBeNull();
+    expect(service.approve).toHaveBeenCalledTimes(1);
+    const handoff = fixture.nativeElement.querySelector('app-merchant-credentials');
+    (handoff.querySelector('button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(component.handoff()).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('one-time-test-secret');
+    component.openApprove({ ...merchant, id: 'm-2' });
+    expect(component.action()).toBe('approve');
+  });
+
+  it('clears the secret when leaving the page and never recovers it from the merchant list', () => {
+    service.approve.mockReturnValueOnce(of({ merchant: { ...merchant, status: 'APPROVED' },
+      clientId: 'client-1', clientSecret: 'one-time-test-secret' }));
+    component.openApprove(merchant);
+    component.confirmAction();
+    fixture.destroy();
+    expect(component.handoff()).toBeNull();
+    fixture = TestBed.createComponent(MerchantApprovalComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('one-time-test-secret');
+  });
+
+  it('does not retain a late approval response after leaving the page', () => {
+    const response = new Subject<{ merchant: MerchantSummary; clientId: string; clientSecret: string }>();
+    service.approve.mockReturnValueOnce(response);
+    component.openApprove(merchant);
+    component.confirmAction();
+    fixture.destroy();
+    response.next({ merchant: { ...merchant, status: 'APPROVED' },
+      clientId: 'client-1', clientSecret: 'late-test-secret' });
+    response.complete();
+    expect(component.handoff()).toBeNull();
+  });
+
+  it('allows closing an approval response with no optional secret', () => {
+    component.openApprove(merchant);
+    component.confirmAction();
+    fixture.detectChanges();
+    expect(component.handoff()?.clientSecret).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('secret is unavailable');
+    (fixture.nativeElement.querySelector('#dismiss-merchant-handoff') as HTMLButtonElement).click();
+    expect(component.handoff()).toBeNull();
+    component.openApprove({ ...merchant, id: 'm-2' });
+    expect(component.action()).toBe('approve');
+  });
+
   it('blocks an empty rejection reason', () => {
     component.openReject(merchant);
     component.confirmAction();
@@ -92,5 +150,8 @@ describe('MerchantApprovalComponent', () => {
     component.confirmAction();
     expect(component.isSubmitting()).toBe(false);
     expect(component.reasonError()).toBe('Action failed');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role=alert]').textContent).toContain('Action failed');
+    expect(component.handoff()).toBeNull();
   });
 });

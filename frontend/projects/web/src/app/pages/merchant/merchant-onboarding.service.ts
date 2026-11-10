@@ -1,6 +1,6 @@
-import { Injectable, signal } from '@angular/core';
-import { Observable, of, throwError } from 'rxjs';
-import { delay } from 'rxjs/operators';
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { Observable } from 'rxjs';
 import {
   MerchantRegistrationRequest,
   MerchantRegistrationResponse,
@@ -8,24 +8,11 @@ import {
 
 @Injectable({ providedIn: 'root' })
 export class MerchantOnboardingService {
-  private registrations = signal<MerchantRegistrationResponse[]>([]);
+  private readonly http = inject(HttpClient);
 
   register(request: MerchantRegistrationRequest): Observable<MerchantRegistrationResponse> {
-    const duplicate = this.registrations().some(
-      (registration) => registration.email.toLowerCase() === request.email.toLowerCase()
+    return this.http.post<MerchantRegistrationResponse>(
+      '/api/v1/merchants/register', request,
     );
-    if (duplicate) {
-      return throwError(() => ({ status: 409 }));
-    }
-
-    const registration: MerchantRegistrationResponse = {
-      ...request,
-      id: crypto.randomUUID(),
-      status: 'PENDING',
-      createdAt: new Date().toISOString(),
-      message: 'Registration submitted for administrator review.',
-    };
-    this.registrations.update((current) => [...current, registration]);
-    return of(registration).pipe(delay(150));
   }
 }

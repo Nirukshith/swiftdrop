@@ -28,7 +28,7 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
             <p class="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-amber-800">
               Status: <ui-status-badge [status]="result.status" tone="warning" [label]="result.status" />
             </p>
-            <p class="mt-4 text-sm text-slate-600">Once approved, your API client credentials will be available in the Merchant Portal.</p>
+            <p class="mt-4 text-sm text-slate-600">Once approved, an administrator will securely hand over your API client credentials. Store the secret safely; it is shown only once during approval.</p>
             <div class="mt-5">
               <ui-button routerLink="/login">Sign in</ui-button>
             </div>

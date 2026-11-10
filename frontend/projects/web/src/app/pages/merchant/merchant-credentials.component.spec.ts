@@ -1,69 +1,64 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
 import { MerchantCredentialsComponent } from './merchant-credentials.component';
-import { MerchantService } from './merchant.service';
+import { MerchantApiCredentials } from './merchant.model';
 
 describe('MerchantCredentialsComponent', () => {
-  let service: MerchantService;
   let fixture: ComponentFixture<MerchantCredentialsComponent>;
-
+  const credentials: MerchantApiCredentials = {
+    merchantId: 'm-1', status: 'APPROVED', clientId: 'client-1',
+    clientSecret: 'one-time-test-secret', secretAvailableOnce: true,
+  };
   beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [MerchantCredentialsComponent],
-      providers: [MerchantService],
-    }).compileComponents();
-    service = TestBed.inject(MerchantService);
+    await TestBed.configureTestingModule({ imports: [MerchantCredentialsComponent] }).compileComponents();
     fixture = TestBed.createComponent(MerchantCredentialsComponent);
-    fixture.detectChanges();
   });
 
-  it('shows mock OAuth credentials and hides the one-time secret after acknowledgement', () => {
-    expect(fixture.nativeElement.textContent).toContain('swd_test_client_merchant_01');
-    expect(fixture.nativeElement.textContent).toContain('swd_test_secret_once_7f3a9c2e');
-
-    const saveButton = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
-    saveButton.click();
+  it('shows the supplied OAuth credentials and asks the owner to clear them after acknowledgement', () => {
+    fixture.componentRef.setInput('credentials', credentials);
+    const saved = jest.fn();
+    fixture.componentInstance.secretSaved.subscribe(saved);
     fixture.detectChanges();
-
-    expect(fixture.nativeElement.textContent).not.toContain('swd_test_secret_once_7f3a9c2e');
-    expect(fixture.nativeElement.textContent).toContain('already been shown');
+    expect(fixture.nativeElement.textContent).toContain('client-1');
+    expect(fixture.nativeElement.textContent).toContain('one-time-test-secret');
+    (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();
+    expect(saved).toHaveBeenCalledTimes(1);
+    fixture.componentRef.setInput('credentials', null);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('one-time-test-secret');
   });
 
-  it('does not show the mock secret again when the page is reopened', () => {
+  it('does not retrieve or redisplay secrets when reopened without an approval response', () => {
+    fixture.componentRef.setInput('credentials', credentials);
+    fixture.detectChanges();
     fixture.destroy();
     fixture = TestBed.createComponent(MerchantCredentialsComponent);
     fixture.detectChanges();
-
-    expect(fixture.nativeElement.textContent).not.toContain('swd_test_secret_once_7f3a9c2e');
-    expect(fixture.nativeElement.textContent).toContain('already been shown');
+    expect(fixture.nativeElement.textContent).not.toContain('one-time-test-secret');
+    expect(fixture.nativeElement.textContent).not.toContain('APPROVED');
+    expect(fixture.nativeElement.textContent).toContain('administrator will securely hand over');
   });
 
-  it('renders UI kit components: card, status badge, and button', () => {
-    const card = fixture.nativeElement.querySelector('ui-card');
-    expect(card).toBeTruthy();
-
-    const badge = fixture.nativeElement.querySelector('ui-status-badge');
-    expect(badge).toBeTruthy();
-    expect(badge.textContent).toContain('APPROVED');
-
-    const button = fixture.nativeElement.querySelector('ui-button');
-    expect(button).toBeTruthy();
+  it('renders the public UI kit components with the approved status', () => {
+    fixture.componentRef.setInput('credentials', credentials);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('ui-card')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('ui-status-badge').textContent).toContain('APPROVED');
+    expect(fixture.nativeElement.querySelector('ui-button')).toBeTruthy();
   });
 
-  it('shows awaiting administrator approval message when status is PENDING', () => {
-    jest.spyOn(service, 'getApiCredentials').mockReturnValue(of({
-      merchantId: 'm-pending',
-      status: 'PENDING',
-      clientId: 'swd_test_client_pending',
-      clientSecret: null,
-      secretAvailableOnce: false,
-    }));
+  it('shows pending approval without exposing credentials', () => {
+    fixture.componentRef.setInput('credentials', { ...credentials, status: 'PENDING' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('awaiting administrator approval');
+    expect(fixture.nativeElement.querySelector('ui-status-badge').textContent).toContain('PENDING');
+    expect(fixture.nativeElement.textContent).not.toContain('one-time-test-secret');
+    expect(fixture.nativeElement.querySelector('#clientId')).toBeNull();
+  });
 
-    const pendingFixture = TestBed.createComponent(MerchantCredentialsComponent);
-    pendingFixture.detectChanges();
-
-    expect(pendingFixture.nativeElement.textContent).toContain('awaiting administrator approval');
-    const badge = pendingFixture.nativeElement.querySelector('ui-status-badge');
-    expect(badge?.textContent).toContain('PENDING');
+  it('explains unavailable secrets without claiming they have already been delivered', () => {
+    fixture.componentRef.setInput('credentials', { ...credentials, clientSecret: null, secretAvailableOnce: false });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('secret is unavailable');
+    expect(fixture.nativeElement.querySelector('button')).toBeNull();
   });
 });

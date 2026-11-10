@@ -1,8 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { ButtonComponent, CardComponent, StatusBadgeComponent } from 'ui';
 import { MerchantApiCredentials } from './merchant.model';
-import { MerchantService } from './merchant.service';
 
 @Component({
   selector: 'app-merchant-credentials',
@@ -27,7 +26,7 @@ import { MerchantService } from './merchant.service';
         @if (credentials(); as item) {
           @if (item.status === 'PENDING') {
             <div class="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900" role="status">
-              Your merchant registration is awaiting administrator approval. API credentials will appear here after approval.
+              Your merchant registration is awaiting administrator approval. An administrator will securely hand over your API credentials after approval.
             </div>
           } @else {
             <div class="space-y-5">
@@ -49,7 +48,7 @@ import { MerchantService } from './merchant.service';
                     <ui-button variant="secondary" (click)="hideSecret()">I saved the secret</ui-button>
                   </div>
                 } @else {
-                  <p class="rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-600">This secret has already been shown. Keep your saved copy secure.</p>
+                  <p class="rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-600">The secret is unavailable in this view. Use the copy saved during the one-time administrator handoff.</p>
                 }
               </div>
               <div class="rounded-lg border border-slate-200 p-4">
@@ -57,23 +56,24 @@ import { MerchantService } from './merchant.service';
                 <p class="mt-1 text-sm text-slate-600">Request a short-lived bearer token using the client credentials grant. Send the token in the Authorization header when calling merchant APIs.</p>
                 <code class="mt-3 block overflow-x-auto rounded-lg bg-slate-900 px-3 py-3 text-xs text-slate-100">Authorization: Bearer &lt;access-token&gt;</code>
               </div>
-              <p class="text-xs text-slate-500">Demo credentials are mock data. Never commit real secrets to source control.</p>
+              <p class="text-xs text-slate-500">Hand over these credentials securely to the merchant. The secret cannot be retrieved again from this page.</p>
             </div>
           }
+        } @else {
+          <div class="rounded-lg bg-slate-50 p-5 text-sm text-slate-700" role="status">
+            After your registration is approved, an administrator will securely hand over your client ID and one-time client secret.
+            Use your saved credentials to request an access token. This page does not retrieve or redisplay your secret.
+          </div>
         }
       </ui-card>
     </main>
   `,
 })
-export class MerchantCredentialsComponent implements OnInit {
-  private readonly merchantService = inject(MerchantService);
-  readonly credentials = signal<MerchantApiCredentials | null>(null);
-
-  ngOnInit(): void {
-    this.merchantService.getApiCredentials().subscribe((credentials) => this.credentials.set(credentials));
-  }
+export class MerchantCredentialsComponent {
+  readonly credentials = input<MerchantApiCredentials | null>(null);
+  readonly secretSaved = output<void>();
 
   hideSecret(): void {
-    this.credentials.update((current) => current ? { ...current, clientSecret: null } : current);
+    this.secretSaved.emit();
   }
 }
