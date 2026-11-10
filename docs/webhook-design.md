@@ -127,13 +127,14 @@ Allowing merchants to input arbitrary webhook destination URLs introduces SSRF r
 ### 6.1 Retry Policy
 Outbound webhook deliveries that encounter transient failures (network timeouts, DNS errors, or HTTP response status codes $\ge 500$ or $429$) trigger automated retry:
 * **Max Attempts:** 5 attempts.
-* **Backoff Strategy:** Exponential backoff with initial interval `1000ms`, multiplier `2.0`, max delay `16000ms` (`1s`, `2s`, `4s`, `8s`, `16s`).
+* **Backoff Strategy:** Exponential backoff with initial interval `1000ms`, multiplier `2.0`, max delay `16000ms`. Five total attempts mean four retry waits (`1s`, `2s`, `4s`, `8s`); `16s` is the delay cap.
 * **Client Error Handling:** HTTP $4xx$ responses (e.g. $400$, $401$, $404$) do NOT retry automatically, as they indicate payload or configuration incompatibility. They are marked `FAILED` immediately.
 
 ### 6.2 Dead-Letter Topic (DLT)
 If all 5 attempts fail:
 * The delivery log record transitions to `FAILED`.
-* The event envelope is forwarded to Kafka topic `parcel.status-changed.v1.dlt` with error headers (`x-exception-message`, `x-delivery-id`, `x-merchant-id`, `x-original-topic`).
+* The original event envelope is forwarded to the M7-only Kafka topic `parcel.status-changed.v1.webhook.dlt` with error headers (`x-exception-message`, `x-delivery-id`, `x-merchant-id`, `x-original-topic`). M7's retry topics are `parcel.status-changed.v1.webhook.retry-1000`, `-2000`, `-4000`, and `-8000`.
+* M3 retains `parcel.status-changed.v1.retry-1000`, `-2000`, `-4000`, `-8000`, and `parcel.status-changed.v1.dlt`. Webhook DLT handling does not update notification or tracking state.
 * The broker offset on `parcel.status-changed.v1` is committed so the consumer partition is never blocked.
 
 ---
