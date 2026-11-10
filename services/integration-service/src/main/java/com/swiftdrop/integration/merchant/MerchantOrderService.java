@@ -100,15 +100,19 @@ public class MerchantOrderService {
                     "Merchant credentials are invalid, inactive, or not approved for ordering");
         }
 
+        MerchantOrderEntity order = orderRepository.findByOrderIdAndMerchantId(orderId, merchantId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Merchant order was not found"));
         String hash = requestHasher.hash(CANCEL_OPERATION, request);
         MerchantOrderIdempotencyStore.StoredResponse replay =
                 idempotencyStore.reserveOrReplay(merchantId, CANCEL_OPERATION, idempotencyKey, hash);
         if (replay != null) {
+            // Bind cancellation replay to its target while retaining compatibility with persisted keys.
+            if (!orderId.equals(replay.body().orderId())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Idempotency-Key was already used for a different merchant order");
+            }
             return replay;
         }
-
-        MerchantOrderEntity order = orderRepository.findByOrderIdAndMerchantId(orderId, merchantId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Merchant order was not found"));
         if (order.getStatus() != MerchantOrderStatus.CREATED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Merchant orders can only be cancelled before pickup");

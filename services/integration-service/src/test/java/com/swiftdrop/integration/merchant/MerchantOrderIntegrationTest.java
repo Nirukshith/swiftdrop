@@ -199,6 +199,113 @@ class MerchantOrderIntegrationTest {
         verify(parcelClient, org.mockito.Mockito.times(1)).cancelParcel(eq(parcelId), eq("Reason one"), any());
     }
 
+    @Test
+    void cancellationKeyCannotReplayAResponseForAnotherOrder() throws Exception {
+        UUID merchantId = approvedMerchant("cancel-target@example.test");
+        MerchantOrderEntity first = storedOrder(merchantId, MerchantOrderStatus.CREATED);
+        MerchantOrderEntity second = storedOrder(merchantId, MerchantOrderStatus.CREATED);
+        when(parcelClient.cancelParcel(eq(first.getParcelId()), eq("Changed mind"), any()))
+                .thenReturn(cancelledParcel(first));
+        String body = "{\"reason\":\"Changed mind\"}";
+        mockMvc.perform(cancelRequest(merchantId, first.getOrderId(), "target-key", body))
+                .andExpect(status().isOk());
+        mockMvc.perform(cancelRequest(merchantId, second.getOrderId(), "target-key", body))
+                .andExpect(status().isConflict());
+        org.assertj.core.api.Assertions.assertThat(orderRepository.findById(second.getOrderId()).orElseThrow().getStatus())
+                .isEqualTo(MerchantOrderStatus.CREATED);
+        verify(parcelClient, org.mockito.Mockito.times(1)).cancelParcel(any(), any(), any());
+    }
+
+    @Test
+    void ownershipIsCheckedBeforeReplayingACancellation() throws Exception {
+        UUID merchantId = approvedMerchant("owner@example.test");
+        UUID otherMerchant = approvedMerchant("other-owner@example.test");
+        MerchantOrderEntity own = storedOrder(merchantId, MerchantOrderStatus.CREATED);
+        MerchantOrderEntity foreign = storedOrder(otherMerchant, MerchantOrderStatus.CREATED);
+        when(parcelClient.cancelParcel(eq(own.getParcelId()), any(), any())).thenReturn(cancelledParcel(own));
+        mockMvc.perform(cancelRequest(merchantId, own.getOrderId(), "owner-key", null))
+                .andExpect(status().isOk());
+        mockMvc.perform(cancelRequest(merchantId, foreign.getOrderId(), "owner-key", null))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(cancelRequest(otherMerchant, own.getOrderId(), "new-key", null))
+                .andExpect(status().isNotFound());
+        verify(parcelClient, org.mockito.Mockito.times(1)).cancelParcel(any(), any(), any());
+    }
+
+    @Test
+    void staleCreatedMappingCannotCancelAPickedUpParcel() throws Exception {
+        UUID merchantId = approvedMerchant("stale@example.test");
+        MerchantOrderEntity order = storedOrder(merchantId, MerchantOrderStatus.CREATED);
+        when(parcelClient.cancelParcel(eq(order.getParcelId()), any(), any()))
+                .thenThrow(new org.springframework.web.client.HttpClientErrorException(
+                        org.springframework.http.HttpStatus.CONFLICT));
+        mockMvc.perform(cancelRequest(merchantId, order.getOrderId(), "stale-key", null))
+                .andExpect(status().isConflict());
+        org.assertj.core.api.Assertions.assertThat(orderRepository.findById(order.getOrderId()).orElseThrow().getStatus())
+                .isEqualTo(MerchantOrderStatus.CREATED);
+        org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from idempotency_keys", Integer.class)).isZero();
+    }
+
+    @Test
+    void localPickedUpStateRejectsCancellationWithoutCallingParcelService() throws Exception {
+        UUID merchantId = approvedMerchant("picked-up@example.test");
+        MerchantOrderEntity order = storedOrder(merchantId, MerchantOrderStatus.PICKED_UP);
+        mockMvc.perform(cancelRequest(merchantId, order.getOrderId(), "picked-up-key", null))
+                .andExpect(status().isConflict());
+        org.mockito.Mockito.verifyNoInteractions(parcelClient);
+    }
+
+    @Test
+    void cancellationFailureRollsBackTheKeySoTheSameRequestCanRetry() throws Exception {
+        UUID merchantId = approvedMerchant("retry-cancel@example.test");
+        MerchantOrderEntity order = storedOrder(merchantId, MerchantOrderStatus.CREATED);
+        when(parcelClient.cancelParcel(eq(order.getParcelId()), any(), any()))
+                .thenThrow(new org.springframework.web.client.ResourceAccessException("Connection interrupted"))
+                .thenReturn(cancelledParcel(order));
+        mockMvc.perform(cancelRequest(merchantId, order.getOrderId(), "retry-key", null))
+                .andExpect(status().isBadGateway());
+        mockMvc.perform(cancelRequest(merchantId, order.getOrderId(), "retry-key", null))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        verify(parcelClient, org.mockito.Mockito.times(2)).cancelParcel(any(), any(), any());
+    }
+
+    @Test
+    void pendingMerchantCannotCreateOrdersEvenWithAMerchantRoleClaim() throws Exception {
+        Merchant pending = merchantRepository.saveAndFlush(new Merchant(UUID.randomUUID(), "Pending Store", "Contact",
+                "pending-order@example.test", "+94771234567", null, Instant.now()));
+        mockMvc.perform(createRequest(pending.getId(), "pending-key", requestJson("pending-order")))
+                .andExpect(status().isForbidden());
+        org.mockito.Mockito.verifyNoInteractions(pricingQuoteClient, parcelClient);
+    }
+
+    @Test
+    void semanticallyEquivalentJsonReturnsTheEntireOriginalResponse() throws Exception {
+        UUID merchantId = approvedMerchant("canonical@example.test");
+        when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
+        when(parcelClient.createParcel(eq(merchantId), any(), any(), any()))
+                .thenReturn(parcel(UUID.randomUUID().toString(), "SD-20261110-0100"));
+        String body = requestJson("canonical-order");
+        String first = mockMvc.perform(createRequest(merchantId, "canonical-key", body))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String replay = mockMvc.perform(createRequest(merchantId, "canonical-key", body.replace("1.5", "1.500")))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper();
+        org.assertj.core.api.Assertions.assertThat(json.readTree(replay)).isEqualTo(json.readTree(first));
+        verify(parcelClient, org.mockito.Mockito.times(1)).createParcel(any(), any(), any(), any());
+    }
+
+    private MerchantOrderEntity storedOrder(UUID merchantId, MerchantOrderStatus status) {
+        return orderRepository.saveAndFlush(new MerchantOrderEntity(UUID.randomUUID(), merchantId, UUID.randomUUID(),
+                "SD-" + UUID.randomUUID(), "ref-" + UUID.randomUUID(), status, new BigDecimal("850.00"), Instant.now()));
+    }
+
+    private ParcelClient.InternalParcelResponse cancelledParcel(MerchantOrderEntity order) {
+        return new ParcelClient.InternalParcelResponse(order.getParcelId().toString(), order.getTrackingNumber(),
+                "CANCELLED", order.getMerchantId().toString(), order.getFee(), order.getCreatedAt(), Instant.now());
+    }
+
     private UUID approvedMerchant(String email) {
         Merchant merchant = new Merchant(UUID.randomUUID(), "Store", "Contact", email,
                 "+94771234567", null, Instant.now());
