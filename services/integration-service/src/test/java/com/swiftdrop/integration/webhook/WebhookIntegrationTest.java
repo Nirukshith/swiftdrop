@@ -60,6 +60,40 @@ class WebhookIntegrationTest {
     private WebhookDispatcher dispatcher;
 
     @Test
+    @DisplayName("Settings persist by merchant and a test uses the active secret without returning it")
+    void settingsPersistAndTestUsesMerchantSecret() {
+        UUID firstMerchant = UUID.randomUUID();
+        UUID secondMerchant = UUID.randomUUID();
+        String firstUrl = "https://127.0.0.1/first";
+        String secondUrl = "https://127.0.0.1/second";
+
+        WebhookSettingsResponse created = webhookService.updateSettings(firstMerchant,
+                new UpdateWebhookSettingsRequest(firstUrl, true, List.of("PARCEL_STATUS_CHANGED"), false));
+        assertThat(created.rawSecret()).isNotBlank();
+        assertThat(webhookService.getSettings(firstMerchant).rawSecret()).isNull();
+        assertThat(webhookService.getSettings(firstMerchant).url()).isEqualTo(firstUrl);
+        assertThat(webhookService.getSettings(secondMerchant).url()).isNull();
+
+        webhookService.updateSettings(secondMerchant,
+                new UpdateWebhookSettingsRequest(secondUrl, true, List.of("PARCEL_CREATED"), false));
+        assertThat(webhookService.getSettings(firstMerchant).url()).isEqualTo(firstUrl);
+        assertThat(webhookService.getSettings(secondMerchant).url()).isEqualTo(secondUrl);
+
+        WebhookSettingsResponse rotated = webhookService.updateSettings(firstMerchant,
+                new UpdateWebhookSettingsRequest(firstUrl, true, List.of("PARCEL_STATUS_CHANGED"), true));
+        assertThat(rotated.rawSecret()).isNotEqualTo(created.rawSecret());
+        assertThat(webhookService.getSettings(firstMerchant).rawSecret()).isNull();
+
+        when(dispatcher.dispatch(eq(firstUrl), eq(rotated.rawSecret()), anyString(), any(WebhookPayload.class)))
+                .thenReturn(new WebhookDispatcher.DispatchResult(true, 204, 12, Map.of(), Map.of(),
+                        null, null, null, "t=1,v1=signature", "1"));
+        TestWebhookResultResponse result = webhookService.triggerTestWebhook(firstMerchant, null);
+        assertThat(result.success()).isTrue();
+        assertThat(result.statusCode()).isEqualTo(204);
+        verify(dispatcher).dispatch(eq(firstUrl), eq(rotated.rawSecret()), anyString(), any(WebhookPayload.class));
+    }
+
+    @Test
     @DisplayName("End-to-End: Parcel status event creates signed delivery record and delivery log shows it")
     void parcelStatusEvent_createsSignedDeliveryRecord_andIdempotent() {
         UUID merchantId = UUID.randomUUID();

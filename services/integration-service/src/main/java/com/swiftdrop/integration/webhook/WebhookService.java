@@ -94,9 +94,7 @@ public class WebhookService {
 
     @Transactional
     public WebhookSettingsResponse updateSettings(UUID merchantId, UpdateWebhookSettingsRequest request) {
-        if (request.url() != null && !request.url().isBlank()) {
-            ssrfGuard.validateUrl(request.url());
-        }
+        ssrfGuard.validateUrl(request.url());
 
         Optional<WebhookEndpointEntity> existingOpt = endpointRepository.findById(merchantId);
         WebhookEndpointEntity endpoint;

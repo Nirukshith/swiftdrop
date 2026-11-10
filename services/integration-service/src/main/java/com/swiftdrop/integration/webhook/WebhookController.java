@@ -4,21 +4,19 @@ import com.swiftdrop.common.security.CurrentUser;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -31,55 +29,37 @@ public class WebhookController {
         this.webhookService = webhookService;
     }
 
-    private UUID resolveMerchantId(String headerMerchantId) {
-        if (headerMerchantId != null && !headerMerchantId.isBlank()) {
-            try {
-                return UUID.fromString(headerMerchantId);
-            } catch (IllegalArgumentException ignored) {
-            }
+    private UUID requireMerchantId() {
+        CurrentUser user = CurrentUser.require();
+        if (!user.isMerchant() || user.merchantId() == null || user.merchantId().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Merchant credentials are required");
         }
-
-        Optional<CurrentUser> userOpt = CurrentUser.get();
-        if (userOpt.isPresent() && userOpt.get().merchantId() != null && !userOpt.get().merchantId().isBlank()) {
-            try {
-                return UUID.fromString(userOpt.get().merchantId());
-            } catch (IllegalArgumentException ignored) {
-            }
+        try {
+            return UUID.fromString(user.merchantId());
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Merchant credentials are invalid");
         }
-
-        // Fallback for tests or token subject as UUID
-        if (userOpt.isPresent() && userOpt.get().userId() != null) {
-            try {
-                return UUID.fromString(userOpt.get().userId());
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
-
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access forbidden. Valid merchant identification required");
     }
 
     @GetMapping("/settings")
-    public ResponseEntity<WebhookSettingsResponse> getSettings(
-            @RequestHeader(value = "X-Merchant-Id", required = false) String headerMerchantId) {
-        UUID merchantId = resolveMerchantId(headerMerchantId);
+    public ResponseEntity<WebhookSettingsResponse> getSettings() {
+        UUID merchantId = requireMerchantId();
         WebhookSettingsResponse response = webhookService.getSettings(merchantId);
         return ResponseEntity.ok(response);
     }
 
     @PutMapping("/settings")
     public ResponseEntity<WebhookSettingsResponse> updateSettings(
-            @Valid @RequestBody UpdateWebhookSettingsRequest request,
-            @RequestHeader(value = "X-Merchant-Id", required = false) String headerMerchantId) {
-        UUID merchantId = resolveMerchantId(headerMerchantId);
+            @Valid @RequestBody UpdateWebhookSettingsRequest request) {
+        UUID merchantId = requireMerchantId();
         WebhookSettingsResponse response = webhookService.updateSettings(merchantId, request);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(response);
     }
 
     @PostMapping("/test")
     public ResponseEntity<TestWebhookResultResponse> triggerTest(
-            @RequestBody(required = false) TestWebhookRequest request,
-            @RequestHeader(value = "X-Merchant-Id", required = false) String headerMerchantId) {
-        UUID merchantId = resolveMerchantId(headerMerchantId);
+            @RequestBody(required = false) TestWebhookRequest request) {
+        UUID merchantId = requireMerchantId();
         TestWebhookResultResponse result = webhookService.triggerTestWebhook(merchantId, request);
 
         if (result.success()) {
@@ -96,27 +76,24 @@ public class WebhookController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            @RequestHeader(value = "X-Merchant-Id", required = false) String headerMerchantId) {
-        UUID merchantId = resolveMerchantId(headerMerchantId);
+            @RequestParam(defaultValue = "20") int size) {
+        UUID merchantId = requireMerchantId();
         WebhookDeliveryLogPage pageResult = webhookService.listDeliveries(merchantId, status, eventType, from, to, page, size);
         return ResponseEntity.ok(pageResult);
     }
 
     @GetMapping("/deliveries/{deliveryId}")
     public ResponseEntity<WebhookDeliveryDetailResponse> getDeliveryDetail(
-            @PathVariable UUID deliveryId,
-            @RequestHeader(value = "X-Merchant-Id", required = false) String headerMerchantId) {
-        UUID merchantId = resolveMerchantId(headerMerchantId);
+            @PathVariable UUID deliveryId) {
+        UUID merchantId = requireMerchantId();
         WebhookDeliveryDetailResponse detail = webhookService.getDeliveryDetail(merchantId, deliveryId);
         return ResponseEntity.ok(detail);
     }
 
     @PostMapping("/deliveries/{deliveryId}/retry")
     public ResponseEntity<WebhookDeliveryDetailResponse> retryDelivery(
-            @PathVariable UUID deliveryId,
-            @RequestHeader(value = "X-Merchant-Id", required = false) String headerMerchantId) {
-        UUID merchantId = resolveMerchantId(headerMerchantId);
+            @PathVariable UUID deliveryId) {
+        UUID merchantId = requireMerchantId();
         WebhookDeliveryDetailResponse updated = webhookService.retryDelivery(merchantId, deliveryId);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(updated);
     }

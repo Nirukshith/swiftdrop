@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { finalize } from 'rxjs';
 import {
   EmptyStateComponent,
   ErrorStateComponent,
@@ -54,7 +56,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
         <div class="inline-flex flex-wrap rounded-lg bg-slate-100 p-1 border border-slate-200 text-sm font-medium">
           <button
             type="button"
-            (click)="activeTab.set('orders')"
+            (click)="selectTab('orders')"
             [class.bg-white]="activeTab() === 'orders'"
             [class.shadow-sm]="activeTab() === 'orders'"
             [class.text-indigo-600]="activeTab() === 'orders'"
@@ -65,7 +67,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
           </button>
           <button
             type="button"
-            (click)="activeTab.set('settings')"
+            (click)="selectTab('settings')"
             [class.bg-white]="activeTab() === 'settings'"
             [class.shadow-sm]="activeTab() === 'settings'"
             [class.text-indigo-600]="activeTab() === 'settings'"
@@ -76,7 +78,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
           </button>
           <button
             type="button"
-            (click)="activeTab.set('deliveries')"
+            (click)="selectTab('deliveries')"
             [class.bg-white]="activeTab() === 'deliveries'"
             [class.shadow-sm]="activeTab() === 'deliveries'"
             [class.text-indigo-600]="activeTab() === 'deliveries'"
@@ -87,7 +89,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
           </button>
           <button
             type="button"
-            (click)="activeTab.set('credentials')"
+            (click)="selectTab('credentials')"
             [class.bg-white]="activeTab() === 'credentials'"
             [class.shadow-sm]="activeTab() === 'credentials'"
             [class.text-indigo-600]="activeTab() === 'credentials'"
@@ -274,8 +276,13 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
       <!-- TAB 2: WEBHOOK SETTINGS                                                  -->
       <!-- ========================================================================= -->
       <div *ngIf="activeTab() === 'settings'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div *ngIf="isLoadingSettings()" class="lg:col-span-3" role="status">Loading webhook settings...</div>
+        <div *ngIf="settingsError()" class="lg:col-span-3 rounded-lg bg-rose-50 border border-rose-200 p-3 text-sm text-rose-800" role="alert">
+          {{ settingsError() }}
+          <button *ngIf="!settings()" type="button" (click)="loadSettings()" class="ml-2 underline">Retry</button>
+        </div>
         <!-- Configuration Card -->
-        <div class="lg:col-span-2 space-y-6">
+        <div *ngIf="settings()" class="lg:col-span-2 space-y-6">
           <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-5">
             <h2 class="text-lg font-bold text-slate-900">Webhook Destination & Subscriptions</h2>
 
@@ -287,6 +294,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
               <input
                 type="url"
                 [(ngModel)]="settingsForm.url"
+                [disabled]="isSavingSettings()"
                 placeholder="https://api.yourdomain.com/webhooks/swiftdrop"
                 class="w-full text-sm border border-slate-300 rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
@@ -302,7 +310,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
                 <div class="text-xs text-slate-500">Enable or temporarily suspend outbound webhook dispatches.</div>
               </div>
               <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" [(ngModel)]="settingsForm.active" class="sr-only peer" />
+                <input type="checkbox" [(ngModel)]="settingsForm.active" [disabled]="isSavingSettings()" class="sr-only peer" />
                 <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
               </label>
             </div>
@@ -316,6 +324,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
                     type="checkbox"
                     [checked]="settingsForm.subscribedEvents.includes('PARCEL_STATUS_CHANGED')"
                     (change)="toggleEvent('PARCEL_STATUS_CHANGED')"
+                    [disabled]="isSavingSettings()"
                     class="rounded text-indigo-600 focus:ring-indigo-500"
                   />
                   <span><code>PARCEL_STATUS_CHANGED</code> — Emitted on state transitions (PICKED_UP, IN_TRANSIT, DELIVERED, etc.)</span>
@@ -325,6 +334,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
                     type="checkbox"
                     [checked]="settingsForm.subscribedEvents.includes('PARCEL_CREATED')"
                     (change)="toggleEvent('PARCEL_CREATED')"
+                    [disabled]="isSavingSettings()"
                     class="rounded text-indigo-600 focus:ring-indigo-500"
                   />
                   <span><code>PARCEL_CREATED</code> — Emitted when a new parcel is accepted into the system</span>
@@ -336,9 +346,10 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
               <button
                 type="button"
                 (click)="saveSettings()"
+                [disabled]="isSavingSettings() || isLoadingSettings()"
                 class="px-5 py-2.5 bg-indigo-600 text-white font-medium text-sm rounded-lg hover:bg-indigo-700 shadow-sm transition-colors"
               >
-                Save Settings
+                {{ isSavingSettings() ? 'Saving...' : 'Save Settings' }}
               </button>
             </div>
           </div>
@@ -358,6 +369,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
               <div class="font-mono bg-white p-2 rounded border border-amber-200 text-slate-800 break-all select-all">
                 {{ settings()?.rawSecret }}
               </div>
+              <button type="button" (click)="dismissSecret()" class="underline font-semibold">I have saved this secret</button>
             </div>
 
             <div class="flex items-center justify-between p-3.5 bg-slate-50 rounded-lg border border-slate-200">
@@ -368,6 +380,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
               <button
                 type="button"
                 (click)="regenerateSecret()"
+                [disabled]="isSavingSettings() || isLoadingSettings()"
                 class="px-3.5 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-md transition-colors"
               >
                 Regenerate Secret
@@ -377,7 +390,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
         </div>
 
         <!-- Test Event Trigger Panel -->
-        <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-5 h-fit">
+        <div *ngIf="settings()" class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-5 h-fit">
           <div class="border-b border-slate-100 pb-3">
             <h2 class="text-lg font-bold text-slate-900">Test Webhook Trigger</h2>
             <p class="text-xs text-slate-500 mt-1">
@@ -390,6 +403,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
             <input
               type="url"
               [(ngModel)]="testUrlOverride"
+              [disabled]="isTestingWebhook()"
               placeholder="Leave empty to use configured URL"
               class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
@@ -405,10 +419,12 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
             <span>{{ isTestingWebhook() ? 'Sending Test Event...' : '⚡ Send Test Event' }}</span>
           </button>
 
+          <div *ngIf="testError()" class="rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800" role="alert">{{ testError() }}</div>
+
           <!-- Test Execution Result -->
           <div *ngIf="testResult()" class="rounded-lg p-4 text-xs space-y-2 border" [ngClass]="testResult()?.success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'">
             <div class="flex items-center justify-between font-bold">
-              <span>{{ testResult()?.success ? 'HTTP 200 OK — Delivered' : 'Delivery Failed' }}</span>
+              <span>{{ testResult()?.success ? 'HTTP ' + testResult()?.statusCode + ' — Delivered' : 'Delivery Failed' }}</span>
               <span>{{ testResult()?.latencyMs }} ms</span>
             </div>
             <div class="space-y-1 font-mono text-[11px] pt-1">
@@ -419,6 +435,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
             <div *ngIf="testResult()?.responseBodySummary" class="mt-2 p-2 bg-white/75 rounded border border-slate-200 text-[11px] font-mono break-all">
               {{ testResult()?.responseBodySummary }}
             </div>
+            <div *ngIf="testResult()?.errorMessage">{{ testResult()?.errorMessage }}</div>
           </div>
         </div>
       </div>
@@ -427,6 +444,11 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
       <!-- TAB 3: WEBHOOK DELIVERY LOG                                              -->
       <!-- ========================================================================= -->
       <div *ngIf="activeTab() === 'deliveries'" class="space-y-6">
+        <div *ngIf="isLoadingDeliveries()" role="status" class="text-sm text-slate-500">Loading webhook deliveries...</div>
+        <div *ngIf="deliveryError()" role="alert" class="rounded-lg bg-rose-50 border border-rose-200 p-3 text-sm text-rose-800">
+          {{ deliveryError() }}
+          <button type="button" (click)="loadDeliveries()" class="ml-2 underline">Retry</button>
+        </div>
         <!-- Log Filter Toolbar -->
         <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-wrap gap-2 items-center justify-between">
           <div class="flex items-center gap-2">
@@ -496,7 +518,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
                   <td class="px-6 py-4 text-right space-x-2">
                     <button
                       type="button"
-                      (click)="selectedDelivery.set(d)"
+                      (click)="inspectDelivery(d)"
                       class="px-2.5 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors"
                     >
                       Inspect
@@ -511,7 +533,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
                     </button>
                   </td>
                 </tr>
-                <tr *ngIf="deliveries().length === 0">
+                <tr *ngIf="deliveries().length === 0 && !isLoadingDeliveries() && !deliveryError()">
                   <td colspan="8" class="px-6 py-8 text-center text-slate-400">
                     No webhook deliveries found.
                   </td>
@@ -623,6 +645,9 @@ export class MerchantComponent implements OnInit {
 
   // Settings State
   settings = signal<WebhookSettings | null>(null);
+  isLoadingSettings = signal(false);
+  isSavingSettings = signal(false);
+  settingsError = signal<string | null>(null);
   settingsForm = {
     url: '',
     active: true,
@@ -633,11 +658,14 @@ export class MerchantComponent implements OnInit {
   testUrlOverride = '';
   isTestingWebhook = signal<boolean>(false);
   testResult = signal<TestWebhookResult | null>(null);
+  testError = signal<string | null>(null);
 
   // Deliveries State
   deliveries = signal<WebhookDeliveryItem[]>([]);
   selectedDeliveryFilter = signal<string>('ALL');
   selectedDelivery = signal<WebhookDeliveryItem | null>(null);
+  deliveryError = signal<string | null>(null);
+  isLoadingDeliveries = signal(false);
 
   deliveryFilterOptions = [
     { label: 'All', value: 'ALL' },
@@ -650,6 +678,20 @@ export class MerchantComponent implements OnInit {
     this.loadOrders();
     this.loadSettings();
     this.loadDeliveries();
+  }
+
+  selectTab(tab: ActiveTab): void {
+    if (tab !== 'settings') {
+      this.dismissSecret();
+    }
+    this.activeTab.set(tab);
+  }
+
+  dismissSecret(): void {
+    const current = this.settings();
+    if (current?.rawSecret) {
+      this.settings.set({ ...current, rawSecret: null });
+    }
   }
 
   loadOrders(page: number = this.currentPage()): void {
@@ -713,15 +755,25 @@ export class MerchantComponent implements OnInit {
   }
 
   loadSettings(): void {
-    this.merchantService.getWebhookSettings().subscribe((s) => {
-      this.settings.set(s);
-      this.settingsForm.url = s.url || '';
-      this.settingsForm.active = s.active;
-      this.settingsForm.subscribedEvents = [...s.subscribedEvents];
+    if (this.isLoadingSettings()) return;
+    this.isLoadingSettings.set(true);
+    this.settingsError.set(null);
+    this.merchantService.getWebhookSettings().pipe(finalize(() => this.isLoadingSettings.set(false))).subscribe({
+      next: (s) => {
+        this.settings.set({ ...s, rawSecret: null });
+        this.settingsForm.url = s.url || '';
+        this.settingsForm.active = s.active;
+        this.settingsForm.subscribedEvents = [...s.subscribedEvents];
+      },
+      error: (error: HttpErrorResponse) => {
+        this.settings.set(null);
+        this.settingsError.set(this.apiErrorMessage(error, 'Unable to load webhook settings.'));
+      },
     });
   }
 
   toggleEvent(eventType: string): void {
+    if (this.isSavingSettings()) return;
     const list = this.settingsForm.subscribedEvents;
     const idx = list.indexOf(eventType);
     if (idx > -1) {
@@ -732,65 +784,133 @@ export class MerchantComponent implements OnInit {
   }
 
   saveSettings(): void {
-    this.merchantService
-      .updateWebhookSettings(
-        this.settingsForm.url,
-        this.settingsForm.active,
-        this.settingsForm.subscribedEvents,
-        false
-      )
-      .subscribe((updated) => {
-        this.settings.set(updated);
-        this.notification.set('Webhook configuration saved successfully.');
-      });
+    this.submitSettings(false);
   }
 
   regenerateSecret(): void {
+    if (this.isSavingSettings() || this.isLoadingSettings()) return;
     if (confirm('Are you sure you want to regenerate your HMAC signing secret? Outbound signatures will immediately use the new secret.')) {
-      this.merchantService
-        .updateWebhookSettings(
-          this.settingsForm.url,
-          this.settingsForm.active,
-          this.settingsForm.subscribedEvents,
-          true
-        )
-        .subscribe((updated) => {
-          this.settings.set(updated);
-          this.notification.set('New signing secret generated. Copy it below.');
-        });
+      this.submitSettings(true);
     }
   }
 
+  private submitSettings(regenerateSecret: boolean): void {
+    if (this.isSavingSettings() || this.isLoadingSettings() || !this.settings()) return;
+    this.settingsError.set(null);
+    const url = this.settingsForm.url.trim();
+    if (!this.isHttpsUrl(url)) {
+      this.settingsError.set('Enter a valid public HTTPS destination URL.');
+      return;
+    }
+    this.isSavingSettings.set(true);
+    this.merchantService.updateWebhookSettings(
+      url, this.settingsForm.active, [...this.settingsForm.subscribedEvents], regenerateSecret
+    ).pipe(finalize(() => this.isSavingSettings.set(false))).subscribe({
+      next: (updated) => {
+        this.settings.set(updated);
+        this.settingsForm.url = updated.url || '';
+        this.notification.set(updated.rawSecret
+          ? 'Webhook settings saved. Copy the new signing secret now.'
+          : 'Webhook configuration saved successfully.');
+      },
+      error: (error: HttpErrorResponse) => {
+        this.settingsError.set(this.apiErrorMessage(error, 'Unable to save webhook settings.'));
+      },
+    });
+  }
+
   runTestWebhook(): void {
+    if (this.isTestingWebhook() || !this.settings()) return;
+    this.testError.set(null);
+    const override = this.testUrlOverride.trim();
+    if (override && !this.isHttpsUrl(override)) {
+      this.testError.set('Enter a valid public HTTPS test URL or leave the override empty.');
+      return;
+    }
     this.isTestingWebhook.set(true);
     this.testResult.set(null);
 
-    this.merchantService.triggerTestWebhook(this.testUrlOverride).subscribe({
+    this.merchantService.triggerTestWebhook(override).pipe(finalize(() => this.isTestingWebhook.set(false))).subscribe({
       next: (res) => {
         this.testResult.set(res);
-        this.isTestingWebhook.set(false);
-        this.loadDeliveries();
       },
-      error: () => {
-        this.isTestingWebhook.set(false);
+      error: (error: HttpErrorResponse) => {
+        if (error.status === 502 && this.isTestResult(error.error)) {
+          this.testResult.set(error.error);
+        } else {
+          this.testError.set(this.apiErrorMessage(error, 'Unable to send the test event.'));
+        }
       },
     });
   }
 
   loadDeliveries(): void {
-    this.merchantService.getDeliveryLogs(this.selectedDeliveryFilter()).subscribe((d) => {
-      this.deliveries.set(d);
+    this.isLoadingDeliveries.set(true);
+    this.deliveryError.set(null);
+    this.merchantService.getDeliveryLogs(this.selectedDeliveryFilter())
+      .pipe(finalize(() => this.isLoadingDeliveries.set(false))).subscribe({
+      next: (d) => this.deliveries.set(d),
+      error: (error: HttpErrorResponse) => {
+        this.deliveries.set([]);
+        this.deliveryError.set(this.apiErrorMessage(error, 'Unable to load webhook deliveries.'));
+      },
+    });
+  }
+
+  inspectDelivery(item: WebhookDeliveryItem): void {
+    this.deliveryError.set(null);
+    this.merchantService.getDeliveryDetail(item.deliveryId).subscribe({
+      next: (detail) => this.selectedDelivery.set({
+        ...item,
+        ...detail,
+        httpStatusCode: detail.httpStatusCode === null ? undefined : detail.httpStatusCode,
+        lastAttemptAt: detail.lastAttemptAt ?? undefined,
+        payloadJson: detail.payload == null ? undefined : JSON.stringify(detail.payload, null, 2),
+        requestHeaders: detail.requestHeaders || undefined,
+        responseHeaders: detail.responseHeaders || undefined,
+        responseBody: detail.responseBody || undefined,
+      }),
+      error: (error: HttpErrorResponse) => {
+        this.deliveryError.set(this.apiErrorMessage(error, 'Unable to load delivery details.'));
+      },
     });
   }
 
   retryDelivery(deliveryId: string): void {
-    this.merchantService.retryDelivery(deliveryId).subscribe((updated) => {
-      this.notification.set(`Delivery retry completed: HTTP ${updated.httpStatusCode} (${updated.status})`);
-      this.loadDeliveries();
-      if (this.selectedDelivery()?.deliveryId === deliveryId) {
-        this.selectedDelivery.set(updated);
-      }
+    this.merchantService.retryDelivery(deliveryId).subscribe({
+      next: (updated) => {
+        this.notification.set(`Delivery retry accepted (${updated.status}).`);
+        this.loadDeliveries();
+        const selected = this.selectedDelivery();
+        if (selected?.deliveryId === deliveryId) {
+          this.inspectDelivery(selected);
+        }
+      },
+      error: (error: HttpErrorResponse) => {
+        this.deliveryError.set(this.apiErrorMessage(error, 'Unable to retry delivery.'));
+      },
     });
+  }
+
+  private isHttpsUrl(value: string): boolean {
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' && !!url.hostname && !url.username && !url.password;
+    } catch {
+      return false;
+    }
+  }
+
+  private isTestResult(value: unknown): value is TestWebhookResult {
+    return typeof value === 'object' && value !== null &&
+      'success' in value && 'statusCode' in value && 'latencyMs' in value;
+  }
+
+  private apiErrorMessage(error: HttpErrorResponse, fallback: string): string {
+    if (error.status === 400) return 'The URL or request was rejected. Check the destination and try again.';
+    if (error.status === 401) return 'Your session has expired. Sign in and try again.';
+    if (error.status === 403) return 'Your merchant account cannot perform this action.';
+    return fallback;
   }
 
   getStatusBadgeClass(status: ParcelLifecycleStatus): string {
