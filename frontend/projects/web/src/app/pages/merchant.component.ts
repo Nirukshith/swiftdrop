@@ -863,7 +863,7 @@ export class MerchantComponent implements OnInit {
       next: (detail) => this.selectedDelivery.set({
         ...item,
         ...detail,
-        httpStatusCode: detail.httpStatusCode ?? undefined,
+        httpStatusCode: detail.httpStatusCode === null ? undefined : detail.httpStatusCode,
         lastAttemptAt: detail.lastAttemptAt ?? undefined,
         payloadJson: detail.payload == null ? undefined : JSON.stringify(detail.payload, null, 2),
         requestHeaders: detail.requestHeaders || undefined,
