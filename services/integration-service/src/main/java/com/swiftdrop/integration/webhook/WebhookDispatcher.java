@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -12,6 +13,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -25,14 +27,21 @@ public class WebhookDispatcher {
     private final SsrfGuard ssrfGuard;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    private final Clock clock;
 
+    @Autowired
     public WebhookDispatcher(SsrfGuard ssrfGuard, ObjectMapper objectMapper) {
-        this.ssrfGuard = ssrfGuard;
-        this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newBuilder()
+        this(ssrfGuard, objectMapper, HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .followRedirects(HttpClient.Redirect.NEVER)
-                .build();
+                .build(), Clock.systemUTC());
+    }
+
+    WebhookDispatcher(SsrfGuard ssrfGuard, ObjectMapper objectMapper, HttpClient httpClient, Clock clock) {
+        this.ssrfGuard = ssrfGuard;
+        this.objectMapper = objectMapper;
+        this.httpClient = httpClient;
+        this.clock = clock;
     }
 
     public DispatchResult dispatch(String destinationUrl, String secret, String deliveryId, Object payloadObj) {
@@ -52,7 +61,7 @@ public class WebhookDispatcher {
         }
 
         // 3. Cryptographic signature generation
-        long timestamp = Instant.now().getEpochSecond();
+        long timestamp = Instant.now(clock).getEpochSecond();
         String signatureHeader = WebhookSigner.sign(rawJson, timestamp, secret);
         String timestampStr = String.valueOf(timestamp);
 
@@ -104,7 +113,8 @@ public class WebhookDispatcher {
             );
         } catch (IOException | InterruptedException e) {
             int latencyMs = (int) (System.currentTimeMillis() - startTime);
-            log.warn("Webhook dispatch failed to {}: {}", destinationUrl, e.getMessage());
+            // Transport exception messages can include merchant-provided URLs or credentials.
+            log.warn("Webhook transport failure: {}", e.getClass().getSimpleName());
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
@@ -116,7 +126,7 @@ public class WebhookDispatcher {
                     Map.of(),
                     null,
                     null,
-                    e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName(),
+                    "Webhook transport failure: " + e.getClass().getSimpleName(),
                     signatureHeader,
                     timestampStr
             );
