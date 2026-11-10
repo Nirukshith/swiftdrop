@@ -9,8 +9,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
@@ -20,16 +21,19 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(WebhookController.class)
-@AutoConfigureMockMvc(addFilters = false)
+@AutoConfigureMockMvc
 class WebhookControllerTest {
 
     @Autowired
@@ -43,8 +47,53 @@ class WebhookControllerTest {
 
     private final UUID merchantId = UUID.fromString("9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d");
 
+    private RequestPostProcessor merchantJwt() {
+        return jwt().jwt(token -> token.subject("merchant-user")
+                        .claim("role", "MERCHANT")
+                        .claim("merchantId", merchantId.toString()))
+                .authorities(new SimpleGrantedAuthority("ROLE_MERCHANT"));
+    }
+
     @Test
-    @WithMockUser
+    @DisplayName("Webhook settings use the authenticated merchant even when a different ID is supplied")
+    void settings_ignoreSpoofedMerchantHeader() throws Exception {
+        UUID otherMerchant = UUID.randomUUID();
+        when(webhookService.getSettings(merchantId)).thenReturn(new WebhookSettingsResponse(
+                merchantId, null, false, List.of(), false, null, null, Instant.now(), Instant.now()));
+
+        mockMvc.perform(get("/api/v1/merchant/webhooks/settings")
+                        .with(merchantJwt())
+                        .header("X-Merchant-Id", otherMerchant.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.merchantId").value(merchantId.toString()));
+
+        verify(webhookService).getSettings(merchantId);
+        verify(webhookService, never()).getSettings(otherMerchant);
+    }
+
+    @Test
+    @DisplayName("Non-merchant JWT cannot read webhook settings")
+    void settings_rejectNonMerchant() throws Exception {
+        mockMvc.perform(get("/api/v1/merchant/webhooks/settings")
+                        .with(jwt().jwt(token -> token.subject("customer-user")
+                                        .claim("role", "CUSTOMER")
+                                        .claim("merchantId", merchantId.toString()))
+                                .authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"))))
+                .andExpect(status().isForbidden());
+        verify(webhookService, never()).getSettings(any());
+    }
+
+    @Test
+    @DisplayName("Merchant JWT without merchantId cannot trigger a test webhook")
+    void test_rejectMissingMerchantClaim() throws Exception {
+        mockMvc.perform(post("/api/v1/merchant/webhooks/test")
+                        .with(jwt().jwt(token -> token.subject("merchant-user").claim("role", "MERCHANT"))
+                                .authorities(new SimpleGrantedAuthority("ROLE_MERCHANT"))))
+                .andExpect(status().isForbidden());
+        verify(webhookService, never()).triggerTestWebhook(any(), any());
+    }
+
+    @Test
     @DisplayName("GET /settings returns configured webhook settings")
     void getSettings_success() throws Exception {
         WebhookSettingsResponse mockResponse = new WebhookSettingsResponse(
@@ -62,7 +111,7 @@ class WebhookControllerTest {
         when(webhookService.getSettings(merchantId)).thenReturn(mockResponse);
 
         mockMvc.perform(get("/api/v1/merchant/webhooks/settings")
-                        .header("X-Merchant-Id", merchantId.toString())
+                        .with(merchantJwt())
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.merchantId").value(merchantId.toString()))
@@ -72,7 +121,6 @@ class WebhookControllerTest {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("PUT /settings updates destination URL and returns rawSecret on generation")
     void updateSettings_success() throws Exception {
         UpdateWebhookSettingsRequest request = new UpdateWebhookSettingsRequest(
@@ -98,17 +146,18 @@ class WebhookControllerTest {
                 .thenReturn(mockResponse);
 
         mockMvc.perform(put("/api/v1/merchant/webhooks/settings")
-                        .with(csrf())
-                        .header("X-Merchant-Id", merchantId.toString())
+                        .with(merchantJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.url").value("https://api.merchant.com/new-webhook"))
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.rawSecret").value("whsec_full_secret_returned_on_rotation_99ab"));
+
+        org.junit.jupiter.api.Assertions.assertFalse(mockResponse.toString().contains(mockResponse.rawSecret()));
     }
 
     @Test
-    @WithMockUser
     @DisplayName("POST /test dispatches test event and returns 200 on target success")
     void triggerTest_success() throws Exception {
         TestWebhookRequest request = new TestWebhookRequest(
@@ -132,8 +181,7 @@ class WebhookControllerTest {
                 .thenReturn(mockResult);
 
         mockMvc.perform(post("/api/v1/merchant/webhooks/test")
-                        .with(csrf())
-                        .header("X-Merchant-Id", merchantId.toString())
+                        .with(merchantJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -142,7 +190,6 @@ class WebhookControllerTest {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("POST /test returns 502 Bad Gateway when target fails")
     void triggerTest_targetFailure_returns502() throws Exception {
         TestWebhookRequest request = new TestWebhookRequest(
@@ -166,8 +213,7 @@ class WebhookControllerTest {
                 .thenReturn(mockResult);
 
         mockMvc.perform(post("/api/v1/merchant/webhooks/test")
-                        .with(csrf())
-                        .header("X-Merchant-Id", merchantId.toString())
+                        .with(merchantJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadGateway())
@@ -176,7 +222,6 @@ class WebhookControllerTest {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("GET /deliveries returns paginated log items")
     void listDeliveries_success() throws Exception {
         UUID deliveryId = UUID.randomUUID();
@@ -209,7 +254,7 @@ class WebhookControllerTest {
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/v1/merchant/webhooks/deliveries")
-                        .header("X-Merchant-Id", merchantId.toString()))
+                        .with(merchantJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].deliveryId").value(deliveryId.toString()))
@@ -217,7 +262,6 @@ class WebhookControllerTest {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("GET /deliveries/{deliveryId} returns delivery detail")
     void getDeliveryDetail_success() throws Exception {
         UUID deliveryId = UUID.randomUUID();
@@ -244,7 +288,7 @@ class WebhookControllerTest {
         when(webhookService.getDeliveryDetail(merchantId, deliveryId)).thenReturn(detail);
 
         mockMvc.perform(get("/api/v1/merchant/webhooks/deliveries/" + deliveryId)
-                        .header("X-Merchant-Id", merchantId.toString()))
+                        .with(merchantJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.deliveryId").value(deliveryId.toString()))
                 .andExpect(jsonPath("$.status").value("SUCCESS"))
@@ -252,7 +296,6 @@ class WebhookControllerTest {
     }
 
     @Test
-    @WithMockUser
     @DisplayName("GET /deliveries/{deliveryId} returns 404 when not found")
     void getDeliveryDetail_notFound() throws Exception {
         UUID deliveryId = UUID.randomUUID();
@@ -260,12 +303,11 @@ class WebhookControllerTest {
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Webhook delivery not found"));
 
         mockMvc.perform(get("/api/v1/merchant/webhooks/deliveries/" + deliveryId)
-                        .header("X-Merchant-Id", merchantId.toString()))
+                        .with(merchantJwt()))
                 .andExpect(status().isNotFound());
     }
 
     @Test
-    @WithMockUser
     @DisplayName("POST /deliveries/{deliveryId}/retry triggers retry and returns 202 Accepted")
     void retryDelivery_success() throws Exception {
         UUID deliveryId = UUID.randomUUID();
@@ -290,8 +332,7 @@ class WebhookControllerTest {
         when(webhookService.retryDelivery(merchantId, deliveryId)).thenReturn(updated);
 
         mockMvc.perform(post("/api/v1/merchant/webhooks/deliveries/" + deliveryId + "/retry")
-                        .with(csrf())
-                        .header("X-Merchant-Id", merchantId.toString()))
+                        .with(merchantJwt()))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.attempts").value(2))
                 .andExpect(jsonPath("$.status").value("SUCCESS"));

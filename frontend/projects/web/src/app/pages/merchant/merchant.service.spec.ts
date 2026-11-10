@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
-import { MerchantOrderListPage, OrderCounts } from './merchant.model';
+import { MerchantOrderListPage, OrderCounts, WebhookSettings } from './merchant.model';
 import { MerchantService } from './merchant.service';
 
 describe('MerchantService', () => {
@@ -116,5 +116,58 @@ describe('MerchantService', () => {
     expect(result.total).toBe(15);
     expect(result.delivered).toBe(4);
     expect(result.inTransit).toBe(4);
+  });
+
+  const webhookSettings: WebhookSettings = {
+    merchantId: '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d',
+    url: 'https://merchant.example/webhook',
+    active: true,
+    subscribedEvents: ['PARCEL_STATUS_CHANGED'],
+    secretConfigured: true,
+    secretPreview: 'whsec_...1234',
+    rawSecret: null,
+    createdAt: '2026-11-11T10:00:00Z',
+    updatedAt: '2026-11-11T10:00:00Z',
+  };
+
+  it('loads settings from the authenticated merchant endpoint without identity headers', async () => {
+    const result = firstValueFrom(service.getWebhookSettings());
+    const req = httpMock.expectOne('/api/v1/merchant/webhooks/settings');
+    expect(req.request.method).toBe('GET');
+    expect(req.request.headers.has('X-Merchant-Id')).toBe(false);
+    req.flush(webhookSettings);
+    expect(await result).toEqual(webhookSettings);
+  });
+
+  it('saves settings with the merged request shape and accepts a one-time secret', async () => {
+    const result = firstValueFrom(service.updateWebhookSettings(
+      'https://merchant.example/webhook', true, ['PARCEL_STATUS_CHANGED'], true));
+    const req = httpMock.expectOne('/api/v1/merchant/webhooks/settings');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({
+      url: 'https://merchant.example/webhook', active: true,
+      subscribedEvents: ['PARCEL_STATUS_CHANGED'], regenerateSecret: true,
+    });
+    req.flush({ ...webhookSettings, rawSecret: 'one-time-secret' });
+    expect((await result).rawSecret).toBe('one-time-secret');
+  });
+
+  it('posts a real test request and omits a blank override', async () => {
+    const result = firstValueFrom(service.triggerTestWebhook('  '));
+    const req = httpMock.expectOne('/api/v1/merchant/webhooks/test');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({});
+    req.flush({ success: true, statusCode: 204, latencyMs: 12,
+      attemptedAt: '2026-11-11T10:00:00Z', targetUrl: webhookSettings.url,
+      signatureSent: 't=1,v1=abc', timestampSent: '1' });
+    expect((await result).statusCode).toBe(204);
+  });
+
+  it('loads persisted delivery rows instead of manufactured test entries', async () => {
+    const result = firstValueFrom(service.getDeliveryLogs('FAILED'));
+    const req = httpMock.expectOne((request) => request.url === '/api/v1/merchant/webhooks/deliveries');
+    expect(req.request.params.get('status')).toBe('FAILED');
+    req.flush({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 20 });
+    expect(await result).toEqual([]);
   });
 });

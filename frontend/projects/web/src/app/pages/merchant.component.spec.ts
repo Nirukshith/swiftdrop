@@ -1,7 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Subject, of, throwError } from 'rxjs';
 import { MerchantComponent } from './merchant.component';
-import { MerchantOrderListPage, OrderCounts } from './merchant/merchant.model';
+import { MerchantOrderListPage, OrderCounts, WebhookSettings } from './merchant/merchant.model';
 import { MerchantService } from './merchant/merchant.service';
 
 describe('MerchantComponent', () => {
@@ -248,5 +249,43 @@ describe('MerchantComponent', () => {
     expect(component.isTestingWebhook()).toBe(false);
     expect(component.testResult()).toBeTruthy();
     expect(component.testResult()?.success).toBe(true);
+  });
+
+  it('blocks duplicate saves until the API responds', () => {
+    const pending = new Subject<WebhookSettings>();
+    merchantService.updateWebhookSettings.mockReturnValue(pending);
+    component.saveSettings();
+    component.saveSettings();
+    expect(merchantService.updateWebhookSettings).toHaveBeenCalledTimes(1);
+    expect(component.isSavingSettings()).toBe(true);
+    pending.next({ ...component.settings()!, updatedAt: '2026-11-11T10:00:00Z' });
+    pending.complete();
+    expect(component.isSavingSettings()).toBe(false);
+  });
+
+  it('shows validation errors without submitting an invalid URL', () => {
+    component.settingsForm.url = 'http://localhost/private';
+    component.saveSettings();
+    expect(merchantService.updateWebhookSettings).not.toHaveBeenCalled();
+    expect(component.settingsError()).toContain('HTTPS');
+  });
+
+  it('shows a failed test delivery returned in the 502 response body', () => {
+    merchantService.triggerTestWebhook.mockReturnValue(throwError(() => new HttpErrorResponse({
+      status: 502,
+      error: { success: false, statusCode: 500, latencyMs: 50,
+        attemptedAt: '2026-11-11T10:00:00Z', targetUrl: 'https://merchant.example/webhook',
+        signatureSent: 't=1,v1=abc', timestampSent: '1', errorMessage: 'Target returned HTTP 500' },
+    })));
+    component.runTestWebhook();
+    expect(component.testResult()?.success).toBe(false);
+    expect(component.testResult()?.statusCode).toBe(500);
+    expect(component.isTestingWebhook()).toBe(false);
+  });
+
+  it('clears the one-time secret on leaving settings', () => {
+    component.settings.set({ ...component.settings()!, rawSecret: 'one-time-secret' });
+    component.selectTab('orders');
+    expect(component.settings()?.rawSecret).toBeNull();
   });
 });

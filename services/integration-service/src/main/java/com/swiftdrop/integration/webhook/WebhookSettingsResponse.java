@@ -15,4 +15,10 @@ public record WebhookSettingsResponse(
         Instant createdAt,
         Instant updatedAt
 ) {
+    @Override
+    public String toString() {
+        return "WebhookSettingsResponse[merchantId=" + merchantId
+                + ", active=" + active
+                + ", secretConfigured=" + secretConfigured + "]";
+    }
 }

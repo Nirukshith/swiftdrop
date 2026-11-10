@@ -106,6 +106,32 @@ export interface WebhookDeliveryItem {
   retryHistory?: DeliveryAttempt[];
 }
 
+export interface WebhookDeliveryPage {
+  content: WebhookDeliveryItem[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  size: number;
+}
+
+export interface WebhookDeliveryDetail {
+  deliveryId: string;
+  eventId: string;
+  eventType: string;
+  status: WebhookDeliveryStatus;
+  targetUrl: string;
+  attempts: number;
+  httpStatusCode: number | null;
+  requestHeaders: Record<string, string> | null;
+  payload: unknown;
+  responseHeaders: Record<string, string> | null;
+  responseBody: string | null;
+  lastAttemptAt: string | null;
+  nextRetryAt: string | null;
+  retryHistory: DeliveryAttempt[];
+  createdAt: string;
+}
+
 export interface TestWebhookResult {
   success: boolean;
   statusCode: number;
