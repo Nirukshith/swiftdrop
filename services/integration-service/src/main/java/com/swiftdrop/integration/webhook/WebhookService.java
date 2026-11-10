@@ -29,6 +29,17 @@ public class WebhookService {
     private static final Logger log = LoggerFactory.getLogger(WebhookService.class);
     public static final String CONSUMER_GROUP = "integration-webhook";
 
+    public enum DeliveryDisposition {
+        SKIPPED, SUCCESS, RETRYABLE_FAILURE, TERMINAL_FAILURE
+    }
+
+    public record DeliveryOutcome(DeliveryDisposition disposition, UUID deliveryId,
+                                  UUID merchantId, String errorMessage) {
+        static DeliveryOutcome skipped() {
+            return new DeliveryOutcome(DeliveryDisposition.SKIPPED, null, null, null);
+        }
+    }
+
     private final WebhookEndpointRepository endpointRepository;
     private final WebhookDeliveryRepository deliveryRepository;
     private final ProcessedEventRepository processedEventRepository;
@@ -238,12 +249,22 @@ public class WebhookService {
         WebhookDeliveryEntity delivery = deliveryRepository.findByDeliveryIdAndMerchantId(deliveryId, merchantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Webhook delivery not found"));
 
+        if (!"FAILED".equals(delivery.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only failed webhook deliveries can be retried");
+        }
+
         WebhookEndpointEntity endpoint = endpointRepository.findById(merchantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Webhook settings not configured"));
 
+        if (!endpoint.isActive()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Webhook endpoint is inactive");
+        }
+
         String secret = cryptoService.decrypt(endpoint.getEncryptedSecret());
 
-        delivery.setAttempts(delivery.getAttempts() + 1);
+        // Manual replay starts a new five-attempt cycle while retaining the existing history.
+        delivery.setAttempts(1);
+        delivery.setNextRetryAt(null);
         delivery.setLastAttemptAt(Instant.now());
 
         WebhookDispatcher.DispatchResult result = dispatcher.dispatch(
@@ -278,87 +299,160 @@ public class WebhookService {
     }
 
     @Transactional
-    public void processParcelStatusChangedEvent(EventEnvelope event) {
+    public DeliveryOutcome processParcelStatusChangedEvent(EventEnvelope event) {
+        return processParcelStatusChangedEvent(event, false);
+    }
+
+    @Transactional
+    public DeliveryOutcome processParcelStatusChangedEvent(EventEnvelope event, boolean fromRetryTopic) {
         if (event == null || event.eventId() == null) {
-            return;
+            return DeliveryOutcome.skipped();
         }
 
         UUID eventId;
         try {
             eventId = UUID.fromString(event.eventId());
         } catch (IllegalArgumentException e) {
-            log.warn("Malformed eventId in parcel status changed event: {}", event.eventId());
-            return;
+            log.warn("Malformed eventId in parcel status changed event");
+            return DeliveryOutcome.skipped();
         }
 
-        // Idempotency check: consumer-scoped
         if (processedEventRepository.existsByEventIdAndConsumerGroup(eventId, CONSUMER_GROUP)) {
-            log.info("Event {} has already been processed by consumer group {}; skipping.", eventId, CONSUMER_GROUP);
-            return;
+            return DeliveryOutcome.skipped();
         }
-
-        // Only process merchant-associated parcels
         if (event.merchantId() == null || event.merchantId().isBlank()) {
-            log.debug("Event {} does not carry a merchantId; skipping webhook dispatch.", eventId);
             recordProcessedEvent(eventId);
-            return;
+            return DeliveryOutcome.skipped();
         }
 
         UUID merchantId;
         try {
             merchantId = UUID.fromString(event.merchantId());
         } catch (IllegalArgumentException e) {
-            log.warn("Invalid merchantId UUID in event {}: {}", eventId, event.merchantId());
+            log.warn("Invalid merchantId UUID in event {}", eventId);
             recordProcessedEvent(eventId);
-            return;
+            return DeliveryOutcome.skipped();
+        }
+
+        Optional<WebhookDeliveryEntity> existing = deliveryRepository
+                .findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(eventId, merchantId);
+        if (existing.isPresent() && ("SUCCESS".equals(existing.get().getStatus())
+                || "FAILED".equals(existing.get().getStatus())
+                || "CANCELLED".equals(existing.get().getStatus()))) {
+            recordProcessedEvent(eventId);
+            return DeliveryOutcome.skipped();
+        }
+        if (existing.isPresent() && !fromRetryTopic) {
+            // A duplicate on the main topic must not bypass the Kafka retry delay.
+            return DeliveryOutcome.skipped();
         }
 
         Optional<WebhookEndpointEntity> endpointOpt = endpointRepository.findById(merchantId);
-        if (endpointOpt.isEmpty() || !endpointOpt.get().isActive() || endpointOpt.get().getUrl() == null) {
-            log.debug("No active webhook endpoint configured for merchant {}; skipping event {}.", merchantId, eventId);
+        if (endpointOpt.isEmpty() || !endpointOpt.get().isActive() || endpointOpt.get().getUrl() == null
+                || !endpointOpt.get().isSubscribedTo(event.eventType())) {
+            existing.ifPresent(delivery -> {
+                delivery.setStatus("CANCELLED");
+                delivery.setNextRetryAt(null);
+                deliveryRepository.save(delivery);
+            });
             recordProcessedEvent(eventId);
-            return;
+            return DeliveryOutcome.skipped();
         }
 
         WebhookEndpointEntity endpoint = endpointOpt.get();
-        if (!endpoint.isSubscribedTo(event.eventType())) {
-            log.debug("Merchant {} is not subscribed to event type {}; skipping event {}.", merchantId, event.eventType(), eventId);
-            recordProcessedEvent(eventId);
-            return;
+        WebhookDeliveryEntity delivery = existing.orElseGet(() -> newDelivery(event, eventId, merchantId, endpoint));
+        int attemptNumber = delivery.getAttempts() + 1;
+        Instant attemptedAt = Instant.now();
+        delivery.setAttempts(attemptNumber);
+        delivery.setStatus("PENDING");
+        delivery.setLastAttemptAt(attemptedAt);
+        delivery.setNextRetryAt(null);
+
+        WebhookDispatcher.DispatchResult result;
+        try {
+            String secret = cryptoService.decrypt(endpoint.getEncryptedSecret());
+            result = dispatcher.dispatch(delivery.getTargetUrl(), secret,
+                    delivery.getDeliveryId().toString(), delivery.getPayload());
+        } catch (SsrfException e) {
+            boolean retryableDnsFailure = e.isTransientDnsFailure();
+            result = new WebhookDispatcher.DispatchResult(false, retryableDnsFailure ? 0 : 400, 0,
+                    Map.of(), Map.of(), null, null,
+                    retryableDnsFailure ? "Webhook DNS resolution failed" : "Webhook destination rejected",
+                    null, null);
         }
 
-        // Create webhook delivery record in PENDING state
-        UUID deliveryId = UUID.randomUUID();
-        WebhookPayload payload = new WebhookPayload(
-                deliveryId,
-                eventId,
-                event.eventType(),
-                event.occurredAt() != null ? event.occurredAt() : Instant.now(),
-                event.sequence() != null ? event.sequence() : 1L,
-                merchantId,
-                new WebhookParcelFields(
-                        event.parcelId(),
-                        event.trackingNumber(),
-                        event.toStatus(),
-                        event.fromStatus(),
-                        event.toStatus(),
-                        null,
-                        null,
-                        null,
-                        event.occurredAt() != null ? event.occurredAt() : Instant.now(),
-                        event.reason()
-                )
-        );
+        delivery.setHttpStatusCode(result.statusCode());
+        delivery.setErrorSummary(result.errorMessage());
+        try {
+            delivery.setRequestHeaders(objectMapper.writeValueAsString(result.requestHeaders()));
+            delivery.setResponseHeaders(objectMapper.writeValueAsString(result.responseHeaders()));
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to serialize webhook headers");
+        }
+        delivery.setResponseBody(result.responseBodySummary());
+        delivery.addAttempt(new WebhookDeliveryAttemptEntity(delivery, attemptNumber, attemptedAt,
+                result.statusCode(), result.latencyMs(), result.success(), result.errorMessage()));
 
+        DeliveryDisposition disposition;
+        if (result.success()) {
+            delivery.setStatus("SUCCESS");
+            disposition = DeliveryDisposition.SUCCESS;
+        } else if (WebhookDeliveryPolicy.isRetryable(result)) {
+            delivery.setNextRetryAt(WebhookDeliveryPolicy.nextDelay(attemptNumber)
+                    .map(delay -> Instant.now().plus(delay)).orElse(null));
+            delivery.setStatus(attemptNumber < WebhookDeliveryPolicy.MAX_ATTEMPTS ? "PENDING_RETRY" : "FAILED");
+            disposition = DeliveryDisposition.RETRYABLE_FAILURE;
+        } else {
+            delivery.setStatus("FAILED");
+            disposition = DeliveryDisposition.TERMINAL_FAILURE;
+        }
+
+        deliveryRepository.save(delivery);
+        if (disposition != DeliveryDisposition.RETRYABLE_FAILURE
+                || attemptNumber >= WebhookDeliveryPolicy.MAX_ATTEMPTS) {
+            recordProcessedEvent(eventId);
+        }
+        return new DeliveryOutcome(disposition, delivery.getDeliveryId(), merchantId, result.errorMessage());
+    }
+
+    @Transactional
+    public void markDltFailed(EventEnvelope event) {
+        if (event == null || event.eventId() == null || event.merchantId() == null) {
+            return;
+        }
+        try {
+            UUID eventId = UUID.fromString(event.eventId());
+            UUID merchantId = UUID.fromString(event.merchantId());
+            deliveryRepository.findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(eventId, merchantId)
+                    .ifPresent(delivery -> {
+                        if (!"SUCCESS".equals(delivery.getStatus()) && !"CANCELLED".equals(delivery.getStatus())) {
+                            delivery.setStatus("FAILED");
+                            delivery.setNextRetryAt(null);
+                            deliveryRepository.save(delivery);
+                        }
+                    });
+            if (!processedEventRepository.existsByEventIdAndConsumerGroup(eventId, CONSUMER_GROUP)) {
+                recordProcessedEvent(eventId);
+            }
+        } catch (IllegalArgumentException e) {
+            log.warn("Malformed event identifiers in webhook DLT record");
+        }
+    }
+
+    private WebhookDeliveryEntity newDelivery(EventEnvelope event, UUID eventId, UUID merchantId,
+                                               WebhookEndpointEntity endpoint) {
+        UUID deliveryId = UUID.randomUUID();
+        Instant occurredAt = event.occurredAt() != null ? event.occurredAt() : Instant.now();
+        WebhookPayload payload = new WebhookPayload(deliveryId, eventId, event.eventType(), occurredAt,
+                event.sequence() != null ? event.sequence() : 1L, merchantId,
+                new WebhookParcelFields(event.parcelId(), event.trackingNumber(), event.toStatus(),
+                        event.fromStatus(), event.toStatus(), null, null, null, occurredAt, event.reason()));
         String payloadJson;
         try {
             payloadJson = objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException e) {
-            log.error("Failed to serialize webhook payload: {}", e.getMessage(), e);
-            recordProcessedEvent(eventId);
-            return;
+            throw new IllegalStateException("Unable to serialize webhook payload");
         }
-
         WebhookDeliveryEntity delivery = new WebhookDeliveryEntity();
         delivery.setDeliveryId(deliveryId);
         delivery.setEventId(eventId);
@@ -367,38 +461,10 @@ public class WebhookService {
         delivery.setTrackingNumber(event.trackingNumber());
         delivery.setTargetUrl(endpoint.getUrl());
         delivery.setStatus("PENDING");
-        delivery.setAttempts(1);
+        delivery.setAttempts(0);
         delivery.setPayload(payloadJson);
         delivery.setCreatedAt(Instant.now());
-        delivery.setLastAttemptAt(Instant.now());
-
-        String secret = cryptoService.decrypt(endpoint.getEncryptedSecret());
-        WebhookDispatcher.DispatchResult result = dispatcher.dispatch(endpoint.getUrl(), secret, deliveryId.toString(), payloadJson);
-
-        delivery.setHttpStatusCode(result.statusCode());
-        delivery.setStatus(result.success() ? "SUCCESS" : "FAILED");
-        delivery.setErrorSummary(result.errorMessage());
-        try {
-            delivery.setRequestHeaders(objectMapper.writeValueAsString(result.requestHeaders()));
-            delivery.setResponseHeaders(objectMapper.writeValueAsString(result.responseHeaders()));
-        } catch (JsonProcessingException e) {
-            log.warn("Failed to serialize headers: {}", e.getMessage());
-        }
-        delivery.setResponseBody(result.responseBodySummary());
-
-        WebhookDeliveryAttemptEntity attempt = new WebhookDeliveryAttemptEntity(
-                delivery,
-                1,
-                Instant.now(),
-                result.statusCode(),
-                result.latencyMs(),
-                result.success(),
-                result.errorMessage()
-        );
-        delivery.addAttempt(attempt);
-
-        deliveryRepository.save(delivery);
-        recordProcessedEvent(eventId);
+        return delivery;
     }
 
     private void recordProcessedEvent(UUID eventId) {

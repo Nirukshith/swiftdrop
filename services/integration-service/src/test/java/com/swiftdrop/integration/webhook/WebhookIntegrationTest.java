@@ -14,15 +14,19 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 
 @SpringBootTest
 @Testcontainers
@@ -165,5 +169,168 @@ class WebhookIntegrationTest {
 
         assertThat(processedEventRepository.existsByEventIdAndConsumerGroup(eventId, WebhookService.CONSUMER_GROUP))
                 .isTrue();
+    }
+
+    @Test
+    @DisplayName("Manual replay resets attempt count and cannot repeat a successful delivery")
+    void failedDelivery_canBeReplayedOnlyUntilItSucceeds() {
+        UUID merchantId = UUID.randomUUID();
+        String webhookUrl = "https://api.testmerchant.com/swiftdrop/webhook";
+        webhookService.updateSettings(merchantId, new UpdateWebhookSettingsRequest(
+                webhookUrl, true, List.of("PARCEL_STATUS_CHANGED"), true));
+
+        WebhookDeliveryEntity failed = new WebhookDeliveryEntity();
+        failed.setDeliveryId(UUID.randomUUID());
+        failed.setEventId(UUID.randomUUID());
+        failed.setMerchantId(merchantId);
+        failed.setEventType("PARCEL_STATUS_CHANGED");
+        failed.setTargetUrl(webhookUrl);
+        failed.setPayload("{}");
+        failed.setStatus("FAILED");
+        failed.setAttempts(5);
+        failed.setNextRetryAt(Instant.now().plusSeconds(20));
+        deliveryRepository.save(failed);
+
+        when(dispatcher.dispatch(eq(webhookUrl), anyString(), eq(failed.getDeliveryId().toString()), eq("{}")))
+                .thenReturn(new WebhookDispatcher.DispatchResult(
+                        true, 200, 10, Map.of(), Map.of(), "ok", "ok", null, "signature", "123"));
+
+        WebhookDeliveryDetailResponse replayed = webhookService.retryDelivery(merchantId, failed.getDeliveryId());
+        assertThat(replayed.status()).isEqualTo("SUCCESS");
+        assertThat(replayed.attempts()).isEqualTo(1);
+        assertThat(replayed.nextRetryAt()).isNull();
+        assertThat(replayed.retryHistory()).hasSize(1);
+
+        assertThatThrownBy(() -> webhookService.retryDelivery(merchantId, failed.getDeliveryId()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("Only failed webhook deliveries can be retried");
+        EventEnvelope delayedDlt = new EventEnvelope(failed.getEventId().toString(), "PARCEL_STATUS_CHANGED",
+                Instant.now(), 2L, UUID.randomUUID().toString(), "SD-20261110-100200",
+                "PICKED_UP", "IN_TRANSIT", "courier-123", null, merchantId.toString(), null, null);
+        webhookService.markDltFailed(delayedDlt);
+        assertThat(deliveryRepository.findById(failed.getDeliveryId()).orElseThrow().getStatus())
+                .isEqualTo("SUCCESS");
+        verify(dispatcher, times(1)).dispatch(eq(webhookUrl), anyString(), eq(failed.getDeliveryId().toString()), eq("{}"));
+    }
+
+    @Test
+    @DisplayName("Transient failures retain one delivery through five attempts and a duplicate main event does not send")
+    void transientFailures_followDeliveryStateAndAttemptLimit() {
+        UUID merchantId = UUID.randomUUID();
+        String webhookUrl = "http://127.0.0.1:8787/hook";
+        webhookService.updateSettings(merchantId, new UpdateWebhookSettingsRequest(
+                webhookUrl, true, List.of("PARCEL_STATUS_CHANGED"), true));
+        EventEnvelope event = statusEvent(merchantId);
+        UUID eventId = UUID.fromString(event.eventId());
+        when(dispatcher.dispatch(eq(webhookUrl), anyString(), anyString(), any()))
+                .thenReturn(failedResult(503));
+
+        WebhookService.DeliveryOutcome first = webhookService.processParcelStatusChangedEvent(event);
+        assertThat(first.disposition()).isEqualTo(WebhookService.DeliveryDisposition.RETRYABLE_FAILURE);
+        WebhookDeliveryEntity pending = deliveryRepository
+                .findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(eventId, merchantId).orElseThrow();
+        assertThat(pending.getStatus()).isEqualTo("PENDING_RETRY");
+        assertThat(pending.getAttempts()).isEqualTo(1);
+        assertThat(pending.getNextRetryAt()).isNotNull();
+        assertThat(Duration.between(pending.getLastAttemptAt(), pending.getNextRetryAt()).toMillis())
+                .isBetween(1000L, 2000L);
+        assertThat(processedEventRepository.existsByEventIdAndConsumerGroup(eventId, WebhookService.CONSUMER_GROUP))
+                .isFalse();
+
+        assertThat(webhookService.processParcelStatusChangedEvent(event).disposition())
+                .isEqualTo(WebhookService.DeliveryDisposition.SKIPPED);
+        verify(dispatcher, times(1)).dispatch(eq(webhookUrl), anyString(), anyString(), any());
+
+        for (int attempt = 2; attempt <= 5; attempt++) {
+            WebhookService.DeliveryOutcome retry = webhookService.processParcelStatusChangedEvent(event, true);
+            assertThat(retry.disposition()).isEqualTo(WebhookService.DeliveryDisposition.RETRYABLE_FAILURE);
+            assertThat(retry.deliveryId()).isEqualTo(first.deliveryId());
+            WebhookDeliveryEntity current = deliveryRepository.findById(first.deliveryId()).orElseThrow();
+            assertThat(current.getAttempts()).isEqualTo(attempt);
+            assertThat(current.getStatus()).isEqualTo(attempt == 5 ? "FAILED" : "PENDING_RETRY");
+            if (attempt == 5) {
+                assertThat(current.getNextRetryAt()).isNull();
+            } else {
+                assertThat(current.getNextRetryAt()).isNotNull();
+                long expectedDelay = 1000L << (attempt - 1);
+                assertThat(Duration.between(current.getLastAttemptAt(), current.getNextRetryAt()).toMillis())
+                        .isBetween(expectedDelay, expectedDelay + 1000L);
+            }
+        }
+
+        assertThat(processedEventRepository.existsByEventIdAndConsumerGroup(eventId, WebhookService.CONSUMER_GROUP))
+                .isTrue();
+        assertThat(webhookService.getDeliveryDetail(merchantId, first.deliveryId()).retryHistory()).hasSize(5);
+        assertThat(webhookService.listDeliveries(merchantId, null, null, null, null, 0, 10).totalElements())
+                .isEqualTo(1);
+        assertThat(webhookService.processParcelStatusChangedEvent(event, true).disposition())
+                .isEqualTo(WebhookService.DeliveryDisposition.SKIPPED);
+        verify(dispatcher, times(5)).dispatch(eq(webhookUrl), anyString(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("Timeout, network, and HTTP 429 are retryable; HTTP 4xx is terminal")
+    void classifiesFailuresWithoutReplayingClientErrors() {
+        UUID merchantId = UUID.randomUUID();
+        String webhookUrl = "http://127.0.0.1:8788/hook";
+        webhookService.updateSettings(merchantId, new UpdateWebhookSettingsRequest(
+                webhookUrl, true, List.of("PARCEL_STATUS_CHANGED"), true));
+        when(dispatcher.dispatch(eq(webhookUrl), anyString(), anyString(), any()))
+                .thenReturn(failedResult(0), failedResult(0), failedResult(429),
+                        failedResult(500), failedResult(400));
+
+        for (int status : new int[]{0, 0, 429, 500}) {
+            EventEnvelope event = statusEvent(merchantId);
+            WebhookService.DeliveryOutcome outcome = webhookService.processParcelStatusChangedEvent(event);
+            assertThat(outcome.disposition()).isEqualTo(WebhookService.DeliveryDisposition.RETRYABLE_FAILURE);
+            assertThat(deliveryRepository.findById(outcome.deliveryId()).orElseThrow().getHttpStatusCode())
+                    .isEqualTo(status);
+        }
+
+        EventEnvelope clientErrorEvent = statusEvent(merchantId);
+        WebhookService.DeliveryOutcome clientError = webhookService.processParcelStatusChangedEvent(clientErrorEvent);
+        assertThat(clientError.disposition()).isEqualTo(WebhookService.DeliveryDisposition.TERMINAL_FAILURE);
+        assertThat(deliveryRepository.findById(clientError.deliveryId()).orElseThrow().getStatus())
+                .isEqualTo("FAILED");
+        assertThat(processedEventRepository.existsByEventIdAndConsumerGroup(
+                UUID.fromString(clientErrorEvent.eventId()), WebhookService.CONSUMER_GROUP)).isTrue();
+        assertThat(webhookService.processParcelStatusChangedEvent(clientErrorEvent, true).disposition())
+                .isEqualTo(WebhookService.DeliveryDisposition.SKIPPED);
+        verify(dispatcher, times(5)).dispatch(eq(webhookUrl), anyString(), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("Deactivating an endpoint cancels a pending retry without another HTTP request")
+    void deactivatedEndpoint_cancelsPendingRetry() {
+        UUID merchantId = UUID.randomUUID();
+        String webhookUrl = "http://127.0.0.1:8791/hook";
+        webhookService.updateSettings(merchantId, new UpdateWebhookSettingsRequest(
+                webhookUrl, true, List.of("PARCEL_STATUS_CHANGED"), true));
+        when(dispatcher.dispatch(eq(webhookUrl), anyString(), anyString(), any()))
+                .thenReturn(failedResult(503));
+        EventEnvelope event = statusEvent(merchantId);
+        WebhookService.DeliveryOutcome first = webhookService.processParcelStatusChangedEvent(event);
+
+        webhookService.updateSettings(merchantId, new UpdateWebhookSettingsRequest(
+                webhookUrl, false, List.of("PARCEL_STATUS_CHANGED"), false));
+        assertThat(webhookService.processParcelStatusChangedEvent(event, true).disposition())
+                .isEqualTo(WebhookService.DeliveryDisposition.SKIPPED);
+        WebhookDeliveryEntity delivery = deliveryRepository.findById(first.deliveryId()).orElseThrow();
+        assertThat(delivery.getStatus()).isEqualTo("CANCELLED");
+        assertThat(delivery.getAttempts()).isEqualTo(1);
+        assertThat(delivery.getNextRetryAt()).isNull();
+        verify(dispatcher, times(1)).dispatch(eq(webhookUrl), anyString(), anyString(), any());
+    }
+
+    private static EventEnvelope statusEvent(UUID merchantId) {
+        return new EventEnvelope(UUID.randomUUID().toString(), "PARCEL_STATUS_CHANGED", Instant.now(),
+                2L, UUID.randomUUID().toString(), "SD-20261110-100200", "PICKED_UP", "IN_TRANSIT",
+                "courier-123", null, merchantId.toString(), null, null);
+    }
+
+    private static WebhookDispatcher.DispatchResult failedResult(int status) {
+        return new WebhookDispatcher.DispatchResult(false, status, 10, Map.of(), Map.of(), null,
+                null, status == 0 ? "Webhook transport failure: IOException" : "Target returned HTTP " + status,
+                null, null);
     }
 }

@@ -18,6 +18,8 @@ public interface WebhookDeliveryRepository extends JpaRepository<WebhookDelivery
 
     Optional<WebhookDeliveryEntity> findByDeliveryIdAndMerchantId(UUID deliveryId, UUID merchantId);
 
+    Optional<WebhookDeliveryEntity> findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(UUID eventId, UUID merchantId);
+
     @Query("SELECT d FROM WebhookDeliveryEntity d WHERE d.merchantId = :merchantId " +
             "AND (:status IS NULL OR d.status = :status) " +
             "AND (:eventType IS NULL OR d.eventType = :eventType) " +

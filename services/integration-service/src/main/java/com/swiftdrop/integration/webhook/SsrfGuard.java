@@ -63,11 +63,11 @@ public class SsrfGuard {
         try {
             addresses = InetAddress.getAllByName(host);
         } catch (UnknownHostException e) {
-            throw new SsrfException("Destination host cannot be resolved via DNS: " + host);
+            throw new SsrfException("Destination host cannot be resolved via DNS: " + host, true);
         }
 
         if (addresses == null || addresses.length == 0) {
-            throw new SsrfException("No DNS address records found for host: " + host);
+            throw new SsrfException("No DNS address records found for host: " + host, true);
         }
 
         for (InetAddress address : addresses) {
