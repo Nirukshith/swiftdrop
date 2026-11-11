@@ -246,14 +246,22 @@ export class DispatchService {
    */
   public assignParcel(
     parcelId: string,
-    courierId: string
+    courierId: string,
+    reassign = false
   ): Observable<AssignmentResult> {
-    const payload: AssignParcelRequest = { parcelId, courierId };
+    const payload: AssignParcelRequest = reassign
+      ? { parcelId, courierId, reassign: true }
+      : { parcelId, courierId };
+    let params = new HttpParams();
+    if (reassign) {
+      params = params.set('reassign', 'true');
+    }
 
     return this.http
       .post<AssignmentResult>(
         `${DispatchService.BASE_URL}/assignments`,
-        payload
+        payload,
+        { params }
       )
       .pipe(
         tap(() => {

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
@@ -38,6 +38,13 @@ type DispatchTab = 'queue' | 'workload' | 'failed';
                 class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
               >
                 Ops Hub • Port 8083
+              </span>
+              <span
+                id="live-sync-indicator"
+                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
+              >
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Live Sync (10s)
               </span>
             </div>
             <p class="text-xs sm:text-sm text-slate-500 font-medium">
@@ -967,11 +974,12 @@ type DispatchTab = 'queue' | 'workload' | 'failed';
     </div>
   `,
 })
-export class DispatchComponent implements OnInit {
+export class DispatchComponent implements OnInit, OnDestroy {
   public dispatchService = inject(DispatchService);
   private readonly route = inject(ActivatedRoute, { optional: true });
 
   public activeTab = signal<DispatchTab>('queue');
+  private pollIntervalId: any = null;
 
   // Search & Filter Signals
   public searchQuery = signal('');
@@ -1018,6 +1026,39 @@ export class DispatchComponent implements OnInit {
     this.retryLoadQueue();
     this.retryLoadWorkload();
     this.retryLoadFailed();
+    this.startLiveQueuePolling();
+  }
+
+  public ngOnDestroy(): void {
+    this.stopLiveQueuePolling();
+  }
+
+  public startLiveQueuePolling(): void {
+    this.stopLiveQueuePolling();
+    this.pollIntervalId = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+      this.performPeriodicSync();
+    }, 10000);
+  }
+
+  public stopLiveQueuePolling(): void {
+    if (this.pollIntervalId !== null) {
+      clearInterval(this.pollIntervalId);
+      this.pollIntervalId = null;
+    }
+  }
+
+  public performPeriodicSync(): void {
+    const tab = this.activeTab();
+    if (tab === 'queue' && !this.dispatchService.isLoadingParcels()) {
+      this.retryLoadQueue();
+    } else if (tab === 'workload' && !this.dispatchService.isLoadingCouriers()) {
+      this.retryLoadWorkload();
+    } else if (tab === 'failed' && !this.dispatchService.isLoadingFailed()) {
+      this.retryLoadFailed();
+    }
   }
 
   public retryLoadQueue(): void {
@@ -1241,11 +1282,8 @@ export class DispatchComponent implements OnInit {
 
     this.dispatchService.assignParcel(parcel.parcelId, courierId).subscribe({
       next: () => {
-        const courier = this.dispatchService
-          .couriers()
-          .find((c) => c.courierId === courierId);
         this.showToast(
-          `Parcel ${parcel.trackingNumber} assigned to ${courier?.name || 'Courier'}. Workload count updated!`,
+          `Assignment accepted for parcel ${parcel.trackingNumber}; updating workload via event stream...`,
           'success'
         );
         this.selectedParcelForAssign.set(null);
@@ -1262,6 +1300,7 @@ export class DispatchComponent implements OnInit {
 
         if (err?.status === 409) {
           this.retryLoadQueue();
+          this.retryLoadWorkload();
         }
       },
     });
