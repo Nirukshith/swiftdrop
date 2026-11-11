@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.common.EventEnvelope;
+import com.swiftdrop.integration.merchant.MerchantOrder;
+import com.swiftdrop.integration.merchant.MerchantOrderQuery;
+import com.swiftdrop.integration.merchant.ParcelStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -41,6 +44,7 @@ public class WebhookService {
     }
 
     private final WebhookEndpointRepository endpointRepository;
+    private final MerchantOrderQuery merchantOrderQuery;
     private final WebhookDeliveryRepository deliveryRepository;
     private final ProcessedEventRepository processedEventRepository;
     private final WebhookCryptoService cryptoService;
@@ -50,6 +54,7 @@ public class WebhookService {
 
     public WebhookService(
             WebhookEndpointRepository endpointRepository,
+            MerchantOrderQuery merchantOrderQuery,
             WebhookDeliveryRepository deliveryRepository,
             ProcessedEventRepository processedEventRepository,
             WebhookCryptoService cryptoService,
@@ -57,6 +62,7 @@ public class WebhookService {
             WebhookDispatcher dispatcher,
             ObjectMapper objectMapper) {
         this.endpointRepository = endpointRepository;
+        this.merchantOrderQuery = merchantOrderQuery;
         this.deliveryRepository = deliveryRepository;
         this.processedEventRepository = processedEventRepository;
         this.cryptoService = cryptoService;
@@ -332,6 +338,11 @@ public class WebhookService {
             return DeliveryOutcome.skipped();
         }
 
+        if (!projectMerchantOrderStatus(event, merchantId)) {
+            recordProcessedEvent(eventId);
+            return DeliveryOutcome.skipped();
+        }
+
         Optional<WebhookDeliveryEntity> existing = deliveryRepository
                 .findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(eventId, merchantId);
         if (existing.isPresent() && ("SUCCESS".equals(existing.get().getStatus())
@@ -411,6 +422,38 @@ public class WebhookService {
             recordProcessedEvent(eventId);
         }
         return new DeliveryOutcome(disposition, delivery.getDeliveryId(), merchantId, result.errorMessage());
+    }
+
+    /** Keeps the M6 order read model current even when this merchant has no active webhook. */
+    private boolean projectMerchantOrderStatus(EventEnvelope event, UUID merchantId) {
+        if (!"PARCEL_STATUS_CHANGED".equals(event.eventType()) || event.occurredAt() == null) {
+            return false;
+        }
+
+        UUID parcelId;
+        ParcelStatus status;
+        try {
+            parcelId = UUID.fromString(event.parcelId());
+            status = ParcelStatus.valueOf(event.toStatus());
+        } catch (IllegalArgumentException | NullPointerException exception) {
+            log.warn("Invalid parcel identifiers or status in merchant webhook event");
+            return false;
+        }
+
+        Optional<MerchantOrder> order = merchantOrderQuery.findByParcelId(parcelId);
+        if (order.isEmpty()) {
+            // The event is the source of truth for webhook routing; M6 may not own this parcel.
+            return true;
+        }
+        MerchantOrder mappedOrder = order.get();
+        if (!merchantId.equals(mappedOrder.merchantId())) {
+            log.warn("Merchant identity does not match parcel order mapping for event {}", event.eventId());
+            return false;
+        }
+        if (mappedOrder.updatedAt() == null || !event.occurredAt().isBefore(mappedOrder.updatedAt())) {
+            merchantOrderQuery.updateParcelStatusByParcelId(parcelId, status, event.occurredAt());
+        }
+        return true;
     }
 
     @Transactional

@@ -2,6 +2,12 @@ package com.swiftdrop.integration.webhook;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.common.EventEnvelope;
+import com.swiftdrop.integration.merchant.Merchant;
+import com.swiftdrop.integration.merchant.MerchantOrderEntity;
+import com.swiftdrop.integration.merchant.MerchantOrderQuery;
+import com.swiftdrop.integration.merchant.MerchantOrderRepository;
+import com.swiftdrop.integration.merchant.MerchantOrderStatus;
+import com.swiftdrop.integration.merchant.MerchantRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +21,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Instant;
 import java.time.Duration;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -55,6 +62,15 @@ class WebhookIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private MerchantRepository merchantRepository;
+
+    @Autowired
+    private MerchantOrderRepository merchantOrderRepository;
+
+    @Autowired
+    private MerchantOrderQuery merchantOrderQuery;
 
     @MockBean
     private WebhookDispatcher dispatcher;
@@ -360,6 +376,71 @@ class WebhookIntegrationTest {
         return new EventEnvelope(UUID.randomUUID().toString(), "PARCEL_STATUS_CHANGED", Instant.now(),
                 2L, UUID.randomUUID().toString(), "SD-20261110-100200", "PICKED_UP", "IN_TRANSIT",
                 "courier-123", null, merchantId.toString(), null, null);
+    }
+
+    @Test
+    @DisplayName("Status events update only the owning merchant order even without an active webhook")
+    void statusEvent_updatesMerchantOrderProjection() {
+        UUID merchantA = createMerchant();
+        UUID merchantB = createMerchant();
+        Instant createdAt = Instant.now().minus(Duration.ofMinutes(5));
+        MerchantOrderEntity orderA = createOrder(merchantA, createdAt);
+        MerchantOrderEntity orderB = createOrder(merchantB, createdAt);
+        Instant occurredAt = createdAt.plus(Duration.ofMinutes(1));
+        EventEnvelope event = orderStatusEvent(merchantA, orderA.getParcelId(), occurredAt, "CREATED", "PICKED_UP");
+
+        assertThat(webhookService.processParcelStatusChangedEvent(event).disposition())
+                .isEqualTo(WebhookService.DeliveryDisposition.SKIPPED);
+        assertThat(merchantOrderRepository.findById(orderA.getOrderId()).orElseThrow().getStatus())
+                .isEqualTo(MerchantOrderStatus.PICKED_UP);
+        assertThat(merchantOrderRepository.findById(orderB.getOrderId()).orElseThrow().getStatus())
+                .isEqualTo(MerchantOrderStatus.CREATED);
+        assertThat(merchantOrderQuery.countOrdersByStatus(merchantA).pickedUp()).isEqualTo(1);
+        assertThat(merchantOrderQuery.countOrdersByStatus(merchantB).created()).isEqualTo(1);
+
+        webhookService.processParcelStatusChangedEvent(event);
+        assertThat(merchantOrderRepository.findById(orderA.getOrderId()).orElseThrow().getStatus())
+                .isEqualTo(MerchantOrderStatus.PICKED_UP);
+    }
+
+    @Test
+    @DisplayName("An event with another merchant ID cannot update or deliver an owned parcel")
+    void statusEvent_rejectsMerchantMismatch() {
+        UUID owner = createMerchant();
+        UUID otherMerchant = createMerchant();
+        MerchantOrderEntity order = createOrder(owner, Instant.now().minus(Duration.ofMinutes(5)));
+        webhookService.updateSettings(otherMerchant, new UpdateWebhookSettingsRequest(
+                "https://example.com/merchant-hook", true, List.of("PARCEL_STATUS_CHANGED"), false));
+        EventEnvelope event = orderStatusEvent(otherMerchant, order.getParcelId(), Instant.now(),
+                "CREATED", "IN_TRANSIT");
+
+        assertThat(webhookService.processParcelStatusChangedEvent(event).disposition())
+                .isEqualTo(WebhookService.DeliveryDisposition.SKIPPED);
+        assertThat(merchantOrderRepository.findById(order.getOrderId()).orElseThrow().getStatus())
+                .isEqualTo(MerchantOrderStatus.CREATED);
+        assertThat(webhookService.listDeliveries(otherMerchant, null, null, null, null, 0, 10).totalElements())
+                .isZero();
+        verify(dispatcher, times(0)).dispatch(anyString(), anyString(), anyString(), any());
+    }
+
+    private UUID createMerchant() {
+        UUID id = UUID.randomUUID();
+        merchantRepository.saveAndFlush(new Merchant(id, "Webhook Test Store", "Test Contact",
+                "merchant-" + id + "@example.test", "+94770000000", null, Instant.now()));
+        return id;
+    }
+
+    private MerchantOrderEntity createOrder(UUID merchantId, Instant createdAt) {
+        return merchantOrderRepository.saveAndFlush(new MerchantOrderEntity(UUID.randomUUID(), merchantId,
+                UUID.randomUUID(), "SD-" + UUID.randomUUID(), "ref-" + UUID.randomUUID(),
+                MerchantOrderStatus.CREATED, new BigDecimal("250.00"), createdAt));
+    }
+
+    private static EventEnvelope orderStatusEvent(UUID merchantId, UUID parcelId, Instant occurredAt,
+                                                  String fromStatus, String toStatus) {
+        return new EventEnvelope(UUID.randomUUID().toString(), "PARCEL_STATUS_CHANGED", occurredAt,
+                2L, parcelId.toString(), "SD-20261111-000001", fromStatus, toStatus,
+                null, null, merchantId.toString(), null, null);
     }
 
     private static WebhookDispatcher.DispatchResult failedResult(int status) {
