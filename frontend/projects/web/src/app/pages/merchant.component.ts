@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { finalize } from 'rxjs';
+import { Subscription, finalize } from 'rxjs';
 import {
   EmptyStateComponent,
   ErrorStateComponent,
@@ -114,8 +114,17 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
       <!-- TAB 1: ORDERS DASHBOARD                                                  -->
       <!-- ========================================================================= -->
       <div *ngIf="activeTab() === 'orders'" class="space-y-6">
+        <div class="flex justify-end">
+          <button type="button" (click)="refreshOrders()" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            Refresh tracking
+          </button>
+        </div>
         <!-- KPI Metrics Cards -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div *ngIf="isLoadingCounts()" role="status" class="rounded-lg bg-white border border-slate-200 p-4 text-sm text-slate-600">Loading order counts...</div>
+        <div *ngIf="!isLoadingCounts() && countsError()" role="alert" class="rounded-lg bg-rose-50 border border-rose-200 p-4 text-sm text-rose-800">
+          {{ countsError() }} <button type="button" (click)="loadOrderCounts()" class="underline font-medium">Retry</button>
+        </div>
+        <div *ngIf="!isLoadingCounts() && !countsError()" class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Orders</span>
             <div class="text-3xl font-bold text-slate-900 mt-2">{{ counts().total }}</div>
@@ -610,8 +619,10 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
     </div>
   `,
 })
-export class MerchantComponent implements OnInit {
+export class MerchantComponent implements OnInit, OnDestroy {
   private merchantService = inject(MerchantService);
+  private orderSubscription?: Subscription;
+  private countsSubscription?: Subscription;
 
   activeTab = signal<ActiveTab>('orders');
   notification = signal<string | null>(null);
@@ -631,6 +642,8 @@ export class MerchantComponent implements OnInit {
   totalPages = signal<number>(0);
   isLoadingOrders = signal<boolean>(false);
   orderError = signal<string | null>(null);
+  isLoadingCounts = signal<boolean>(true);
+  countsError = signal<string | null>(null);
 
   statusFilterOptions = [
     { label: 'All', value: 'ALL' },
@@ -676,8 +689,14 @@ export class MerchantComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadOrders();
+    this.loadOrderCounts();
     this.loadSettings();
     this.loadDeliveries();
+  }
+
+  ngOnDestroy(): void {
+    this.orderSubscription?.unsubscribe();
+    this.countsSubscription?.unsubscribe();
   }
 
   selectTab(tab: ActiveTab): void {
@@ -695,6 +714,7 @@ export class MerchantComponent implements OnInit {
   }
 
   loadOrders(page: number = this.currentPage()): void {
+    this.orderSubscription?.unsubscribe();
     this.currentPage.set(page);
     this.isLoadingOrders.set(true);
     this.orderError.set(null);
@@ -708,7 +728,7 @@ export class MerchantComponent implements OnInit {
       size: this.pageSize(),
     };
 
-    this.merchantService.getOrders(params).subscribe({
+    this.orderSubscription = this.merchantService.getOrders(params).subscribe({
       next: (res) => {
         this.orders.set(res.content);
         this.totalElements.set(res.totalElements);
@@ -721,12 +741,27 @@ export class MerchantComponent implements OnInit {
       },
     });
 
-    this.merchantService.getOrderCounts().subscribe({
+  }
+
+  loadOrderCounts(): void {
+    this.countsSubscription?.unsubscribe();
+    this.isLoadingCounts.set(true);
+    this.countsError.set(null);
+    this.countsSubscription = this.merchantService.getOrderCounts().subscribe({
       next: (c) => {
         this.counts.set(c);
+        this.isLoadingCounts.set(false);
       },
-      error: () => {},
+      error: () => {
+        this.countsError.set('Unable to load order counts.');
+        this.isLoadingCounts.set(false);
+      },
     });
+  }
+
+  refreshOrders(): void {
+    this.loadOrders();
+    this.loadOrderCounts();
   }
 
   onStatusFilterChange(status: string): void {
