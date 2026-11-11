@@ -219,7 +219,7 @@ describe('CourierComponent', () => {
     }
   }));
 
-  it('should open fail modal and record failure status via PATCH', fakeAsync(() => {
+  it('should submit a failure through the profile endpoint and refresh deliveries', fakeAsync(() => {
     const delivery = component.filteredDeliveries()[0];
     component.openFailModal(delivery);
 
@@ -230,23 +230,51 @@ describe('CourierComponent', () => {
     component.submitFailure();
     tick();
 
-    const patchReq = httpMock.expectOne(`/api/v1/courier/deliveries/${delivery.parcelId}/status`);
-    expect(patchReq.request.method).toBe('PATCH');
-    expect(patchReq.request.body.status).toBe('FAILED');
-    expect(patchReq.request.body.reason).toContain('Customer refused parcel');
-
-    patchReq.flush({
-      parcelId: delivery.parcelId,
-      trackingNumber: delivery.trackingNumber,
-      previousStatus: delivery.status,
-      currentStatus: 'FAILED',
-      updatedAt: '2026-10-28T14:40:00Z',
-      allowedNextStatuses: [],
+    const postReq = httpMock.expectOne(`/api/v1/courier/deliveries/${delivery.parcelId}/fail`);
+    expect(postReq.request.method).toBe('POST');
+    expect(postReq.request.body).toEqual({ reasonCode: 'CUSTOMER_REJECTED', note: 'Customer refused parcel' });
+    postReq.flush(null, { status: 202, statusText: 'Accepted' });
+    const refreshReq = httpMock.expectOne('/api/v1/courier/deliveries');
+    refreshReq.flush({ ...mockDeliveriesResponse, deliveries: mockDeliveriesResponse.deliveries.map((item) =>
+      item.parcelId === delivery.parcelId ? { ...item, status: 'FAILED' as const } : item),
     });
     tick();
 
     expect(component.selectedDeliveryForFailure()).toBeNull();
     const updated = component.filteredDeliveries().find((d) => d.parcelId === delivery.parcelId);
     expect(updated?.status).toBe('FAILED');
+  }));
+
+  it('requires a note for OTHER without making a request', () => {
+    const delivery = component.filteredDeliveries()[0];
+    component.openFailModal(delivery);
+    component.failureReasonCategory = 'OTHER';
+    component.failureNotes = '   ';
+
+    component.submitFailure();
+
+    httpMock.expectNone(`/api/v1/courier/deliveries/${delivery.parcelId}/fail`);
+    expect(component.selectedDeliveryForFailure()).toBe(delivery);
+    expect(component.isSubmittingFailure).toBe(false);
+  });
+
+  it('prevents duplicate failure submissions and preserves form values after an API error', fakeAsync(() => {
+    const delivery = component.filteredDeliveries()[0];
+    component.openFailModal(delivery);
+    component.failureReasonCategory = 'INCORRECT_ADDRESS';
+    component.failureNotes = 'Address could not be located';
+
+    component.submitFailure();
+    component.submitFailure();
+    const request = httpMock.expectOne(`/api/v1/courier/deliveries/${delivery.parcelId}/fail`);
+    expect(component.isSubmittingFailure).toBe(true);
+    request.flush({ message: 'Parcel is no longer assigned' }, { status: 409, statusText: 'Conflict' });
+    tick();
+
+    expect(component.isSubmittingFailure).toBe(false);
+    expect(component.selectedDeliveryForFailure()).toBe(delivery);
+    expect(component.failureReasonCategory).toBe('INCORRECT_ADDRESS');
+    expect(component.failureNotes).toBe('Address could not be located');
+    expect(component.toastMessage()).toContain('Parcel is no longer assigned');
   }));
 });

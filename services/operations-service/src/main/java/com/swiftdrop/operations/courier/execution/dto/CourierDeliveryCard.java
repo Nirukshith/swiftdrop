@@ -1,5 +1,6 @@
 package com.swiftdrop.operations.courier.execution.dto;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public record CourierDeliveryCard(
@@ -13,5 +14,6 @@ public record CourierDeliveryCard(
     String googleMapsUrl,
     Double weightKg,
     Integer attemptCount,
-    Integer sequenceOrder
+    Integer sequenceOrder,
+    Instant completedAt
 ) {}

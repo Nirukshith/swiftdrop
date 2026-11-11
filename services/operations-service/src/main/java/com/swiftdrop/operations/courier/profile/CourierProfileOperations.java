@@ -68,8 +68,16 @@ public class CourierProfileOperations {
         if (!courierId.equals(parcel.courierId())) {
             throw new ResponseStatusException(FORBIDDEN, "Courier is not assigned to this parcel");
         }
+        String note = request.note() == null ? null : request.note().trim();
+        String reason = request.reasonCode().name();
+        if (note != null && !note.isBlank()) {
+            reason += ": " + note;
+        }
+        if (reason.length() > 255) {
+            throw new ResponseStatusException(BAD_REQUEST, "Failure reason must not exceed 255 characters");
+        }
         parcels.updateStatus(parcelId, new ParcelStatusUpdateRequest(
-            "FAILED", parcel.status(), courierId, request.reasonCode().name(), null, UUID.randomUUID().toString()));
+            "FAILED", parcel.status(), courierId, reason, null, UUID.randomUUID().toString()));
     }
 
     public CourierDeliveriesResponse getSummary(String courierId, LocalDate requestedDate) {
@@ -86,7 +94,7 @@ public class CourierProfileOperations {
             AddressDto dropoff = parcel.dropoffAddress();
             cards.add(new CourierDeliveryCard(parcel.id(), parcel.trackingNumber(), parcel.status(), parcel.recipientName(),
                 parcel.recipientPhone(), address(parcel.pickupAddress()), address(dropoff), mapsUrl(dropoff), parcel.weightKg(),
-                parcel.attemptCount() == null ? 0 : parcel.attemptCount(), order++));
+                parcel.attemptCount() == null ? 0 : parcel.attemptCount(), order++, done ? parcel.updatedAt() : null));
         }
         return new CourierDeliveriesResponse(date.toString(), items.size(), pending, completed, cards);
     }
