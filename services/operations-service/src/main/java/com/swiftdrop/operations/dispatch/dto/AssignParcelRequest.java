@@ -7,5 +7,11 @@ public record AssignParcelRequest(
     String parcelId,
 
     @NotBlank(message = "courierId is required")
-    String courierId
-) {}
+    String courierId,
+
+    Boolean reassign
+) {
+    public AssignParcelRequest(String parcelId, String courierId) {
+        this(parcelId, courierId, false);
+    }
+}

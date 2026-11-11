@@ -252,6 +252,28 @@ describe('DispatchService (Real API Integration)', () => {
       expect(service.totalWorkloadActive()).toBe(3);
     });
 
+    it('should submit reassignment request with reassign=true when flag is passed', () => {
+      const mockResult: AssignmentResult = {
+        parcelId,
+        courierId,
+        assignedAt: '2026-10-25T12:00:00Z',
+        status: 'ASSIGNED',
+      };
+
+      service.assignParcel(parcelId, courierId, true).subscribe();
+
+      const assignReq = httpMock.expectOne('/api/v1/dispatch/assignments?reassign=true');
+      expect(assignReq.request.method).toBe('POST');
+      expect(assignReq.request.body).toEqual({ parcelId, courierId, reassign: true });
+
+      assignReq.flush(mockResult);
+
+      const queueReq = httpMock.expectOne('/api/v1/dispatch/parcels?page=0&size=20');
+      queueReq.flush({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 20 });
+      const workloadReq = httpMock.expectOne('/api/v1/dispatch/couriers');
+      workloadReq.flush([]);
+    });
+
     it('should propagate 409 Conflict when parcel is already assigned', () => {
       service.assignParcel(parcelId, courierId).subscribe({
         next: () => fail('Should have failed with 409'),
