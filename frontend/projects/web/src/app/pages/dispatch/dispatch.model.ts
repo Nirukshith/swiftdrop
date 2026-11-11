@@ -86,6 +86,7 @@ export type CourierWorkload = CourierWorkloadItem;
 export interface AssignParcelRequest {
   parcelId: string;
   courierId: string;
+  reassign?: boolean;
 }
 
 export type AssignParcelPayload = AssignParcelRequest;

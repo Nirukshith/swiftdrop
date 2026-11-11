@@ -134,7 +134,8 @@ public class DispatchService {
                     continue;
                 }
 
-                parcelServiceClient.assignCourier(parcelId, courierId, assignedBy);
+                boolean reassign = Boolean.TRUE.equals(item.reassign());
+                parcelServiceClient.assignCourier(parcelId, courierId, assignedBy, reassign);
                 results.add(new BulkAssignItemResult(
                     parcelId,
                     courierId,
@@ -192,7 +193,8 @@ public class DispatchService {
             throw new CourierUnavailableException("Courier is currently unavailable for assignments.");
         }
 
-        parcelServiceClient.assignCourier(request.parcelId(), request.courierId(), assignedBy);
+        boolean reassign = Boolean.TRUE.equals(request.reassign());
+        parcelServiceClient.assignCourier(request.parcelId(), request.courierId(), assignedBy, reassign);
 
         return new AssignmentResult(
             request.parcelId(),
