@@ -122,6 +122,27 @@ describe('Auth Guards', () => {
       expect(result).toBeTruthy();
     });
 
+    it('should redirect unauthorized users of each role category to their respective role dashboard', async () => {
+      const testCases: { role: string; expectedPath: string }[] = [
+        { role: 'CUSTOMER', expectedPath: '/customer' },
+        { role: 'MERCHANT', expectedPath: '/merchant' },
+        { role: 'COURIER', expectedPath: '/courier' },
+        { role: 'DISPATCHER', expectedPath: '/dispatcher' },
+        { role: 'ADMIN', expectedPath: '/admin' },
+      ];
+
+      for (const tc of testCases) {
+        authServiceMock.isAuthenticated.mockReturnValue(true);
+        authServiceMock.hasAnyRole.mockReturnValue(false);
+        authServiceMock.userRole.mockReturnValue(tc.role);
+
+        const guard = roleGuard(['UNAUTHORIZED_ROLE']);
+        await TestBed.runInInjectionContext(() => guard(dummyRoute, dummyState));
+
+        expect(router.createUrlTree).toHaveBeenCalledWith([tc.expectedPath]);
+      }
+    });
+
     it('should redirect to /login when unauthorized user has no role defined', async () => {
       authServiceMock.isAuthenticated.mockReturnValue(true);
       authServiceMock.hasAnyRole.mockReturnValue(false);
