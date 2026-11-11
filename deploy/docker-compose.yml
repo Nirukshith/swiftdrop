@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:16
-    container_name: swiftdrop-postgres
     profiles:
       - infra
       - core
@@ -24,7 +23,6 @@ services:
 
   kafka:
     image: apache/kafka:3.8.1
-    container_name: swiftdrop-kafka
     profiles:
       - infra
       - core
@@ -59,7 +57,6 @@ services:
 
   kafka-init:
     image: apache/kafka:3.8.1
-    container_name: swiftdrop-kafka-init
     profiles:
       - infra
       - core
@@ -79,7 +76,6 @@ services:
 
   mailpit:
     image: axllent/mailpit:v1.32.0
-    container_name: swiftdrop-mailpit
     profiles:
       - infra
       - core
@@ -98,7 +94,6 @@ services:
 
   gateway:
     image: nginx:1.27-alpine
-    container_name: swiftdrop-gateway
     profiles:
       - core
       - full
@@ -128,7 +123,6 @@ services:
     build:
       context: ..
       dockerfile: deploy/dockerfiles/auth-service.Dockerfile
-    container_name: swiftdrop-auth
     profiles:
       - core
       - full
@@ -164,7 +158,6 @@ services:
     build:
       context: ..
       dockerfile: deploy/dockerfiles/parcel-service.Dockerfile
-    container_name: swiftdrop-parcel
     profiles:
       - core
       - full
@@ -176,7 +169,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-swiftdrop_password}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWKS_URL: http://auth-service:8081/.well-known/jwks.json
-      SWIFTDROP_PRICING_QUOTE_URL: http://integration-service:8083/internal/v1/pricing/quote
+      SWIFTDROP_PRICING_QUOTE_URL: http://operations-service:8083/internal/v1/pricing/quote
     ports:
       - "8082:8082"
     depends_on:
@@ -195,7 +188,6 @@ services:
     build:
       context: ..
       dockerfile: deploy/dockerfiles/operations-service.Dockerfile
-    container_name: swiftdrop-operations
     profiles:
       - core
       - full
@@ -228,7 +220,6 @@ services:
     build:
       context: ..
       dockerfile: deploy/dockerfiles/integration-service.Dockerfile
-    container_name: swiftdrop-integration
     profiles:
       - core
       - full
