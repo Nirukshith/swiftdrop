@@ -121,6 +121,26 @@ class DispatchControllerTest {
 
     @Test
     @WithMockUser(username = "dispatcher", roles = {"DISPATCHER"})
+    @DisplayName("POST /api/v1/dispatch/assignments?reassign=true passes reassignment to service")
+    void assignParcel_reassignQueryParam_returnsOk() throws Exception {
+        AssignParcelRequest request = new AssignParcelRequest(PARCEL_ID, COURIER_ID);
+        AssignParcelRequest expectedEffective = new AssignParcelRequest(PARCEL_ID, COURIER_ID, true);
+        AssignmentResult result = new AssignmentResult(PARCEL_ID, COURIER_ID, Instant.now(), "ASSIGNED");
+
+        when(dispatchService.assignParcel(eq(expectedEffective), anyString())).thenReturn(result);
+
+        mockMvc.perform(post("/api/v1/dispatch/assignments?reassign=true")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.parcelId").value(PARCEL_ID))
+            .andExpect(jsonPath("$.courierId").value(COURIER_ID))
+            .andExpect(jsonPath("$.status").value("ASSIGNED"));
+    }
+
+    @Test
+    @WithMockUser(username = "dispatcher", roles = {"DISPATCHER"})
     @DisplayName("POST /api/v1/dispatch/assignments returns 409 when parcel is already assigned")
     void assignParcel_returns409_whenAlreadyAssigned() throws Exception {
         AssignParcelRequest request = new AssignParcelRequest(PARCEL_ID, COURIER_ID);

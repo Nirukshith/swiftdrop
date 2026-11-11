@@ -9,9 +9,14 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * In-memory fake implementation of {@link CourierDirectory} used until M9 merges
- * the courier profile module.
+ * In-memory fake implementation of {@link CourierDirectory}.
+ *
+ * @deprecated Authoritative courier management is provided by M9's
+ *             {@code com.swiftdrop.operations.courier.profile.M4CourierDirectoryAdapter}
+ *             which is marked as {@code @Primary}. This class is retained purely as a
+ *             fallback and standalone test fixture.
  */
+@Deprecated
 @Component
 public class FakeCourierDirectory implements CourierDirectory {
 

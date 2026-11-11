@@ -80,11 +80,19 @@ public class RestParcelServiceClient implements ParcelServiceClient {
 
     @Override
     public ParcelClientResponse assignCourier(String parcelId, String courierId, String assignedBy) {
+        return assignCourier(parcelId, courierId, assignedBy, false);
+    }
+
+    @Override
+    public ParcelClientResponse assignCourier(String parcelId, String courierId, String assignedBy, boolean reassign) {
         return restClient.put()
-            .uri("/internal/v1/parcels/{id}/assignment", parcelId)
+            .uri(uriBuilder -> uriBuilder
+                .path("/internal/v1/parcels/{id}/assignment")
+                .queryParam("reassign", reassign)
+                .build(parcelId))
             .contentType(MediaType.APPLICATION_JSON)
             .accept(MediaType.APPLICATION_JSON)
-            .body(new ParcelAssignmentClientRequest(courierId, assignedBy))
+            .body(new ParcelAssignmentClientRequest(courierId, assignedBy, reassign))
             .retrieve()
             .onStatus(status -> status.isSameCodeAs(HttpStatus.CONFLICT), (req, resp) -> {
                 throw new ParcelAlreadyAssignedException("Parcel has already been assigned to another courier.");
