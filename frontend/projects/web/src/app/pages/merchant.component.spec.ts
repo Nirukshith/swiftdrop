@@ -232,6 +232,53 @@ describe('MerchantComponent', () => {
     expect(component.totalElements()).toBe(0);
   });
 
+  it('shows loading and uses only the latest tracking response after a filter change', () => {
+    const pending = new Subject<MerchantOrderListPage>();
+    merchantService.getOrders
+      .mockReturnValueOnce(pending.asObservable())
+      .mockReturnValueOnce(of({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 20 }));
+
+    component.loadOrders();
+    fixture.detectChanges();
+    expect(component.isLoadingOrders()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Loading merchant orders');
+
+    component.onStatusFilterChange('DELIVERED');
+    pending.next(mockOrderPage);
+    fixture.detectChanges();
+
+    expect(component.isLoadingOrders()).toBe(false);
+    expect(component.orders()).toHaveLength(0);
+    expect(fixture.nativeElement.textContent).toContain('No orders found');
+  });
+
+  it('shows a counts error and recovers when the merchant retries', () => {
+    merchantService.getOrderCounts.mockReturnValueOnce(throwError(() => new Error('Unavailable')));
+    component.loadOrderCounts();
+    fixture.detectChanges();
+
+    expect(component.countsError()).toContain('Unable to load order counts');
+    expect(fixture.nativeElement.textContent).toContain('Unable to load order counts');
+
+    merchantService.getOrderCounts.mockReturnValueOnce(of(mockCounts));
+    component.loadOrderCounts();
+    fixture.detectChanges();
+
+    expect(component.countsError()).toBeNull();
+    expect(component.counts().total).toBe(10);
+    expect(fixture.nativeElement.textContent).toContain('Total Orders');
+  });
+
+  it('refreshes both merchant status rows and aggregate counts', () => {
+    const ordersCalls = merchantService.getOrders.mock.calls.length;
+    const countsCalls = merchantService.getOrderCounts.mock.calls.length;
+
+    component.refreshOrders();
+
+    expect(merchantService.getOrders).toHaveBeenCalledTimes(ordersCalls + 1);
+    expect(merchantService.getOrderCounts).toHaveBeenCalledTimes(countsCalls + 1);
+  });
+
   it('should save webhook settings and update notification', () => {
     component.settingsForm.url = 'https://api.testmerchant.com/webhook';
     component.settingsForm.active = true;

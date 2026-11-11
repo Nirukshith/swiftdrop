@@ -7,6 +7,7 @@ import com.swiftdrop.integration.notification.client.AuthContactClient;
 import com.swiftdrop.integration.notification.client.ContactResolutionException;
 import com.swiftdrop.integration.notification.dto.NotificationPageResponse;
 import com.swiftdrop.integration.notification.dto.UserContactDto;
+import com.swiftdrop.integration.notification.dto.UserRegisteredEvent;
 import com.swiftdrop.integration.notification.model.NotificationLogEntity;
 import com.swiftdrop.integration.notification.repository.NotificationLogRepository;
 import com.swiftdrop.integration.notification.repository.NotificationProcessedEventRepository;
@@ -89,6 +90,9 @@ class NotificationIntegrationTest {
     private RestClient mailpitClient;
 
     private static final String TOPIC = "parcel.status-changed.v1";
+    private static final String CREATED_TOPIC = "parcel.created.v1";
+    private static final String ASSIGNED_TOPIC = "parcel.assigned.v1";
+    private static final String REGISTERED_TOPIC = "user.registered.v1";
 
     @BeforeEach
     void setUp() {
@@ -176,6 +180,100 @@ class NotificationIntegrationTest {
         NotificationPageResponse updatedPage = notificationService.getNotifications(customerId, 0, 10, false);
         assertThat(updatedPage.unreadCount()).isEqualTo(0);
         assertThat(updatedPage.items().get(0).read()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Parcel created event produces customer notification and email")
+    void parcelCreatedEvent_producesNotificationAndEmail() throws Exception {
+        String eventId = UUID.randomUUID().toString();
+        String customerId = "cust-created-" + UUID.randomUUID();
+        String parcelId = "pcl-created-" + UUID.randomUUID();
+        String trackingNo = "SD-20261111-CREATED";
+
+        EventEnvelope event = new EventEnvelope(
+                eventId, "PARCEL_CREATED", Instant.now(), 1L, parcelId, trackingNo,
+                "NONE", "CREATED", null, null, null, customerId, null);
+
+        kafkaTemplate.send(CREATED_TOPIC, parcelId, objectMapper.writeValueAsString(event)).get();
+
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+            assertThat(notificationLogRepository.findAll()).anyMatch(notification ->
+                    eventId.equals(notification.getEventId())
+                            && "IN_APP".equals(notification.getChannel())
+                            && ("SwiftDrop: Parcel Order Confirmed (" + trackingNo + ")")
+                            .equals(notification.getTitle()));
+            assertThat(getMailpitMessages().get("total").asInt()).isEqualTo(1);
+        });
+    }
+
+    @Test
+    @DisplayName("Parcel assigned event produces courier assignment notification and email")
+    void parcelAssignedEvent_producesNotificationAndEmail() throws Exception {
+        String eventId = UUID.randomUUID().toString();
+        String customerId = "cust-assigned-" + UUID.randomUUID();
+        String parcelId = "pcl-assigned-" + UUID.randomUUID();
+        String trackingNo = "SD-20261111-ASSIGNED";
+
+        EventEnvelope event = new EventEnvelope(
+                eventId, "PARCEL_ASSIGNED", Instant.now(), 2L, parcelId, trackingNo,
+                "CREATED", "CREATED", "courier-1", null, null, customerId, null);
+
+        kafkaTemplate.send(ASSIGNED_TOPIC, parcelId, objectMapper.writeValueAsString(event)).get();
+
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+            assertThat(notificationLogRepository.findAll()).anyMatch(notification ->
+                    eventId.equals(notification.getEventId())
+                            && "IN_APP".equals(notification.getChannel())
+                            && ("SwiftDrop: Courier Assigned (" + trackingNo + ")")
+                            .equals(notification.getTitle()));
+            assertThat(getMailpitMessages().get("total").asInt()).isEqualTo(1);
+        });
+    }
+
+    @Test
+    @DisplayName("User registered event sends welcome email and persists in-app notification")
+    void userRegisteredEvent_sendsWelcomeEmailAndPersistsNotification() throws Exception {
+        String eventId = UUID.randomUUID().toString();
+        String userId = "cust-registered-" + UUID.randomUUID();
+        String email = userId + "@example.com";
+        UserRegisteredEvent event = new UserRegisteredEvent(
+                eventId, "USER_REGISTERED", Instant.now(), userId, email,
+                "Registered User", "+94771234567", "CUSTOMER", null, true);
+
+        kafkaTemplate.send(REGISTERED_TOPIC, userId, objectMapper.writeValueAsString(event)).get();
+
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+            assertThat(notificationLogRepository.findAll()).anyMatch(notification ->
+                    eventId.equals(notification.getEventId())
+                            && userId.equals(notification.getUserId())
+                            && "IN_APP".equals(notification.getChannel())
+                            && "Welcome to SwiftDrop!".equals(notification.getTitle()));
+            JsonNode messages = getMailpitMessages();
+            assertThat(messages.get("total").asInt()).isEqualTo(1);
+            assertThat(messages.get("messages").get(0).get("To").get(0)
+                    .get("Address").asText()).isEqualTo(email);
+        });
+    }
+
+    @Test
+    @DisplayName("Duplicate user registered event is processed only once")
+    void duplicateUserRegisteredEvent_isIdempotent() throws Exception {
+        String eventId = UUID.randomUUID().toString();
+        String userId = "cust-duplicate-" + UUID.randomUUID();
+        UserRegisteredEvent event = new UserRegisteredEvent(
+                eventId, "USER_REGISTERED", Instant.now(), userId, userId + "@example.com",
+                "Duplicate User", null, "CUSTOMER", null, true);
+        String payload = objectMapper.writeValueAsString(event);
+
+        kafkaTemplate.send(REGISTERED_TOPIC, userId, payload).get();
+        kafkaTemplate.send(REGISTERED_TOPIC, userId, payload).get();
+
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+            assertThat(notificationLogRepository.findAll().stream()
+                    .filter(notification -> eventId.equals(notification.getEventId()))
+                    .count()).isEqualTo(2);
+            assertThat(getMailpitMessages().get("total").asInt()).isEqualTo(1);
+        });
     }
 
     @Test
@@ -321,4 +419,3 @@ class NotificationIntegrationTest {
                 .hasMessageContaining("Could not resolve contact for customer " + customerId);
     }
 }
-
