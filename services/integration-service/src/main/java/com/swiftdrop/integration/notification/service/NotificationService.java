@@ -9,6 +9,7 @@ import com.swiftdrop.integration.notification.client.ContactResolutionException;
 import com.swiftdrop.integration.notification.dto.NotificationDto;
 import com.swiftdrop.integration.notification.dto.NotificationPageResponse;
 import com.swiftdrop.integration.notification.dto.UserContactDto;
+import com.swiftdrop.integration.notification.dto.UserRegisteredEvent;
 import com.swiftdrop.integration.notification.model.NotificationLogEntity;
 import com.swiftdrop.integration.notification.model.NotificationProcessedEventEntity;
 import com.swiftdrop.integration.notification.model.NotificationProcessedEventId;
@@ -56,7 +57,7 @@ public class NotificationService {
     }
 
     @Transactional
-    public void processStatusChangeEvent(EventEnvelope event) {
+    public void processParcelEvent(EventEnvelope event) {
         if (event == null || event.eventId() == null) {
             log.warn("Received empty event or event without eventId");
             return;
@@ -183,6 +184,110 @@ public class NotificationService {
         processedEventRepository.save(new NotificationProcessedEventEntity(eventUuid, CONSUMER_GROUP, Instant.now()));
     }
 
+    /**
+     * Retained for callers compiled against the original status-change method.
+     */
+    @Transactional
+    public void processStatusChangeEvent(EventEnvelope event) {
+        processParcelEvent(event);
+    }
+
+    @Transactional
+    public void processUserRegisteredEvent(UserRegisteredEvent event) {
+        if (event == null || event.eventId() == null || event.userId() == null || event.userId().isBlank()) {
+            log.warn("Received user.registered.v1 event without eventId or userId");
+            return;
+        }
+
+        UUID eventUuid;
+        try {
+            eventUuid = UUID.fromString(event.eventId());
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid user.registered.v1 eventId UUID: {}", event.eventId());
+            return;
+        }
+
+        NotificationProcessedEventId processedId =
+                new NotificationProcessedEventId(eventUuid, CONSUMER_GROUP);
+        if (processedEventRepository.existsById(processedId)) {
+            log.info("Event {} already processed by group {}, skipping duplicate",
+                    event.eventId(), CONSUMER_GROUP);
+            return;
+        }
+
+        NotificationTemplateEngine.RenderedTemplate rendered = templateEngine.render(event);
+        Instant now = Instant.now();
+
+        notificationLogRepository.save(new NotificationLogEntity(
+                "notif-" + UUID.randomUUID(),
+                event.eventId(),
+                event.userId(),
+                null,
+                null,
+                "IN_APP",
+                event.userId(),
+                rendered.subject(),
+                rendered.body(),
+                false,
+                null,
+                null,
+                now,
+                now
+        ));
+
+        if (event.email() != null && !event.email().isBlank()) {
+            String emailId = "email-" + UUID.randomUUID();
+            emailChannel.send(new NotificationMessage(
+                    emailId,
+                    event.eventId(),
+                    event.userId(),
+                    null,
+                    null,
+                    event.email(),
+                    rendered.subject(),
+                    rendered.body(),
+                    null,
+                    now
+            ));
+            notificationLogRepository.save(new NotificationLogEntity(
+                    emailId,
+                    event.eventId(),
+                    event.userId(),
+                    null,
+                    null,
+                    "EMAIL",
+                    event.email(),
+                    rendered.subject(),
+                    rendered.body(),
+                    false,
+                    null,
+                    null,
+                    now,
+                    now
+            ));
+        } else {
+            log.warn("User {} has no email; skipping welcome email", event.userId());
+        }
+
+        if (event.phoneNumber() != null && !event.phoneNumber().isBlank()) {
+            smsChannel.send(new NotificationMessage(
+                    "sms-" + UUID.randomUUID(),
+                    event.eventId(),
+                    event.userId(),
+                    null,
+                    null,
+                    event.phoneNumber(),
+                    rendered.subject(),
+                    rendered.body(),
+                    null,
+                    now
+            ));
+        }
+
+        processedEventRepository.save(
+                new NotificationProcessedEventEntity(eventUuid, CONSUMER_GROUP, now));
+    }
+
     @Transactional(readOnly = true)
     public NotificationPageResponse getNotifications(String userId, int page, int size, boolean unreadOnly) {
         PageRequest pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100));
@@ -227,4 +332,3 @@ public class NotificationService {
         );
     }
 }
-

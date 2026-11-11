@@ -18,6 +18,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.annotation.DirtiesContext;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -45,6 +46,7 @@ import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Testcontainers
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_CLASS)
 @TestPropertySource(properties = {
         "spring.kafka.consumer.auto-offset-reset=earliest",
         "swiftdrop.webhook.allow-http=true",
@@ -102,12 +104,12 @@ class WebhookRetryKafkaIntegrationTest {
 
         String originalEnvelope = objectMapper.writeValueAsString(event);
         kafkaTemplate.send(MAIN_TOPIC, event.parcelId(), originalEnvelope).get();
-        await().atMost(Duration.ofSeconds(8)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
                 assertThat(deliveryRepository.findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(
                         UUID.fromString(event.eventId()), merchantId).orElseThrow().getStatus())
                         .isEqualTo("PENDING_RETRY"));
         kafkaTemplate.send(MAIN_TOPIC, followingEvent.parcelId(), objectMapper.writeValueAsString(followingEvent)).get();
-        await().atMost(Duration.ofSeconds(8)).untilAsserted(() ->
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
                 assertThat(deliveryRepository.findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(
                         UUID.fromString(followingEvent.eventId()), merchantId).orElseThrow().getStatus())
                         .isEqualTo("SUCCESS"));

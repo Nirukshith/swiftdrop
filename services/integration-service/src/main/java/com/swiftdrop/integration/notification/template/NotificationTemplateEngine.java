@@ -1,6 +1,7 @@
 package com.swiftdrop.integration.notification.template;
 
 import com.swiftdrop.common.EventEnvelope;
+import com.swiftdrop.integration.notification.dto.UserRegisteredEvent;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -78,5 +79,14 @@ public class NotificationTemplateEngine {
             );
         };
     }
-}
 
+    public RenderedTemplate render(UserRegisteredEvent event) {
+        String name = event.fullName() != null && !event.fullName().isBlank()
+                ? event.fullName()
+                : "there";
+        return new RenderedTemplate(
+                "Welcome to SwiftDrop!",
+                "Hello " + name + ", your account has been created. Start booking parcel deliveries anytime."
+        );
+    }
+}
