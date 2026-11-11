@@ -5,6 +5,7 @@ import {
   CourierDelivery,
   CourierStats,
   DeliveryStatus,
+  FailureReasonCode,
 } from './courier/courier.model';
 import { CourierService } from './courier/courier.service';
 
@@ -661,7 +662,7 @@ export class CourierComponent implements OnInit {
   isSubmittingProof = false;
 
   selectedDeliveryForFailure = signal<CourierDelivery | null>(null);
-  failureReasonCategory = 'RECIPIENT_UNAVAILABLE';
+  failureReasonCategory: FailureReasonCode = 'RECIPIENT_UNAVAILABLE';
   failureNotes = '';
   isSubmittingFailure = false;
 
@@ -901,25 +902,18 @@ export class CourierComponent implements OnInit {
 
   submitFailure(): void {
     const delivery = this.selectedDeliveryForFailure();
-    if (!delivery) return;
+    if (!delivery || this.isSubmittingFailure) return;
 
     if (this.failureReasonCategory === 'OTHER' && !this.failureNotes.trim()) {
       this.showToast('Notes are required when the reason is Other.');
       return;
     }
 
-    const fullReason = this.failureNotes.trim()
-      ? `${this.failureReasonCategory}: ${this.failureNotes.trim()}`
-      : this.failureReasonCategory;
-
     this.isSubmittingFailure = true;
-    const idempotencyKey = `fail-${delivery.parcelId}-${Date.now()}`;
-
     this.courierService
-      .updateStatus(delivery.parcelId, {
-        status: 'FAILED',
-        reason: fullReason,
-        idempotencyKey,
+      .reportFailedDelivery(delivery.parcelId, {
+        reasonCode: this.failureReasonCategory,
+        note: this.failureNotes.trim() || undefined,
       })
       .subscribe({
         next: () => {

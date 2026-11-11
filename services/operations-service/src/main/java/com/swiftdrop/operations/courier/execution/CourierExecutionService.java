@@ -95,7 +95,8 @@ public class CourierExecutionService {
                 mapsUrl,
                 p.weightKg(),
                 p.attemptCount() != null ? p.attemptCount() : 0,
-                sequenceIndex++
+                sequenceIndex++,
+                isCompleted ? p.updatedAt() : null
             ));
         }
 
