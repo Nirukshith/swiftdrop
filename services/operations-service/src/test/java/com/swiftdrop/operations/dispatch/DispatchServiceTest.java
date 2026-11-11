@@ -95,7 +95,7 @@ class DispatchServiceTest {
     @DisplayName("assignParcel assigns successfully when courier is available")
     void assignParcel_success() {
         when(courierDirectory.findCourierById(COURIER_ID)).thenReturn(Optional.of(sampleCourier(true)));
-        when(parcelServiceClient.assignCourier(eq(PARCEL_ID), eq(COURIER_ID), eq("admin-user")))
+        when(parcelServiceClient.assignCourier(eq(PARCEL_ID), eq(COURIER_ID), eq("admin-user"), eq(false)))
             .thenReturn(mock(ParcelClientResponse.class));
 
         AssignmentResult result = dispatchService.assignParcel(
@@ -106,7 +106,25 @@ class DispatchServiceTest {
         assertThat(result.parcelId()).isEqualTo(PARCEL_ID);
         assertThat(result.courierId()).isEqualTo(COURIER_ID);
         assertThat(result.status()).isEqualTo("ASSIGNED");
-        verify(parcelServiceClient).assignCourier(PARCEL_ID, COURIER_ID, "admin-user");
+        verify(parcelServiceClient).assignCourier(PARCEL_ID, COURIER_ID, "admin-user", false);
+    }
+
+    @Test
+    @DisplayName("assignParcel with reassign=true passes explicit reassignment flag to client")
+    void assignParcel_reassign_success() {
+        when(courierDirectory.findCourierById(COURIER_ID)).thenReturn(Optional.of(sampleCourier(true)));
+        when(parcelServiceClient.assignCourier(eq(PARCEL_ID), eq(COURIER_ID), eq("admin-user"), eq(true)))
+            .thenReturn(mock(ParcelClientResponse.class));
+
+        AssignmentResult result = dispatchService.assignParcel(
+            new AssignParcelRequest(PARCEL_ID, COURIER_ID, true),
+            "admin-user"
+        );
+
+        assertThat(result.parcelId()).isEqualTo(PARCEL_ID);
+        assertThat(result.courierId()).isEqualTo(COURIER_ID);
+        assertThat(result.status()).isEqualTo("ASSIGNED");
+        verify(parcelServiceClient).assignCourier(PARCEL_ID, COURIER_ID, "admin-user", true);
     }
 
     @Test
@@ -140,7 +158,7 @@ class DispatchServiceTest {
     @DisplayName("assignParcel propagates ParcelAlreadyAssignedException on conflict")
     void assignParcel_alreadyAssigned() {
         when(courierDirectory.findCourierById(COURIER_ID)).thenReturn(Optional.of(sampleCourier(true)));
-        when(parcelServiceClient.assignCourier(PARCEL_ID, COURIER_ID, "dispatcher-1"))
+        when(parcelServiceClient.assignCourier(PARCEL_ID, COURIER_ID, "dispatcher-1", false))
             .thenThrow(new ParcelAlreadyAssignedException("Parcel already assigned"));
 
         assertThatThrownBy(() -> dispatchService.assignParcel(
@@ -274,10 +292,10 @@ class DispatchServiceTest {
         when(courierDirectory.findCourierById(missingCourier)).thenReturn(Optional.empty());
 
         // p1 succeeds
-        when(parcelServiceClient.assignCourier(p1, COURIER_ID, "dispatcher-1"))
+        when(parcelServiceClient.assignCourier(p1, COURIER_ID, "dispatcher-1", false))
             .thenReturn(mock(ParcelClientResponse.class));
         // p4 parcel already assigned
-        when(parcelServiceClient.assignCourier(p4, COURIER_ID, "dispatcher-1"))
+        when(parcelServiceClient.assignCourier(p4, COURIER_ID, "dispatcher-1", false))
             .thenThrow(new ParcelAlreadyAssignedException("Parcel p4 already assigned"));
 
         BulkAssignRequest request = new BulkAssignRequest(List.of(

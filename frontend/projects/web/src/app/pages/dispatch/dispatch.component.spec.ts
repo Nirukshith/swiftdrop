@@ -284,7 +284,7 @@ describe('DispatchComponent (Real API Integration)', () => {
       mockCouriers[0].courierId
     );
     expect(component.selectedParcelForAssign()).toBeNull();
-    expect(component.toastMessage()).toContain('assigned to Saman Perera');
+    expect(component.toastMessage()).toContain('Assignment accepted for parcel SD-20261028-001');
     expect(component.toastType()).toBe('success');
   });
 
@@ -316,6 +316,7 @@ describe('DispatchComponent (Real API Integration)', () => {
     expect(component.toastType()).toBe('error');
     expect(component.toastMessage()).toContain('already been assigned');
     expect(dispatchServiceSpy.loadUnassignedParcels).toHaveBeenCalled();
+    expect(dispatchServiceSpy.loadCourierWorkload).toHaveBeenCalled();
   });
 
   it('should toggle courier availability via API', () => {
@@ -488,6 +489,64 @@ describe('DispatchComponent (Real API Integration)', () => {
       expect(component.isSubmittingBulk()).toBe(false);
       expect(component.toastType()).toBe('error');
       expect(component.toastMessage()).toContain('Bulk assignment network timeout');
+    });
+  });
+
+  describe('Real-Time Queue Polling Lifecycle', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should start polling on init and refresh active tab data periodically', () => {
+      component.startLiveQueuePolling();
+      dispatchServiceSpy.loadUnassignedParcels.mockClear();
+      dispatchServiceSpy.loadCourierWorkload.mockClear();
+      dispatchServiceSpy.loadFailedParcels.mockClear();
+
+      component.activeTab.set('queue');
+      jest.advanceTimersByTime(10000);
+
+      expect(dispatchServiceSpy.loadUnassignedParcels).toHaveBeenCalled();
+    });
+
+    it('should refresh workload tab data when active tab is workload', () => {
+      dispatchServiceSpy.loadCourierWorkload.mockClear();
+
+      component.activeTab.set('workload');
+      component.performPeriodicSync();
+
+      expect(dispatchServiceSpy.loadCourierWorkload).toHaveBeenCalled();
+    });
+
+    it('should refresh failed tab data when active tab is failed', () => {
+      dispatchServiceSpy.loadFailedParcels.mockClear();
+
+      component.activeTab.set('failed');
+      component.performPeriodicSync();
+
+      expect(dispatchServiceSpy.loadFailedParcels).toHaveBeenCalled();
+    });
+
+    it('should avoid overlapping sync requests if already loading', () => {
+      dispatchServiceSpy.loadUnassignedParcels.mockClear();
+      dispatchServiceSpy.isLoadingParcels = jest.fn(() => true);
+
+      component.activeTab.set('queue');
+      component.performPeriodicSync();
+
+      expect(dispatchServiceSpy.loadUnassignedParcels).not.toHaveBeenCalled();
+    });
+
+    it('should stop polling on component destroy', () => {
+      component.startLiveQueuePolling();
+      expect((component as any).pollIntervalId).not.toBeNull();
+
+      component.ngOnDestroy();
+      expect((component as any).pollIntervalId).toBeNull();
     });
   });
 });
