@@ -67,13 +67,18 @@ public class DispatchController {
 
     @PostMapping("/assignments")
     public ResponseEntity<AssignmentResult> assignParcel(
+        @RequestParam(required = false) Boolean reassign,
         @Valid @RequestBody AssignParcelRequest request,
         Principal principal
     ) {
         String assignedBy = (principal != null && principal.getName() != null)
             ? principal.getName()
             : "DISPATCHER";
-        AssignmentResult result = dispatchService.assignParcel(request, assignedBy);
+        boolean isReassign = Boolean.TRUE.equals(reassign) || Boolean.TRUE.equals(request.reassign());
+        AssignParcelRequest effectiveRequest = (request.reassign() != null && request.reassign() == isReassign)
+            ? request
+            : new AssignParcelRequest(request.parcelId(), request.courierId(), isReassign);
+        AssignmentResult result = dispatchService.assignParcel(effectiveRequest, assignedBy);
         return ResponseEntity.ok(result);
     }
 
