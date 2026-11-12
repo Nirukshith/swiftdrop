@@ -149,8 +149,11 @@ paths:
     post:
       summary: Model Context Protocol (MCP) JSON-RPC endpoint
       description: |
-        Exposes the assistant's three tools (`get_parcel_status`, `estimate_fee`, `list_my_recent_parcels`)
-        as standard Model Context Protocol (MCP) tool declarations over JSON-RPC 2.0.
+        Exposes six read-only customer tools (`get_parcel_by_tracking_number`,
+        `get_customer_parcels`, `get_tracking_history`, `get_delivery_information`,
+        `get_parcel_summary`, and `estimate_delivery_fee`) as standard Model Context
+        Protocol tool declarations over JSON-RPC 2.0. Tool execution uses the caller's
+        JWT identity and never accepts a customer ID as authorization input.
         Secured with Bearer token authentication to enforce customer isolation.
       operationId: handleMcpRequest
       tags:
