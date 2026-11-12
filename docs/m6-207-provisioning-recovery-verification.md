@@ -95,3 +95,38 @@ only after the real auth/parcel provider commits, then verifies reconciliation,
 same-client explicit replacement, old-secret denial, real pricing and no duplicate
 parcel after a price change. Final aggregate results are recorded on the related
 PRs and in the Week 6 merchant completion document.
+
+## Final recorded results
+
+Development baseline `cc37191`, Java 21.0.13 / Node 22.23.4:
+
+- Combined full reactor: **BUILD SUCCESS, 836 tests**, zero failures/errors/skips
+  (common 13, auth 218, parcel 218, operations 137, integration 250).
+- After the final operation-collision guard,
+  `mvn -B verify -pl services/auth-service -am`: **BUILD SUCCESS**, common 13 +
+  auth **219 tests**, zero failures/errors/skips. This includes 14 provider recovery
+  tests. The runtime used that verified final auth artifact, with source equality
+  checked against the combined checkout. Other service artifacts came from the
+  passing full reactor.
+- Combined frontend: `npm ci`, `npm test -- --ci`, `npm run build` passed;
+  **65 suites / 489 tests**.
+- `python3 services/integration-service/src/test/resources/merchant/run_isolated_verification.py`:
+  **146 checks passed**, exit 0, all private fixtures cleaned up. Real pricing
+  succeeds; no successful pricing/provisioning/parcel result is mocked.
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s services/integration-service/src/test/resources/merchant -p test_fault_proxy.py -v`:
+  **2 framing/fault tests passed** with loopback socket permission.
+
+The initial combined verification caught an overlap with newly merged M10
+audience support, then a newly merged standalone security test's constructor
+setup. Work stopped after the second failure as required; the user authorized
+the compatibility correction and continuation. M10's implementation was retained,
+and the test received the guard dependency without changing its assertions.
+The corrected full reactor passed. The first runtime run exposed missing chunked
+request forwarding in the test proxy; framing was fixed and independently tested,
+then the complete 146-check run passed. No application authorization or assertions
+were relaxed to obtain these results.
+
+The GitHub PRs remain unmerged. Merge contract #261, then the #207 implementation,
+then #223/#260, after the requested owner reviews. The audience dependency is
+already on development via M10 #262/#264; this work does not claim to close #208
+or replace its other consumers' work.
