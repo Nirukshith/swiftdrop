@@ -4,6 +4,7 @@ import com.swiftdrop.operations.courier.execution.client.*;
 import com.swiftdrop.operations.courier.execution.dto.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -31,19 +32,32 @@ public class CourierExecutionService {
 
     private final ParcelServiceClient parcelServiceClient;
     private final DeliveryProofRepository deliveryProofRepository;
+    private final DeliveryProofAuditService deliveryProofAuditService;
     private final String storageDir;
     private final long maxSizeBytes;
 
+    @Autowired
     public CourierExecutionService(
         ParcelServiceClient parcelServiceClient,
         DeliveryProofRepository deliveryProofRepository,
+        DeliveryProofAuditService deliveryProofAuditService,
         @Value("${swiftdrop.proofs.storage-dir:/data/proofs}") String storageDir,
         @Value("${swiftdrop.proofs.max-size-bytes:5242880}") long maxSizeBytes
     ) {
         this.parcelServiceClient = parcelServiceClient;
         this.deliveryProofRepository = deliveryProofRepository;
+        this.deliveryProofAuditService = deliveryProofAuditService;
         this.storageDir = (storageDir != null && !storageDir.isBlank()) ? storageDir : "/data/proofs";
         this.maxSizeBytes = maxSizeBytes > 0 ? maxSizeBytes : DEFAULT_MAX_SIZE_BYTES;
+    }
+
+    public CourierExecutionService(
+        ParcelServiceClient parcelServiceClient,
+        DeliveryProofRepository deliveryProofRepository,
+        String storageDir,
+        long maxSizeBytes
+    ) {
+        this(parcelServiceClient, deliveryProofRepository, null, storageDir, maxSizeBytes);
     }
 
     public CourierDeliveriesResponse getTodaysDeliveries(String courierId, String dateStr, String statusFilter) {
@@ -246,6 +260,7 @@ public class CourierExecutionService {
         }
 
         if (file.getSize() > maxSizeBytes) {
+            auditRejection(courierId, parcelId, "FILE_SIZE_EXCEEDED");
             throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "File size exceeds the 5MB limit");
         }
 
@@ -258,15 +273,23 @@ public class CourierExecutionService {
 
         String mimeType = ContentTypeDetector.detectImageMimeType(bytes);
         if (mimeType == null) {
+            auditRejection(courierId, parcelId, "INVALID_FILE_TYPE");
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid file content: only JPEG, PNG, and WEBP image files are allowed");
         }
 
         // Validate parcel existence and ownership
-        ParcelResponse parcel = fetchParcel(courierId, parcelId);
-        if (parcel == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Parcel not found with ID: " + parcelId);
+        ParcelResponse parcel;
+        try {
+            parcel = fetchParcel(courierId, parcelId);
+            if (parcel == null) {
+                auditRejection(courierId, parcelId, "PARCEL_NOT_FOUND");
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Parcel not found with ID: " + parcelId);
+            }
+            validateCourierOwnership(parcel, courierId);
+        } catch (ResponseStatusException rse) {
+            auditRejection(courierId, parcelId, "OWNERSHIP_MISMATCH_OR_UNASSIGNED");
+            throw rse;
         }
-        validateCourierOwnership(parcel, courierId);
 
         // Store file to disk under configurable directory
         String extension = ContentTypeDetector.getExtensionForMimeType(mimeType);
@@ -316,6 +339,22 @@ public class CourierExecutionService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to persist proof metadata", e);
         }
 
+        if (deliveryProofAuditService != null) {
+            deliveryProofAuditService.record(
+                courierId,
+                "COURIER",
+                "DELIVERY_PROOF_UPLOADED",
+                "DELIVERY_PROOF",
+                proofId.toString(),
+                Map.of(
+                    "parcelId", parcelId.toString(),
+                    "mimeType", mimeType,
+                    "fileSizeBytes", file.getSize(),
+                    "proofUrl", proofUrl
+                )
+            );
+        }
+
         return new ProofUploadResponse(
             proofId,
             parcelId,
@@ -324,6 +363,23 @@ public class CourierExecutionService {
             file.getSize(),
             proofEntity.getUploadedAt()
         );
+    }
+
+    private void auditRejection(String courierId, UUID parcelId, String reason) {
+        if (deliveryProofAuditService != null && parcelId != null) {
+            try {
+                deliveryProofAuditService.record(
+                    courierId != null ? courierId : "ANONYMOUS",
+                    "COURIER",
+                    "DELIVERY_PROOF_REJECTED",
+                    "PARCEL",
+                    parcelId.toString(),
+                    Map.of("reason", reason)
+                );
+            } catch (Exception ex) {
+                log.warn("Failed to record delivery proof rejection audit: {}", ex.getMessage());
+            }
+        }
     }
 
     private ParcelResponse fetchParcel(String courierId, UUID parcelId) {
