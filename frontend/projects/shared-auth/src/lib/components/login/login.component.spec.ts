@@ -150,4 +150,15 @@ describe('LoginComponent', () => {
     component.onGoogleLogin();
     expect(authServiceMock.loginWithGoogle).toHaveBeenCalled();
   });
+
+  it('should display error message if loginWithGoogle throws', () => {
+    authServiceMock.loginWithGoogle.mockImplementation(() => {
+      throw new Error('Navigation failed');
+    });
+
+    component.onGoogleLogin();
+
+    expect(component.isLoading()).toBe(false);
+    expect(component.errorMessage()).toContain('Unable to initiate Google sign-in');
+  });
 });
