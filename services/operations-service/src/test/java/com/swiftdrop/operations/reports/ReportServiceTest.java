@@ -116,6 +116,37 @@ class ReportServiceTest {
     }
 
     @Test
+    void acceptsValidParcelCreatedEventWithoutUpdatingDeliveryCounters() {
+        when(processedEventRepository.existsById("event-created")).thenReturn(false);
+        when(sequenceRepository.findById("parcel-1")).thenReturn(Optional.empty());
+
+        service.processEvent(createdEvent("event-created", "NONE", "CREATED"));
+
+        verify(sequenceRepository).save(any(ReportParcelSequence.class));
+        verify(processedEventRepository).save(any(ReportProcessedEvent.class));
+        verifyNoInteractions(dailyReportRepository);
+    }
+
+    @Test
+    void rejectsParcelCreatedEventWithInvalidStatuses() {
+        EventEnvelope invalid = createdEvent("event-invalid", "CREATED", "CREATED");
+
+        assertThatThrownBy(() -> service.processEvent(invalid))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(processedEventRepository, sequenceRepository, dailyReportRepository);
+    }
+
+    @Test
+    void rejectsNoneAsTheFromStatusForStatusChangeEvents() {
+        EventEnvelope invalid = eventWithFrom(
+                "event-invalid", 1, "NONE", "DELIVERED", Instant.parse("2026-11-01T10:00:00Z"));
+
+        assertThatThrownBy(() -> service.processEvent(invalid))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(processedEventRepository, sequenceRepository, dailyReportRepository);
+    }
+
+    @Test
     void rejectsEventsOutsideTheReportEnvelopeContract() {
         EventEnvelope invalid = new EventEnvelope(
                 "event-invalid",
@@ -145,6 +176,43 @@ class ReportServiceTest {
         assertThatThrownBy(() -> service.processEvent(invalid))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(processedEventRepository, sequenceRepository, dailyReportRepository);
+    }
+
+    private EventEnvelope createdEvent(String id, String fromStatus, String toStatus) {
+        return new EventEnvelope(
+                id,
+                "PARCEL_CREATED",
+                Instant.parse("2026-11-01T10:00:00Z"),
+                1L,
+                "parcel-1",
+                "SD-20261101-1",
+                fromStatus,
+                toStatus,
+                null,
+                null,
+                null,
+                "customer-1",
+                null
+        );
+    }
+
+    private EventEnvelope eventWithFrom(
+            String id, long sequence, String fromStatus, String status, Instant occurredAt) {
+        return new EventEnvelope(
+                id,
+                "PARCEL_STATUS_CHANGED",
+                occurredAt,
+                sequence,
+                "parcel-1",
+                "SD-20261101-1",
+                fromStatus,
+                status,
+                "courier-1",
+                null,
+                null,
+                "customer-1",
+                null
+        );
     }
 
     private EventEnvelope event(String id, long sequence, String status, Instant occurredAt) {
