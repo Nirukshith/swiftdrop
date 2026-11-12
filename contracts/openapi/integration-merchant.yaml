@@ -403,6 +403,9 @@ components:
       type: object
       required: [id, businessName, contactName, email, phoneNumber, status, createdAt]
       properties:
+        credentialRecoveryAvailable:
+          type: boolean
+          description: ADMIN may explicitly recover a lost one-time credential handoff when provisioning has begun or the merchant is approved. Recovery never runs automatically.
         id:
           type: string
           format: uuid

@@ -1,6 +1,7 @@
 package com.swiftdrop.integration.merchant;
 
 import static com.swiftdrop.integration.merchant.AuthProvisioningClient.*;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,24 @@ public class HttpAuthProvisioningClient implements AuthProvisioningClient {
     /** Package-private constructor for unit tests that supply a pre-built RestClient. */
     HttpAuthProvisioningClient(RestClient restClient) {
         this.restClient = restClient;
+    }
+
+    @Override
+    public ProvisioningResponse provision(UUID operation, ProvisioningRequest request) {
+        return restClient.put().uri("/internal/v1/merchant-provisioning/{id}", operation)
+                .body(request).retrieve().body(ProvisioningResponse.class);
+    }
+
+    @Override
+    public ProvisioningResponse provisioningStatus(UUID operation) {
+        return restClient.get().uri("/internal/v1/merchant-provisioning/{id}", operation)
+                .retrieve().body(ProvisioningResponse.class);
+    }
+
+    @Override
+    public ProvisioningResponse replaceCredential(UUID operation, ReplacementRequest request) {
+        return restClient.post().uri("/internal/v1/merchant-provisioning/{id}/credentials", operation)
+                .body(request).retrieve().body(ProvisioningResponse.class);
     }
 
     @Override

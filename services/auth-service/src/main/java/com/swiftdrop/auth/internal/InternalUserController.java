@@ -40,10 +40,12 @@ public class InternalUserController {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final MerchantProvisioningGuard provisioningGuard;
 
-    public InternalUserController(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public InternalUserController(UserRepository userRepository, PasswordEncoder passwordEncoder, MerchantProvisioningGuard provisioningGuard) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.provisioningGuard = provisioningGuard;
     }
 
     /**
@@ -67,7 +69,9 @@ public class InternalUserController {
      * Internal user provisioning for M6 merchant onboarding.
      */
     @PostMapping
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<InternalUserResponse> createUser(@Valid @RequestBody InternalCreateUserRequest request) {
+        provisioningGuard.checkLegacyWrite(request.merchantId());
         String normalizedEmail = request.email().trim().toLowerCase();
 
         if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {

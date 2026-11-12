@@ -45,6 +45,9 @@ public class Merchant {
     @Column(name = "client_id", length = 128)
     private String clientId;
 
+    @Column(name = "provisioning_operation_id", unique = true)
+    private UUID provisioningOperationId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -77,6 +80,23 @@ public class Merchant {
     public void approve(String clientId) {
         transitionTo(MerchantStatus.APPROVED);
         this.clientId = clientId;
+    }
+
+    public void beginProvisioning(UUID operationId) {
+        this.provisioningOperationId = operationId;
+        this.updatedAt = Instant.now();
+    }
+
+    public void recordProvisioned(String userId, String clientId) {
+        this.authUserId = userId;
+        this.clientId = clientId;
+        this.updatedAt = Instant.now();
+    }
+
+    public UUID getProvisioningOperationId() { return provisioningOperationId; }
+    public boolean isCredentialRecoveryAvailable() {
+        return (status == MerchantStatus.PENDING || status == MerchantStatus.APPROVED)
+                && (provisioningOperationId != null || authUserId != null || clientId != null);
     }
 
     public void reject(String reason) {
