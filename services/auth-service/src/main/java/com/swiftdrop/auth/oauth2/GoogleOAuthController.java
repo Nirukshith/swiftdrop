@@ -41,6 +41,8 @@ public class GoogleOAuthController {
     private static final Duration REFRESH_COOKIE_TTL = Duration.ofDays(7);
     private static final Duration STATE_COOKIE_TTL = Duration.ofMinutes(10);
 
+    private final java.util.Set<String> consumedStates = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     private final GoogleOAuthProperties properties;
     private final GoogleOAuthClient googleOAuthClient;
     private final UserRepository userRepository;
@@ -69,7 +71,7 @@ public class GoogleOAuthController {
      */
     @GetMapping("/google")
     public ResponseEntity<Void> initiateGoogleLogin() {
-        String state = UUID.randomUUID().toString().replace("-", "");
+        String state = UUID.randomUUID().toString().replace("-", "") + "." + Instant.now().toEpochMilli();
 
         ResponseCookie stateCookie = ResponseCookie.from(STATE_COOKIE_NAME, state)
                 .httpOnly(true)
@@ -136,6 +138,27 @@ public class GoogleOAuthController {
                 !MessageDigest.isEqual(state.getBytes(StandardCharsets.UTF_8), stateCookie.getBytes(StandardCharsets.UTF_8))) {
             auditService.record("ANONYMOUS", "ANONYMOUS", "OAUTH_STATE_MISMATCH", "OAUTH", "GOOGLE", Map.of());
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or missing OAuth state parameter");
+        }
+
+        // Single-use state verification: reject reused/replayed states
+        if (!consumedStates.add(state)) {
+            auditService.record("ANONYMOUS", "ANONYMOUS", "OAUTH_STATE_REUSED", "OAUTH", "GOOGLE", Map.of("state", state));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "OAuth state parameter has already been used");
+        }
+
+        // Expiration check: if timestamp is embedded, verify state age against TTL
+        int dotIdx = state.lastIndexOf('.');
+        if (dotIdx > 0) {
+            try {
+                long timestamp = Long.parseLong(state.substring(dotIdx + 1));
+                Instant stateInstant = Instant.ofEpochMilli(timestamp);
+                if (Instant.now().isAfter(stateInstant.plus(STATE_COOKIE_TTL))) {
+                    auditService.record("ANONYMOUS", "ANONYMOUS", "OAUTH_STATE_EXPIRED", "OAUTH", "GOOGLE", Map.of("state", state));
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "OAuth state parameter is expired");
+                }
+            } catch (NumberFormatException ignored) {
+                // If not numeric timestamp, rely on cookie TTL
+            }
         }
 
         if (code == null || code.isBlank()) {

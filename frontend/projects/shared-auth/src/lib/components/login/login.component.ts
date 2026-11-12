@@ -343,7 +343,14 @@ export class LoginComponent {
   });
 
   onGoogleLogin(): void {
-    this.authService.loginWithGoogle();
+    this.errorMessage.set(null);
+    this.isLoading.set(true);
+    try {
+      this.authService.loginWithGoogle();
+    } catch {
+      this.isLoading.set(false);
+      this.errorMessage.set('Unable to initiate Google sign-in. Please try again.');
+    }
   }
 
   isFieldInvalid(fieldName: string): boolean {
