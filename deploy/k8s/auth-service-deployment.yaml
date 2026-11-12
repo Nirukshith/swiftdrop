@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: auth-service
+    app.kubernetes.io/part-of: swiftdrop
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+        app.kubernetes.io/name: auth-service
+        app.kubernetes.io/part-of: swiftdrop
+    spec:
+      containers:
+        - name: auth-service
+          # Build locally: docker build -t swiftdrop/auth-service:latest -f deploy/dockerfiles/auth-service.Dockerfile .
+          # For Minikube: eval $(minikube docker-env) before building
+          image: swiftdrop/auth-service:latest
+          imagePullPolicy: Never   # Use locally-built image in Minikube
+          ports:
+            - containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: swiftdrop-config
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres:5432/auth_db"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: POSTGRES_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: POSTGRES_PASSWORD
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: INTERNAL_NOTIFICATIONS_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: INTERNAL_NOTIFICATIONS_SERVICE_TOKEN
+            - name: INTERNAL_MERCHANT_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: INTERNAL_MERCHANT_SERVICE_TOKEN
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: GOOGLE_CLIENT_SECRET
+          resources:
+            requests:
+              memory: "384Mi"
+              cpu: "200m"
+            limits:
+              memory: "600Mi"
+              cpu: "1000m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: auth-service
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - port: 8081
+      targetPort: 8081
+
