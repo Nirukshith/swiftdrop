@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { TrackComponent } from './track.component';
 import { FakeEventSource, fakeEventSourceProvider, statusEvent } from './tracking/testing';
@@ -32,7 +32,10 @@ describe('TrackComponent (public tracking page)', () => {
     FakeEventSource.reset();
     TestBed.configureTestingModule({
       providers: [
-        provideRouter([{ path: 'track/:trackingNo', component: TrackComponent }]),
+        provideRouter([
+          { path: 'track', component: TrackComponent },
+          { path: 'track/:trackingNo', component: TrackComponent },
+        ]),
         provideHttpClient(),
         provideHttpClientTesting(),
         fakeEventSourceProvider,
@@ -168,5 +171,70 @@ describe('TrackComponent (public tracking page)', () => {
   it('shows an empty timeline message when there is no history yet', async () => {
     await open(TN, { ...lookup(TN, 'CREATED'), timeline: [] });
     expect(el().textContent).toContain('No updates yet');
+  });
+
+  // ---------------------------------------------------------------- search box
+
+  const input = () => el().querySelector('#tracking-number-input') as HTMLInputElement;
+  async function searchFor(value: string) {
+    input().value = value;
+    input().dispatchEvent(new Event('input'));
+    (el().querySelector('[data-testid="track-search"]') as HTMLFormElement).dispatchEvent(new Event('submit'));
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+  }
+
+  it('/track without a number shows the search box and asks for a number, without calling the API', async () => {
+    await harness.navigateByUrl('/track');
+
+    expect(input()).not.toBeNull();
+    expect(el().textContent).toContain('Enter the tracking number from your receipt or email');
+    http.expectNone(() => true);
+    expect(FakeEventSource.instances).toHaveLength(0);
+  });
+
+  it('a pasted number with spaces and lower case opens that parcel', async () => {
+    await harness.navigateByUrl('/track');
+
+    await searchFor('  sd-20261104-a1b2c3 ');
+
+    expect(TestBed.inject(Router).url).toBe(`/track/${TN}`);
+    http.expectOne(`/api/v1/tracking/${TN}`).flush(lookup(TN));
+    harness.detectChanges();
+    expect(text('tracking-number')).toBe(TN);
+    expect(input().value).toBe(TN);
+  });
+
+  it('a badly formed number shows the format hint and is never sent', async () => {
+    await harness.navigateByUrl('/track');
+
+    await searchFor('12345');
+    expect(el().textContent).toContain('Use the format SD-YYYYMMDD-XXXXXX');
+    expect(TestBed.inject(Router).url).toBe('/track');
+
+    await searchFor('');
+    expect(el().textContent).toContain('Enter your tracking number.');
+    http.expectNone(() => true);
+  });
+
+  it('a link with a badly formed number explains it without calling the API or opening a stream', async () => {
+    await harness.navigateByUrl('/track/SWIFT-12345');
+
+    expect(text('track-invalid')).toContain('That is not a tracking number');
+    http.expectNone(() => true);
+    expect(FakeEventSource.instances).toHaveLength(0);
+  });
+
+  it('searching another number from a parcel page switches to it and closes the old stream', async () => {
+    await open(TN);
+    const first = FakeEventSource.latest();
+    expect(input().value).toBe(TN);
+
+    await searchFor(OTHER);
+
+    expect(first.closed).toBe(true);
+    http.expectOne(`/api/v1/tracking/${OTHER}`).flush(lookup(OTHER));
+    harness.detectChanges();
+    expect(text('tracking-number')).toBe(OTHER);
   });
 });

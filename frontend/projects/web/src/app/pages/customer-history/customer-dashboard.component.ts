@@ -25,7 +25,7 @@ interface DashboardStats {
   delivered: number;
 }
 
-/** Customer home (CU-05): counts and the most recent parcels. */
+/** Customer home (CU-05): counts and the first page of the customer's parcels. */
 @Component({
   selector: 'app-customer-dashboard',
   standalone: true,
@@ -68,7 +68,7 @@ interface DashboardStats {
             </ui-card>
           </section>
 
-          <ui-card title="Recent parcels" [padded]="false">
+          <ui-card title="Your parcels" [padded]="false">
             @if (recent().length === 0) {
               <ui-empty-state title="No parcels yet" message="Send your first parcel and it will show up here.">
                 <ui-button routerLink="/customer">New delivery</ui-button>
@@ -78,7 +78,7 @@ interface DashboardStats {
                 [columns]="columns"
                 [rows]="recent()"
                 [rowKey]="rowKey"
-                caption="Your most recent parcels"
+                caption="Your parcels"
                 [clickable]="true"
                 (rowClick)="track($event)"
               >
