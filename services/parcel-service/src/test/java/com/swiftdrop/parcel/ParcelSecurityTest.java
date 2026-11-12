@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -37,6 +38,13 @@ class ParcelSecurityTest {
     void addresses_unauthenticated() throws Exception {
         mockMvc.perform(get("/api/v1/addresses"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Spring error dispatch is not rewritten to 401 when unauthenticated")
+    void errorDispatch_unauthenticated() throws Exception {
+        mockMvc.perform(get("/error"))
+                .andExpect(result -> assertNotEquals(401, result.getResponse().getStatus()));
     }
 
     @Test
