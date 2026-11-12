@@ -79,3 +79,5 @@ Following the shared rule for unready dependencies, this verification uses a sma
 - M5/M10 follow-up: agree least-privilege service authentication for the quote route, record it in a small contract PR, and align provider/consumer implementation. No M5 security checks are relaxed by this PR.
 
 Peer review and GitHub CI must pass before the issue is marked complete. The PR targets `development` and must not be auto-merged.
+
+Current verifier note: Week 4 adds an inactive-account security fixture. Standalone `verify_real_parcel.py` now also requires `M6_VERIFY_INTERNAL_TOKEN`; the isolated runner supplies a generated token automatically. See [Week 4 verification](m6-week4-merchant-integration-verification.md) for the current environment requirements. The results above remain the historical Week 3 run.
