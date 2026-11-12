@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { CreateCustomerParcelRequest, CustomerParcel, QuoteResponse } from './customer.model';
+import { CreateCustomerParcelRequest, CustomerAddress, CustomerParcel, CustomerParcelPage, QuoteResponse } from './customer.model';
 import { CustomerService } from './customer.service';
 
 describe('CustomerService', () => {
@@ -55,7 +55,7 @@ describe('CustomerService', () => {
     req.flush(mockQuote);
   });
 
-  it('should create parcel via POST /api/v1/parcels and update parcels signal', () => {
+  it('should create parcel via POST /api/v1/parcels', () => {
     const request: CreateCustomerParcelRequest = {
       pickupAddress: {
         line1: '142 Havelock Rd',
@@ -103,16 +103,44 @@ describe('CustomerService', () => {
     expect(req.request.body).toEqual(request);
     req.flush(mockCreated);
 
-    service.listParcels().subscribe((parcels) => {
-      expect(parcels[0].id).toBe('pcl-new-999');
-      expect(parcels[0].trackingNumber).toBe('SD-20261105-X9Y8Z7');
-    });
   });
 
-  it('should manage address book locally', () => {
-    service.listAddresses().subscribe((addresses) => {
-      expect(addresses.length).toBeGreaterThan(0);
+  it('should list parcels from the authenticated customer endpoint', () => {
+    const page: CustomerParcelPage = {
+      content: [],
+      totalElements: 0,
+      totalPages: 0,
+      page: 0,
+      size: 20,
+    };
+
+    service.listParcels('CREATED').subscribe((parcels) => {
+      expect(parcels).toEqual([]);
     });
+
+    const req = httpMock.expectOne((request) =>
+      request.url === '/api/v1/parcels' &&
+      request.params.get('status') === 'CREATED'
+    );
+    expect(req.request.method).toBe('GET');
+    req.flush(page);
+  });
+
+  it('should manage addresses through the authenticated address endpoint', () => {
+    const address: CustomerAddress = {
+      id: 'address-1',
+      customerId: 'customer-1',
+      label: 'Warehouse',
+      line1: '10 Port Access Rd',
+      line2: null,
+      city: 'Colombo 13',
+      district: 'Colombo',
+      postalCode: '01300',
+      isDefault: false,
+    };
+
+    service.listAddresses().subscribe((addresses) => expect(addresses).toEqual([address]));
+    httpMock.expectOne('/api/v1/addresses').flush([address]);
 
     service.createAddress({
       label: 'Warehouse',
@@ -121,10 +149,53 @@ describe('CustomerService', () => {
       district: 'Colombo',
       postalCode: '01300',
       isDefault: false,
-    }).subscribe((saved) => {
-      expect(saved.label).toBe('Warehouse');
-      expect(saved.id).toBeTruthy();
+    }).subscribe((saved) => expect(saved).toEqual(address));
+    const req = httpMock.expectOne('/api/v1/addresses');
+    expect(req.request.method).toBe('POST');
+    req.flush(address, { status: 201, statusText: 'Created' });
+  });
+
+  it('should update an address and set a default through the address endpoint', () => {
+    const address: CustomerAddress = {
+      id: 'address-1',
+      customerId: 'customer-1',
+      label: 'Home',
+      line1: '142 Havelock Road',
+      line2: null,
+      city: 'Colombo 05',
+      district: 'Colombo',
+      postalCode: '00500',
+      isDefault: false,
+    };
+    const changes = { ...address, isDefault: true };
+
+    service.updateAddress(address.id, changes).subscribe((updated) => {
+      expect(updated.isDefault).toBe(true);
     });
+    const updateRequest = httpMock.expectOne('/api/v1/addresses/address-1');
+    expect(updateRequest.request.method).toBe('PUT');
+    updateRequest.flush(changes);
+
+    service.setDefaultAddress(address.id).subscribe((updated) => {
+      expect(updated.isDefault).toBe(true);
+    });
+    httpMock.expectOne('/api/v1/addresses').flush([address]);
+    const defaultRequest = httpMock.expectOne('/api/v1/addresses/address-1');
+    expect(defaultRequest.request.method).toBe('PUT');
+    expect(defaultRequest.request.body.isDefault).toBe(true);
+    defaultRequest.flush(changes);
+  });
+
+  it('should cancel a parcel through the parcel endpoint', () => {
+    const parcel = { id: 'parcel-1' } as CustomerParcel;
+    service.cancelParcel(parcel.id, 'Customer changed plans').subscribe((cancelled) => {
+      expect(cancelled).toEqual(parcel);
+    });
+
+    const req = httpMock.expectOne('/api/v1/parcels/parcel-1/cancel');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ reason: 'Customer changed plans' });
+    req.flush(parcel);
   });
 });
 
