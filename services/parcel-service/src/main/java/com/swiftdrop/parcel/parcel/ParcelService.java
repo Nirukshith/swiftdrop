@@ -244,15 +244,15 @@ public class ParcelService {
         Parcel parcel = parcelRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Parcel not found with id: " + id));
 
-        // Idempotent retry check: if already reached target status, return 200 OK without re-executing
-        if (parcel.getStatus() == request.status()) {
-            return ParcelResponse.from(parcel);
-        }
-
         // Concurrency check against expected status
         if (parcel.getStatus() != request.expectedCurrentStatus()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Status conflict: expected status " + request.expectedCurrentStatus() + " but actual status is " + parcel.getStatus());
+        }
+
+        // Idempotent retry check: if already reached target status, return 200 OK without re-executing
+        if (parcel.getStatus() == request.status()) {
+            return ParcelResponse.from(parcel);
         }
 
         ParcelStatus oldStatus = parcel.getStatus();

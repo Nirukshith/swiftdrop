@@ -227,7 +227,7 @@ class InternalParcelControllerIntegrationTest {
         // Request requests PICKED_UP when parcel is already PICKED_UP
         ParcelStatusUpdateRequest retryReq = new ParcelStatusUpdateRequest(
                 ParcelStatus.PICKED_UP,
-                ParcelStatus.CREATED,
+                ParcelStatus.PICKED_UP,
                 "usr-courier-42",
                 null,
                 null,
@@ -238,6 +238,46 @@ class InternalParcelControllerIntegrationTest {
                         .content(objectMapper.writeValueAsString(retryReq)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status", is("PICKED_UP")));
+    }
+
+    @Test
+    @DisplayName("Stale idempotent retry: mismatched expected status returns 409 even when target was already reached")
+    void testStaleIdempotentRetryReturnsConflict() throws Exception {
+        Parcel parcel = createSampleParcel("SD-20261027-STALE1", ParcelStatus.PICKED_UP, "usr-courier-42");
+
+        ParcelStatusUpdateRequest staleRetry = new ParcelStatusUpdateRequest(
+                ParcelStatus.PICKED_UP,
+                ParcelStatus.CREATED,
+                "usr-courier-42",
+                null,
+                null,
+                null
+        );
+
+        mockMvc.perform(patch("/internal/v1/parcels/" + parcel.getId() + "/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(staleRetry)))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    @DisplayName("Illegal status transition returns 409")
+    void testIllegalStatusTransitionReturnsConflict() throws Exception {
+        Parcel parcel = createSampleParcel("SD-20261027-ILLEGAL", ParcelStatus.CREATED, "usr-courier-42");
+
+        ParcelStatusUpdateRequest illegalTransition = new ParcelStatusUpdateRequest(
+                ParcelStatus.DELIVERED,
+                ParcelStatus.CREATED,
+                "usr-courier-42",
+                null,
+                null,
+                null
+        );
+
+        mockMvc.perform(patch("/internal/v1/parcels/" + parcel.getId() + "/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(illegalTransition)))
+                .andExpect(status().isConflict());
     }
 
     @Test

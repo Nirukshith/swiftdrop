@@ -248,4 +248,83 @@ class JwtIssuerTest {
                 org.springframework.security.oauth2.jwt.BadJwtException.class,
                 () -> validatingDecoder.decode(badIssuerToken));
     }
+
+    @Test
+    @DisplayName("Token signed by untrusted RSA key is rejected by decoder")
+    void tokenSignedByUntrustedKey_isRejected() throws Exception {
+        RSAKey untrustedKey = new com.nimbusds.jose.jwk.gen.RSAKeyGenerator(2048)
+                .keyID("untrusted-foreign-key")
+                .generate();
+
+        Instant now = Instant.now();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .issuer(JwtIssuer.ISSUER)
+                .subject("usr-untrusted")
+                .issueTime(java.util.Date.from(now))
+                .expirationTime(java.util.Date.from(now.plusSeconds(300)))
+                .claim(JwtClaims.ROLE, Roles.CUSTOMER)
+                .claim(JwtClaims.ROLES, List.of("ROLE_CUSTOMER"))
+                .build();
+
+        com.nimbusds.jose.JWSHeader header = new com.nimbusds.jose.JWSHeader.Builder(JWSAlgorithm.RS256)
+                .keyID("untrusted-foreign-key")
+                .build();
+        SignedJWT jwt = new SignedJWT(header, claims);
+        jwt.sign(new com.nimbusds.jose.crypto.RSASSASigner(untrustedKey.toRSAPrivateKey()));
+        String untrustedToken = jwt.serialize();
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.security.oauth2.jwt.BadJwtException.class,
+                () -> decoder.decode(untrustedToken));
+    }
+
+    @Test
+    @DisplayName("Token with unsupported 'none' algorithm is rejected")
+    void tokenWithNoneAlgorithm_isRejected() {
+        String noneAlgToken = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1c3ItMDA3Iiwicm9sZSI6IkNVU1RPTUVSIiwiZXhwIjoxOTk5OTk5OTk5fQ.";
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.security.oauth2.jwt.BadJwtException.class,
+                () -> decoder.decode(noneAlgToken));
+    }
+
+    @Test
+    @DisplayName("Malformed token string is rejected by decoder")
+    void malformedToken_isRejected() {
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.security.oauth2.jwt.BadJwtException.class,
+                () -> decoder.decode("this.is.not.a.valid.jwt"));
+    }
+
+    @Test
+    @DisplayName("All five role categories issue valid JWTs mapping to expected ROLE_* authorities")
+    void allFiveRoles_produceValidJwtAndAuthorities() throws Exception {
+        com.swiftdrop.common.security.SwiftdropJwtGrantedAuthoritiesConverter authoritiesConverter =
+                new com.swiftdrop.common.security.SwiftdropJwtGrantedAuthoritiesConverter();
+
+        List<String> roles = List.of(
+                Roles.CUSTOMER,
+                Roles.MERCHANT,
+                Roles.COURIER,
+                Roles.DISPATCHER,
+                Roles.ADMIN
+        );
+
+        for (String role : roles) {
+            String merchantId = Roles.MERCHANT.equals(role) ? "mch-test-123" : null;
+            String token = jwtIssuer.issueAccessToken("usr-" + role.toLowerCase(), role.toLowerCase() + "@swiftdrop.lk", role, merchantId);
+
+            var decodedJwt = decoder.decode(token);
+            assertThat(decodedJwt.getSubject()).isEqualTo("usr-" + role.toLowerCase());
+            assertThat(decodedJwt.getClaimAsString(JwtClaims.ROLE)).isEqualTo(role);
+            assertThat(decodedJwt.getClaimAsStringList(JwtClaims.ROLES)).containsExactly("ROLE_" + role);
+
+            var authorities = authoritiesConverter.convert(decodedJwt);
+            assertThat(authorities).extracting("authority").contains("ROLE_" + role);
+
+            if (Roles.MERCHANT.equals(role)) {
+                assertThat(decodedJwt.getClaimAsString(JwtClaims.MERCHANT_ID)).isEqualTo("mch-test-123");
+            }
+        }
+    }
 }
