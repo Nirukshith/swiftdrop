@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -13,9 +14,11 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class HttpAuthProvisioningClientTest {
 
@@ -36,15 +39,20 @@ class HttpAuthProvisioningClientTest {
     @DisplayName("createMerchantUser sends X-Internal-Service-Token header")
     void createMerchantUser_sendsInternalToken() throws Exception {
         AuthProvisioningClient.AuthUserResponse response = new AuthProvisioningClient.AuthUserResponse(
-                "usr-1", "mch@test.com", "Mch", "+94771234567", "MERCHANT", "mch-1", true);
+                "usr-1", "mch@test.com", "Mch", "+94771234567", "MERCHANT", "mch-1", false);
 
         mockServer.expect(requestTo("http://localhost:8081/internal/v1/users"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("X-Internal-Service-Token", "swiftdrop-internal-merchant-secret-2026"))
-                .andRespond(withSuccess(objectMapper.writeValueAsString(response), MediaType.APPLICATION_JSON));
+                .andExpect(content().json("""
+                        {"email":"mch@test.com","password":null,"fullName":"Mch","phoneNumber":"+94771234567",
+                         "role":"MERCHANT","merchantId":"mch-1","enabled":false}
+                        """, true))
+                .andRespond(withStatus(HttpStatus.CREATED).body(objectMapper.writeValueAsString(response))
+                        .contentType(MediaType.APPLICATION_JSON));
 
         AuthProvisioningClient.AuthCreateUserRequest request = new AuthProvisioningClient.AuthCreateUserRequest(
-                "mch@test.com", "pass", "Mch", "+94771234567", "MERCHANT", "mch-1", true);
+                "mch@test.com", null, "Mch", "+94771234567", "MERCHANT", "mch-1", false);
 
         AuthProvisioningClient.AuthUserResponse actual = client.createMerchantUser(request);
         assertThat(actual.id()).isEqualTo("usr-1");
@@ -59,6 +67,7 @@ class HttpAuthProvisioningClientTest {
         mockServer.expect(requestTo("http://localhost:8081/internal/v1/users/usr-1/activate"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("X-Internal-Service-Token", "swiftdrop-internal-merchant-secret-2026"))
+                .andExpect(content().string(""))
                 .andRespond(withSuccess(objectMapper.writeValueAsString(response), MediaType.APPLICATION_JSON));
 
         AuthProvisioningClient.AuthUserResponse actual = client.activateUser("usr-1");
@@ -74,7 +83,11 @@ class HttpAuthProvisioningClientTest {
         mockServer.expect(requestTo("http://localhost:8081/internal/v1/clients"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("X-Internal-Service-Token", "swiftdrop-internal-merchant-secret-2026"))
-                .andRespond(withSuccess(objectMapper.writeValueAsString(response), MediaType.APPLICATION_JSON));
+                .andExpect(content().json("""
+                        {"merchantId":"mch-1","clientName":"Store Client","scopes":["parcels:create"]}
+                        """, true))
+                .andRespond(withStatus(HttpStatus.CREATED).body(objectMapper.writeValueAsString(response))
+                        .contentType(MediaType.APPLICATION_JSON));
 
         AuthProvisioningClient.AuthCreateClientRequest request = new AuthProvisioningClient.AuthCreateClientRequest(
                 "mch-1", "Store Client", List.of("parcels:create"));

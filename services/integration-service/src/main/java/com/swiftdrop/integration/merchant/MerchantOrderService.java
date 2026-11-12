@@ -63,10 +63,12 @@ public class MerchantOrderService {
 
         try {
             BigDecimal quote = pricingQuoteClient.quote(request);
-            ParcelClient.InternalParcelResponse parcel = parcelClient.createParcel(merchantId, request, quote,
-                    requestHasher.downstreamKey(merchantId, CREATE_OPERATION, idempotencyKey));
-            if (parcel == null || parcel.id() == null || parcel.trackingNumber() == null
-                    || parcel.status() == null || parcel.createdAt() == null) {
+            ParcelClient.InternalParcelResponse parcel = requestParcel(merchantId, request, quote, idempotencyKey);
+            if (parcel == null || parcel.id() == null || parcel.id().isBlank()
+                    || parcel.trackingNumber() == null || parcel.trackingNumber().isBlank()
+                    || parcel.status() == null || parcel.createdAt() == null
+                    || !merchantId.toString().equals(parcel.merchantId())
+                    || (parcel.fee() != null && parcel.fee().signum() < 0)) {
                 throw new IllegalStateException("Parcel service returned an incomplete response");
             }
 
@@ -85,6 +87,25 @@ public class MerchantOrderService {
         } catch (DataIntegrityViolationException exception) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Order conflicts with an existing merchant order", exception);
+        }
+    }
+
+    private ParcelClient.InternalParcelResponse requestParcel(UUID merchantId, CreateMerchantOrderRequest request,
+                                                              BigDecimal quote, String idempotencyKey) {
+        try {
+            return parcelClient.createParcel(merchantId, request, quote,
+                    requestHasher.downstreamKey(merchantId, CREATE_OPERATION, idempotencyKey));
+        } catch (HttpStatusCodeException exception) {
+            int status = exception.getStatusCode().value();
+            if (status == 400 || status == 422) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "Parcel service rejected the merchant order data", exception);
+            }
+            if (status == 409) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Parcel creation conflicts with the current request", exception);
+            }
+            throw exception;
         }
     }
 

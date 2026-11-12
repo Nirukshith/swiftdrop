@@ -15,6 +15,9 @@ import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -56,7 +59,7 @@ class MerchantOrderIntegrationTest {
         UUID merchantId = approvedMerchant("create@example.test");
         when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
         when(parcelClient.createParcel(eq(merchantId), any(), eq(new BigDecimal("850.00")), any()))
-                .thenReturn(parcel("5ad84fda-20a8-4412-81de-3a8728f10d3d", "SD-20261028-0001"));
+                .thenReturn(parcel(merchantId, "5ad84fda-20a8-4412-81de-3a8728f10d3d", "SD-20261028-0001"));
 
         mockMvc.perform(createRequest(merchantId, "create-key-1", requestJson("order-100")))
                 .andExpect(status().isCreated())
@@ -75,7 +78,7 @@ class MerchantOrderIntegrationTest {
         UUID merchantId = approvedMerchant("replay@example.test");
         when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
         when(parcelClient.createParcel(eq(merchantId), any(), eq(new BigDecimal("850.00")), any()))
-                .thenReturn(parcel("b3b03c0e-fdb4-47df-b479-ff41e8b11934", "SD-20261028-0002"));
+                .thenReturn(parcel(merchantId, "b3b03c0e-fdb4-47df-b479-ff41e8b11934", "SD-20261028-0002"));
         String body = requestJson("order-200");
 
         mockMvc.perform(createRequest(merchantId, "replay-key", body)).andExpect(status().isCreated())
@@ -97,7 +100,7 @@ class MerchantOrderIntegrationTest {
         UUID merchantId = approvedMerchant("conflict@example.test");
         when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
         when(parcelClient.createParcel(eq(merchantId), any(), eq(new BigDecimal("850.00")), any()))
-                .thenReturn(parcel("68e927c7-57fd-4a9d-9f93-f2adfe9dd716", "SD-20261028-0003"));
+                .thenReturn(parcel(merchantId, "68e927c7-57fd-4a9d-9f93-f2adfe9dd716", "SD-20261028-0003"));
 
         mockMvc.perform(createRequest(merchantId, "conflict-key", requestJson("order-300")))
                 .andExpect(status().isCreated());
@@ -115,9 +118,9 @@ class MerchantOrderIntegrationTest {
         UUID secondMerchant = approvedMerchant("second@example.test");
         when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
         when(parcelClient.createParcel(eq(firstMerchant), any(), eq(new BigDecimal("850.00")), any()))
-                .thenReturn(parcel("a8db1755-0ce5-49c5-a66f-cf56232efc19", "SD-20261028-0004"));
+                .thenReturn(parcel(firstMerchant, "a8db1755-0ce5-49c5-a66f-cf56232efc19", "SD-20261028-0004"));
         when(parcelClient.createParcel(eq(secondMerchant), any(), eq(new BigDecimal("850.00")), any()))
-                .thenReturn(parcel("d60d120e-4803-4f63-8f3f-a9010bef4536", "SD-20261028-0005"));
+                .thenReturn(parcel(secondMerchant, "d60d120e-4803-4f63-8f3f-a9010bef4536", "SD-20261028-0005"));
 
         mockMvc.perform(createRequest(firstMerchant, "shared-key", requestJson("same-reference")))
                 .andExpect(status().isCreated());
@@ -134,7 +137,7 @@ class MerchantOrderIntegrationTest {
         UUID parcelId = UUID.fromString("247f52b9-1658-4c06-a68c-a3c5405a0932");
         when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
         when(parcelClient.createParcel(eq(merchantId), any(), eq(new BigDecimal("850.00")), any()))
-                .thenReturn(parcel(parcelId.toString(), "SD-20261028-0006"));
+                .thenReturn(parcel(merchantId, parcelId.toString(), "SD-20261028-0006"));
         mockMvc.perform(createRequest(merchantId, "cancel-create", requestJson("order-cancel")))
                 .andExpect(status().isCreated());
         UUID orderId = orderRepository.findAll().getFirst().getOrderId();
@@ -159,7 +162,7 @@ class MerchantOrderIntegrationTest {
         UUID parcelId = UUID.fromString("5d045ed0-88d3-4de9-b1e5-6254da4b08ea");
         when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
         when(parcelClient.createParcel(eq(merchantId), any(), eq(new BigDecimal("850.00")), any()))
-                .thenReturn(parcel(parcelId.toString(), "SD-20261028-0007"));
+                .thenReturn(parcel(merchantId, parcelId.toString(), "SD-20261028-0007"));
         mockMvc.perform(createRequest(merchantId, "cancel-replay-create", requestJson("order-cancel-replay")))
                 .andExpect(status().isCreated());
         UUID orderId = orderRepository.findAll().getFirst().getOrderId();
@@ -183,7 +186,7 @@ class MerchantOrderIntegrationTest {
         UUID parcelId = UUID.fromString("89b04e69-94dd-499b-bb0d-13aa16a42242");
         when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
         when(parcelClient.createParcel(eq(merchantId), any(), eq(new BigDecimal("850.00")), any()))
-                .thenReturn(parcel(parcelId.toString(), "SD-20261028-0008"));
+                .thenReturn(parcel(merchantId, parcelId.toString(), "SD-20261028-0008"));
         mockMvc.perform(createRequest(merchantId, "cancel-conflict-create", requestJson("order-cancel-conflict")))
                 .andExpect(status().isCreated());
         UUID orderId = orderRepository.findAll().getFirst().getOrderId();
@@ -285,7 +288,7 @@ class MerchantOrderIntegrationTest {
         UUID merchantId = approvedMerchant("canonical@example.test");
         when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
         when(parcelClient.createParcel(eq(merchantId), any(), any(), any()))
-                .thenReturn(parcel(UUID.randomUUID().toString(), "SD-20261110-0100"));
+                .thenReturn(parcel(merchantId, UUID.randomUUID().toString(), "SD-20261110-0100"));
         String body = requestJson("canonical-order");
         String first = mockMvc.perform(createRequest(merchantId, "canonical-key", body))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
@@ -294,6 +297,94 @@ class MerchantOrderIntegrationTest {
         com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper();
         org.assertj.core.api.Assertions.assertThat(json.readTree(replay)).isEqualTo(json.readTree(first));
         verify(parcelClient, org.mockito.Mockito.times(1)).createParcel(any(), any(), any(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing", "blank-id", "invalid-id", "blank-tracking", "invalid-status", "missing-time", "foreign-merchant", "missing-merchant", "negative-fee"})
+    void invalidParcelResponseDoesNotPersistAnOrderOrPoisonItsKey(String variant) throws Exception {
+        UUID merchantId = approvedMerchant("parcel-validation@example.test");
+        when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
+        ParcelClient.InternalParcelResponse response = "missing".equals(variant) ? null : new ParcelClient.InternalParcelResponse(
+                "blank-id".equals(variant) ? " " : "invalid-id".equals(variant) ? "not-a-uuid" : UUID.randomUUID().toString(),
+                "blank-tracking".equals(variant) ? " " : "SD-20261112-0001",
+                "invalid-status".equals(variant) ? "UNKNOWN" : "CREATED",
+                "foreign-merchant".equals(variant) ? UUID.randomUUID().toString() : "missing-merchant".equals(variant) ? null : merchantId.toString(),
+                new BigDecimal("negative-fee".equals(variant) ? "-1" : "850.00"),
+                "missing-time".equals(variant) ? null : Instant.now(), Instant.now());
+        when(parcelClient.createParcel(eq(merchantId), any(), any(), any())).thenReturn(response);
+        mockMvc.perform(createRequest(merchantId, "invalid-parcel-key", requestJson("invalid-parcel")))
+                .andExpect(status().isBadGateway());
+        org.assertj.core.api.Assertions.assertThat(orderRepository.count()).isZero();
+        org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject("select count(*) from idempotency_keys", Integer.class)).isZero();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"400,422", "422,422", "409,409", "500,502", "503,502"})
+    void parcelHttpFailuresUseTheMerchantContractAndRollBackTheKey(int downstreamStatus, int expectedStatus) throws Exception {
+        UUID merchantId = approvedMerchant("parcel-http-failure@example.test");
+        when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
+        org.springframework.http.HttpStatus code = org.springframework.http.HttpStatus.valueOf(downstreamStatus);
+        org.springframework.web.client.HttpStatusCodeException failure = code.is5xxServerError()
+                ? new org.springframework.web.client.HttpServerErrorException(code)
+                : new org.springframework.web.client.HttpClientErrorException(code);
+        when(parcelClient.createParcel(eq(merchantId), any(), any(), any())).thenThrow(failure);
+        mockMvc.perform(createRequest(merchantId, "parcel-http-key", requestJson("parcel-http-failure")))
+                .andExpect(status().is(expectedStatus));
+        org.assertj.core.api.Assertions.assertThat(orderRepository.count()).isZero();
+        org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject("select count(*) from idempotency_keys", Integer.class)).isZero();
+    }
+
+    @Test
+    void failedParcelCreationCanRetryWithTheSameKeyAndThenReplay() throws Exception {
+        UUID merchantId = approvedMerchant("parcel-retry@example.test");
+        when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
+        when(parcelClient.createParcel(eq(merchantId), any(), any(), any()))
+                .thenThrow(new org.springframework.web.client.ResourceAccessException("Parcel unavailable"))
+                .thenReturn(parcel(merchantId, UUID.randomUUID().toString(), "SD-20261112-0002"));
+        String body = requestJson("parcel-retry");
+        mockMvc.perform(createRequest(merchantId, "parcel-retry-key", body)).andExpect(status().isBadGateway());
+        org.assertj.core.api.Assertions.assertThat(orderRepository.count()).isZero();
+        mockMvc.perform(createRequest(merchantId, "parcel-retry-key", body)).andExpect(status().isCreated());
+        mockMvc.perform(createRequest(merchantId, "parcel-retry-key", body)).andExpect(status().isCreated());
+        var keys = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(parcelClient, org.mockito.Mockito.times(2)).createParcel(eq(merchantId), any(), any(), keys.capture());
+        org.assertj.core.api.Assertions.assertThat(keys.getAllValues().get(0)).isEqualTo(keys.getAllValues().get(1));
+        org.assertj.core.api.Assertions.assertThat(orderRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void failedQuoteDoesNotCreateAParcelAndDoesNotPoisonTheKey() throws Exception {
+        UUID merchantId = approvedMerchant("quote-retry@example.test");
+        when(pricingQuoteClient.quote(any()))
+                .thenThrow(new org.springframework.web.client.ResourceAccessException("Pricing unavailable"))
+                .thenReturn(new BigDecimal("850.00"));
+        when(parcelClient.createParcel(eq(merchantId), any(), any(), any()))
+                .thenReturn(parcel(merchantId, UUID.randomUUID().toString(), "SD-20261112-0003"));
+        mockMvc.perform(createRequest(merchantId, "quote-key", requestJson("quote-retry"))).andExpect(status().isBadGateway());
+        org.mockito.Mockito.verifyNoInteractions(parcelClient);
+        mockMvc.perform(createRequest(merchantId, "quote-key", requestJson("quote-retry"))).andExpect(status().isCreated());
+    }
+
+    @Test
+    void rejectedMerchantCannotUseMerchantRoleClaimsToCreateAnOrder() throws Exception {
+        Merchant merchant = new Merchant(UUID.randomUUID(), "Rejected Store", "Contact", "rejected-order@example.test",
+                "+94771234567", null, Instant.now());
+        merchant.reject("Business not verified");
+        merchantRepository.saveAndFlush(merchant);
+        mockMvc.perform(createRequest(merchant.getId(), "rejected-key", requestJson("rejected")))
+                .andExpect(status().isForbidden());
+        org.mockito.Mockito.verifyNoInteractions(pricingQuoteClient, parcelClient);
+    }
+
+    @Test
+    void invalidInputAndMissingIdempotencyKeyNeverReachDownstreamServices() throws Exception {
+        UUID merchantId = approvedMerchant("invalid-input@example.test");
+        mockMvc.perform(createRequest(merchantId, "invalid-input", requestJson("input").replace("1.5", "0")))
+                .andExpect(status().isBadRequest());
+        var request = createRequest(merchantId, "unused", requestJson("input"));
+        request.with(mock -> { mock.removeHeader("Idempotency-Key"); return mock; });
+        mockMvc.perform(request).andExpect(status().isBadRequest());
+        org.mockito.Mockito.verifyNoInteractions(pricingQuoteClient, parcelClient);
     }
 
     private MerchantOrderEntity storedOrder(UUID merchantId, MerchantOrderStatus status) {
@@ -325,8 +416,8 @@ class MerchantOrderIntegrationTest {
                 .content(body);
     }
 
-    private ParcelClient.InternalParcelResponse parcel(String id, String trackingNumber) {
-        return new ParcelClient.InternalParcelResponse(id, trackingNumber, "CREATED", null,
+    private ParcelClient.InternalParcelResponse parcel(UUID merchantId, String id, String trackingNumber) {
+        return new ParcelClient.InternalParcelResponse(id, trackingNumber, "CREATED", merchantId.toString(),
                 new BigDecimal("850.00"), Instant.parse("2026-10-28T10:00:00Z"),
                 Instant.parse("2026-10-28T10:00:00Z"));
     }
