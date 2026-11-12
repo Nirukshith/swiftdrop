@@ -78,7 +78,7 @@ class SlidingWindowLoginGuardTest {
         assertThat(guard.isAccountLocked(email)).isTrue();
         assertThatThrownBy(() -> guard.checkLoginAllowed(email))
                 .isInstanceOf(AccountLockedException.class)
-                .hasMessageContaining(email);
+                .hasMessageNotContaining(email);
     }
 
     @Test
@@ -136,12 +136,34 @@ class SlidingWindowLoginGuardTest {
         // Attacker IP is blocked
         assertThatThrownBy(() -> guard.checkLoginAllowed("another_user@swiftdrop.com", attackerIp))
                 .isInstanceOf(AccountLockedException.class)
-                .hasMessageContaining("IP address " + attackerIp);
+                .hasMessageNotContaining(attackerIp);
 
         // A legitimate user logging in from a different IP is unaffected
         String legitimateIp = "203.0.113.50";
         assertThatCode(() -> guard.checkLoginAllowed("user1@swiftdrop.com", legitimateIp))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Five failures lock only the email and source pair")
+    void compositeThreshold_doesNotLockLegitimateSource() {
+        String email = "victim@swiftdrop.com";
+        String attackerIp = "198.51.100.23";
+        String ownerIp = "203.0.113.50";
+
+        for (int attempt = 0; attempt < 5; attempt++) {
+            guard.recordFailure(email, attackerIp);
+        }
+
+        assertThat(guard.getAccountFailureCount(email)).isEqualTo(5);
+        assertThat(guard.isAccountLocked(email)).isFalse();
+        assertThatThrownBy(() -> guard.checkLoginAllowed(email, attackerIp))
+                .isInstanceOf(AccountLockedException.class)
+                .hasMessageNotContaining(email);
+        assertThatCode(() -> guard.checkLoginAllowed(email, ownerIp)).doesNotThrowAnyException();
+
+        clock.advanceSeconds(901);
+        assertThatCode(() -> guard.checkLoginAllowed(email, attackerIp)).doesNotThrowAnyException();
     }
 
     @Test

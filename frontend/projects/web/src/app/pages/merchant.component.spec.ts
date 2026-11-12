@@ -67,7 +67,9 @@ describe('MerchantComponent', () => {
           updatedAt: '2026-10-25T10:00:00Z',
         })
       ),
-      getDeliveryLogs: jest.fn().mockReturnValue(of([])),
+      getDeliveryLogs: jest.fn().mockReturnValue(of({
+        content: [], totalElements: 0, totalPages: 0, page: 0, size: 20,
+      })),
       updateWebhookSettings: jest.fn().mockReturnValue(
         of({
           merchantId: 'merchant-test-id',
@@ -334,5 +336,49 @@ describe('MerchantComponent', () => {
     component.settings.set({ ...component.settings()!, rawSecret: 'one-time-secret' });
     component.selectTab('orders');
     expect(component.settings()?.rawSecret).toBeNull();
+  });
+
+  it('uses server pagination and only allows retry for failed deliveries', () => {
+    const failed = {
+      deliveryId: 'failed-1', eventId: 'event-1', eventType: 'PARCEL_STATUS_CHANGED',
+      trackingNumber: 'SD-1', targetUrl: 'https://merchant.example/webhook',
+      status: 'FAILED' as const, attempts: 5, createdAt: '2026-11-11T10:00:00Z',
+      errorSummary: 'Target returned HTTP 503',
+    };
+    merchantService.getDeliveryLogs.mockReturnValue(of({
+      content: [failed, { ...failed, deliveryId: 'pending-1', status: 'PENDING_RETRY' }],
+      totalElements: 41, totalPages: 3, page: 1, size: 20,
+    }));
+
+    component.loadDeliveries(1);
+    component.selectTab('deliveries');
+    fixture.detectChanges();
+
+    expect(merchantService.getDeliveryLogs).toHaveBeenLastCalledWith('ALL', 1, 20);
+    expect(component.deliveryTotalElements()).toBe(41);
+    expect(component.deliveryPage()).toBe(1);
+    expect(fixture.nativeElement.textContent).toContain('Showing 2 of 41 deliveries');
+    expect(fixture.nativeElement.querySelectorAll('button').length).toBeGreaterThan(0);
+    component.retryDelivery('pending-1');
+    expect(merchantService.retryDelivery).not.toHaveBeenCalled();
+  });
+
+  it('blocks duplicate retry requests while the first retry is pending', () => {
+    const failed = {
+      deliveryId: 'failed-1', eventId: 'event-1', eventType: 'PARCEL_STATUS_CHANGED',
+      trackingNumber: 'SD-1', targetUrl: 'https://merchant.example/webhook',
+      status: 'FAILED' as const, attempts: 5, createdAt: '2026-11-11T10:00:00Z',
+    };
+    component.deliveries.set([failed]);
+    const pending = new Subject<any>();
+    merchantService.retryDelivery.mockReturnValue(pending);
+
+    component.retryDelivery('failed-1');
+    component.retryDelivery('failed-1');
+
+    expect(merchantService.retryDelivery).toHaveBeenCalledTimes(1);
+    expect(component.retryingDeliveryId()).toBe('failed-1');
+    pending.complete();
+    expect(component.retryingDeliveryId()).toBeNull();
   });
 });

@@ -226,7 +226,7 @@ public class WebhookService {
                         e.getAttempts(),
                         e.getLastAttemptAt(),
                         e.getNextRetryAt(),
-                        e.getErrorSummary(),
+                        safeFailureSummary(e.getErrorSummary()),
                         e.getCreatedAt()
                 ))
                 .toList();
@@ -250,7 +250,7 @@ public class WebhookService {
 
     @Transactional
     public WebhookDeliveryDetailResponse retryDelivery(UUID merchantId, UUID deliveryId) {
-        WebhookDeliveryEntity delivery = deliveryRepository.findByDeliveryIdAndMerchantId(deliveryId, merchantId)
+        WebhookDeliveryEntity delivery = deliveryRepository.findForRetry(deliveryId, merchantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Webhook delivery not found"));
 
         if (!"FAILED".equals(delivery.getStatus())) {
@@ -264,16 +264,31 @@ public class WebhookService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Webhook endpoint is inactive");
         }
 
+        if (endpoint.getUrl() == null || endpoint.getEncryptedSecret() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Webhook endpoint is incomplete");
+        }
         String secret = cryptoService.decrypt(endpoint.getEncryptedSecret());
 
-        // Manual replay starts a new five-attempt cycle while retaining the existing history.
+        // The scoped row lock serializes concurrent retries through the final status check.
+        // Manual retry executes immediately as allowed by the merged OpenAPI contract.
+        // It retains the attempt history and uses the currently configured destination.
+        delivery.setTargetUrl(endpoint.getUrl());
         delivery.setAttempts(1);
         delivery.setNextRetryAt(null);
-        delivery.setLastAttemptAt(Instant.now());
+        Instant attemptedAt = Instant.now();
+        delivery.setLastAttemptAt(attemptedAt);
 
-        WebhookDispatcher.DispatchResult result = dispatcher.dispatch(
-                delivery.getTargetUrl(), secret, delivery.getDeliveryId().toString(), delivery.getPayload()
-        );
+        WebhookDispatcher.DispatchResult result;
+        try {
+            result = dispatcher.dispatch(delivery.getTargetUrl(), secret,
+                    delivery.getDeliveryId().toString(), delivery.getPayload());
+        } catch (SsrfException e) {
+            boolean transientDnsFailure = e.isTransientDnsFailure();
+            result = new WebhookDispatcher.DispatchResult(false,
+                    transientDnsFailure ? 0 : 400, 0, Map.of(), Map.of(), null, null,
+                    transientDnsFailure ? "Webhook DNS resolution failed" : "Webhook destination rejected",
+                    null, null);
+        }
 
         delivery.setHttpStatusCode(result.statusCode());
         delivery.setStatus(result.success() ? "SUCCESS" : "FAILED");
@@ -282,14 +297,16 @@ public class WebhookService {
             delivery.setRequestHeaders(objectMapper.writeValueAsString(result.requestHeaders()));
             delivery.setResponseHeaders(objectMapper.writeValueAsString(result.responseHeaders()));
         } catch (JsonProcessingException e) {
-            log.warn("Failed to serialize headers: {}", e.getMessage());
+            log.warn("Failed to serialize webhook headers");
         }
-        delivery.setResponseBody(result.responseBodySummary());
+        // Merchant endpoints may return credentials or PII. Keep transport diagnostics,
+        // but do not persist an untrusted response body in delivery logs.
+        delivery.setResponseBody(null);
 
         WebhookDeliveryAttemptEntity attempt = new WebhookDeliveryAttemptEntity(
                 delivery,
                 delivery.getAttempts(),
-                Instant.now(),
+                attemptedAt,
                 result.statusCode(),
                 result.latencyMs(),
                 result.success(),
@@ -398,7 +415,7 @@ public class WebhookService {
         } catch (JsonProcessingException e) {
             log.warn("Failed to serialize webhook headers");
         }
-        delivery.setResponseBody(result.responseBodySummary());
+        delivery.setResponseBody(null);
         delivery.addAttempt(new WebhookDeliveryAttemptEntity(delivery, attemptNumber, attemptedAt,
                 result.statusCode(), result.latencyMs(), result.success(), result.errorMessage()));
 
@@ -534,7 +551,13 @@ public class WebhookService {
         Map<String, String> responseHeaders = Collections.emptyMap();
         if (entity.getResponseHeaders() != null) {
             try {
-                responseHeaders = objectMapper.readValue(entity.getResponseHeaders(), new TypeReference<>() {});
+                Map<String, String> savedHeaders = objectMapper.readValue(
+                        entity.getResponseHeaders(), new TypeReference<>() {});
+                responseHeaders = savedHeaders.entrySet().stream()
+                        .filter(entry -> "content-type".equalsIgnoreCase(entry.getKey()))
+                        .map(entry -> entry.getValue().split(";", 2)[0].trim())
+                        .filter(value -> value.matches("[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+"))
+                        .collect(java.util.stream.Collectors.toMap(value -> "Content-Type", value -> value));
             } catch (JsonProcessingException e) {
                 // Ignore parse error
             }
@@ -549,7 +572,7 @@ public class WebhookService {
                         attempt.getHttpStatusCode(),
                         attempt.getLatencyMs(),
                         attempt.isSuccess(),
-                        attempt.getErrorMessage()
+                        safeFailureSummary(attempt.getErrorMessage())
                 ));
             }
         }
@@ -565,11 +588,25 @@ public class WebhookService {
                 requestHeaders,
                 payload,
                 responseHeaders,
-                entity.getResponseBody(),
+                null,
                 entity.getLastAttemptAt(),
                 entity.getNextRetryAt(),
                 history,
                 entity.getCreatedAt()
         );
+    }
+
+    private String safeFailureSummary(String message) {
+        if (message == null) {
+            return null;
+        }
+        if (message.matches("Target returned HTTP [0-9]{3}")) {
+            return message;
+        }
+        if ("Webhook DNS resolution failed".equals(message)
+                || "Webhook destination rejected".equals(message)) {
+            return message;
+        }
+        return "Webhook delivery failed";
     }
 }

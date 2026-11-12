@@ -26,8 +26,6 @@ export class CourierService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = '/api/v1/courier/deliveries';
 
-  private readonly defaultCourierId = 'courier-harsha-01';
-
   // -------------------------------------------------------------------------
   // Signals State
   // -------------------------------------------------------------------------
@@ -214,7 +212,7 @@ export class CourierService {
               const proofInfo: DeliveryProof = {
                 id: res.proofId,
                 parcelId: res.parcelId,
-                courierId: d.courierId || this.defaultCourierId,
+                courierId: d.courierId || this.profileSignal().userId,
                 fileName: payload.file.name,
                 fileSize: res.fileSizeBytes,
                 contentType: res.mimeType,

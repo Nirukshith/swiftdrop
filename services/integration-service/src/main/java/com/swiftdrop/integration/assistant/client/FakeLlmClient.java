@@ -13,18 +13,14 @@ public class FakeLlmClient implements LlmClient {
 
     @Override
     public String chat(String prompt, String conversationId, String callerToken) {
-        String lower = prompt != null ? prompt.toLowerCase() : "";
-
-        if (lower.contains("kandy") || lower.contains("fee") || lower.contains("how much") || lower.contains("quote")) {
-            return "The estimated delivery fee for sending 2 kg to Kandy is 650.00 LKR.";
+        int factsStart = prompt == null ? -1 : prompt.indexOf("Retrieved facts: ");
+        String facts = factsStart >= 0 ? prompt.substring(factsStart + "Retrieved facts: ".length()) : "";
+        if (facts.isBlank()) {
+            return "That information is unavailable from SwiftDrop.";
         }
-        if (lower.contains("where") || lower.contains("parcel") || lower.contains("status") || lower.contains("track")) {
-            return "Your parcel SD-20261024-001 is currently OUT_FOR_DELIVERY with courier Nuwan.";
+        if (facts.contains("UNKNOWN")) {
+            return "I need the pickup district and parcel size before I can calculate a fee.";
         }
-        if (lower.contains("recent") || lower.contains("history") || lower.contains("orders")) {
-            return "You have 1 recent parcel: SD-20261024-001, currently OUT_FOR_DELIVERY.";
-        }
-
-        return "Hello! I am your SwiftDrop Delivery Assistant. I can help answer 'Where is my parcel?', estimate delivery fees, or list your recent orders.";
+        return "Here is the SwiftDrop information I found: " + facts;
     }
 }

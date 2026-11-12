@@ -1,8 +1,8 @@
 package com.swiftdrop.integration.assistant.controller;
 
-import com.swiftdrop.integration.assistant.client.LlmClient;
 import com.swiftdrop.integration.assistant.dto.ChatMessageRequest;
 import com.swiftdrop.integration.assistant.dto.ChatMessageResponse;
+import com.swiftdrop.integration.assistant.service.AssistantService;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
@@ -22,10 +22,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/assistant")
 public class AssistantController {
 
-    private final LlmClient llmClient;
+    private final AssistantService assistantService;
 
-    public AssistantController(LlmClient llmClient) {
-        this.llmClient = llmClient;
+    public AssistantController(AssistantService assistantService) {
+        this.assistantService = assistantService;
     }
 
     @PostMapping("/chat")
@@ -45,7 +45,10 @@ public class AssistantController {
             token = authHeader.substring(7);
         }
 
-        String reply = llmClient.chat(request.message(), conversationId, token);
+        if (token.isBlank()) {
+            throw new IllegalStateException("Authenticated customer token is required");
+        }
+        String reply = assistantService.answer(request.message(), conversationId, token);
 
         return ResponseEntity.ok(new ChatMessageResponse(reply, conversationId));
     }
