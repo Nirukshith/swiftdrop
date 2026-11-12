@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: swiftdrop-config
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/part-of: swiftdrop
+data:
+  # ── Database ──────────────────────────────────────────────────────────────
+  POSTGRES_USER: "swiftdrop"
+  # POSTGRES_PASSWORD is in Secret
+
+  # ── Kafka ─────────────────────────────────────────────────────────────────
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+
+  # ── Auth service ──────────────────────────────────────────────────────────
+  JWKS_URL: "http://auth-service:8081/.well-known/jwks.json"
+  FRONTEND_BASE_URL: "http://localhost:4200"
+
+  # ── Service-to-service URLs ───────────────────────────────────────────────
+  SWIFTDROP_PRICING_QUOTE_URL: "http://operations-service:8083/internal/v1/pricing/quote"
+  SWIFTDROP_SERVICES_PARCEL_SERVICE_URL: "http://parcel-service:8082"
+
+  # ── Mail (Mailpit) ────────────────────────────────────────────────────────
+  SPRING_MAIL_HOST: "mailpit"
+  SPRING_MAIL_PORT: "1025"
+
+  # ── Spring profiles ───────────────────────────────────────────────────────
+  SPRING_PROFILES_ACTIVE: "local"
+

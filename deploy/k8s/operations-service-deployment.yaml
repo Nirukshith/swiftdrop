@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operations-service
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: operations-service
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: operations-service
+  template:
+    metadata:
+      labels:
+        app: operations-service
+        app.kubernetes.io/name: operations-service
+        app.kubernetes.io/part-of: swiftdrop
+    spec:
+      containers:
+        - name: operations-service
+          image: swiftdrop/operations-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8083
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "local"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres:5432/ops_db"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: POSTGRES_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: swiftdrop-secrets
+                  key: POSTGRES_PASSWORD
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: JWKS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: JWKS_URL
+            - name: SWIFTDROP_SERVICES_PARCEL_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: swiftdrop-config
+                  key: SWIFTDROP_SERVICES_PARCEL_SERVICE_URL
+          resources:
+            requests:
+              memory: "384Mi"
+              cpu: "200m"
+            limits:
+              memory: "600Mi"
+              cpu: "1000m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8083
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8083
+            initialDelaySeconds: 60
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: operations-service
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: operations-service
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  selector:
+    app: operations-service
+  ports:
+    - port: 8083
+      targetPort: 8083
+
