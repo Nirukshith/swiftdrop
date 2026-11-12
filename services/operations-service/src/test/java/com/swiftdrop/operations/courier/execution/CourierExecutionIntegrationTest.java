@@ -15,6 +15,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import com.swiftdrop.operations.courier.profile.CourierProfileOperations;
+import com.swiftdrop.operations.OperationsKafkaIntegrationTest;
 import org.springframework.core.io.Resource;
 
 import java.nio.file.Files;
@@ -35,7 +36,7 @@ import static org.mockito.Mockito.when;
     "swiftdrop.proofs.storage-dir=${java.io.tmpdir}/swiftdrop/proofs-it"
 })
 @Testcontainers
-class CourierExecutionIntegrationTest {
+class CourierExecutionIntegrationTest extends OperationsKafkaIntegrationTest {
 
     @Container
     @ServiceConnection

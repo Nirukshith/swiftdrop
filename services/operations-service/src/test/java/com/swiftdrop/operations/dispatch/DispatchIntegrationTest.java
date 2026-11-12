@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.common.EventEnvelope;
 import com.swiftdrop.operations.courier.profile.CourierProfileEntity;
 import com.swiftdrop.operations.courier.profile.CourierProfileRepository;
+import com.swiftdrop.operations.OperationsKafkaIntegrationTest;
 import com.swiftdrop.operations.dispatch.client.*;
 import com.swiftdrop.operations.dispatch.dto.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +31,7 @@ import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Testcontainers
-class DispatchIntegrationTest {
+class DispatchIntegrationTest extends OperationsKafkaIntegrationTest {
 
     @Container
     @ServiceConnection
