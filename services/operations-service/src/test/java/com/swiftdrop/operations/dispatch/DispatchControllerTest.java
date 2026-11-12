@@ -1,6 +1,7 @@
 package com.swiftdrop.operations.dispatch;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.swiftdrop.operations.dispatch.client.CourierNotFoundException;
 import com.swiftdrop.operations.dispatch.client.CourierUnavailableException;
 import com.swiftdrop.operations.dispatch.client.ParcelAlreadyAssignedException;
 import com.swiftdrop.operations.dispatch.client.ParcelNotEligibleForRequeueException;
@@ -172,6 +173,42 @@ class DispatchControllerTest {
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("COURIER_UNAVAILABLE"));
+    }
+
+    @Test
+    @WithMockUser(username = "dispatcher", roles = {"DISPATCHER"})
+    @DisplayName("POST /api/v1/dispatch/assignments returns 404 when parcel is not found")
+    void assignParcel_returns404_whenParcelNotFound() throws Exception {
+        AssignParcelRequest request = new AssignParcelRequest(PARCEL_ID, COURIER_ID);
+
+        when(dispatchService.assignParcel(eq(request), anyString()))
+            .thenThrow(new ParcelNotFoundException("Parcel not found with id: " + PARCEL_ID));
+
+        mockMvc.perform(post("/api/v1/dispatch/assignments")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("PARCEL_NOT_FOUND"))
+            .andExpect(jsonPath("$.message").value("Parcel not found with id: " + PARCEL_ID));
+    }
+
+    @Test
+    @WithMockUser(username = "dispatcher", roles = {"DISPATCHER"})
+    @DisplayName("POST /api/v1/dispatch/assignments returns 404 when courier is not found")
+    void assignParcel_returns404_whenCourierNotFound() throws Exception {
+        AssignParcelRequest request = new AssignParcelRequest(PARCEL_ID, COURIER_ID);
+
+        when(dispatchService.assignParcel(eq(request), anyString()))
+            .thenThrow(new CourierNotFoundException("Courier not found with id: " + COURIER_ID));
+
+        mockMvc.perform(post("/api/v1/dispatch/assignments")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("COURIER_NOT_FOUND"))
+            .andExpect(jsonPath("$.message").value("Courier not found with id: " + COURIER_ID));
     }
 
     @Test
