@@ -143,6 +143,8 @@ export class CallbackComponent implements OnInit {
         this.errorMessage.set('Google sign-in was canceled or denied.');
       } else if (error === 'account_disabled') {
         this.errorMessage.set('Your SwiftDrop account is disabled. Please contact support.');
+      } else if (error === 'state_mismatch' || error === 'invalid_state') {
+        this.errorMessage.set('Authentication failed due to an invalid or expired security state.');
       } else {
         this.errorMessage.set('Authentication failed. Please try again.');
       }
