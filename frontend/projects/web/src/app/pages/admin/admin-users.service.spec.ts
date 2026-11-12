@@ -164,6 +164,37 @@ describe('AdminUsersService', () => {
     expect(service.totalElements()).toBe(1);
   });
 
+  it('should not insert newly created staff into signal if role filter does not match', () => {
+    service.loadUsers(0, 20, 'DISPATCHER').subscribe();
+    const req1 = httpMock.expectOne('/api/v1/admin/users?page=0&size=20&role=DISPATCHER');
+    req1.flush({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 20 });
+
+    const payload: CreateStaffUserRequest = {
+      fullName: 'Kamal Courier',
+      email: 'kamal@swiftdrop.lk',
+      phoneNumber: '+94771234567',
+      password: 'Password#123',
+      role: 'COURIER',
+    };
+
+    const createdResponse: UserSummary = {
+      id: 'usr-courier',
+      email: payload.email,
+      fullName: payload.fullName,
+      phoneNumber: payload.phoneNumber,
+      role: payload.role,
+      enabled: true,
+      createdAt: '2026-10-28T12:00:00Z',
+    };
+
+    service.createStaffUser(payload).subscribe();
+    const req2 = httpMock.expectOne('/api/v1/admin/users');
+    req2.flush(createdResponse, { status: 201, statusText: 'Created' });
+
+    expect(service.users().length).toBe(0);
+    expect(service.totalElements()).toBe(1);
+  });
+
   it('should patch user status and update existing user in signal', () => {
     // Populate service signal first
     service.loadUsers().subscribe();

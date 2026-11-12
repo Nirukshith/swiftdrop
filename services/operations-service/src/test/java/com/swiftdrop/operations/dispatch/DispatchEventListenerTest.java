@@ -286,4 +286,34 @@ class DispatchEventListenerTest {
         verify(courierWorkloadRepository, never()).save(any());
         verify(processedEventRepository, never()).save(any());
     }
+
+    @Test
+    @DisplayName("FAILED to CREATED re-queue status event does NOT decrement courier workload a second time")
+    void onEvent_requeueStatusChange_doesNotDecrementWorkload() {
+        EventEnvelope requeueEvent = new EventEnvelope(
+            "evt-requeue-001",
+            "parcel.status-changed.v1",
+            Instant.now(),
+            5L,
+            PARCEL_ID,
+            "SD-123",
+            "FAILED",
+            "CREATED",
+            null,
+            COURIER_1,
+            null,
+            "cust-1",
+            "Re-queued by dispatcher"
+        );
+
+        when(processedEventRepository.existsByEventId("evt-requeue-001")).thenReturn(false);
+        when(parcelSequenceRepository.findById(PARCEL_ID))
+            .thenReturn(Optional.of(new ParcelSequenceEntity(PARCEL_ID, 4L)));
+
+        listener.processEvent(requeueEvent);
+
+        verify(courierWorkloadRepository, never()).save(any());
+        verify(parcelSequenceRepository).save(any(ParcelSequenceEntity.class));
+        verify(processedEventRepository).save(any(ProcessedEventEntity.class));
+    }
 }

@@ -566,6 +566,9 @@ export class AdminUsersComponent implements OnInit, OnDestroy {
         this.newUserPhone = '';
         this.newUserPassword = '';
         this.closeCreateUserModal();
+
+        // Refresh users to reconcile authoritative backend list
+        this.reloadUsers(this.adminUsersService.currentPage());
       },
       error: (err) => {
         this.isSubmitting.set(false);
