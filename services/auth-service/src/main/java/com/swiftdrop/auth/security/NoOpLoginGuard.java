@@ -4,7 +4,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.stereotype.Component;
 
 /**
- * Default no-op implementation of {@link LoginGuard}.
+ * Fallback no-op implementation of {@link LoginGuard} when lockout is explicitly disabled.
  *
  * <p>Enables auth-service core login controllers and integration tests (owned by M10)
  * to run immediately without blocking on M7's sliding window cache or database-backed lockout engine.

@@ -107,6 +107,30 @@ Expected topics:
 - `parcel.status-changed.v1`
 - `user.registered.v1`
 
+### Full stack deployment
+
+To build and start the complete Compose profile, including the Angular
+frontend, gateway, four backend services, PostgreSQL, Kafka, and Mailpit:
+
+```bash
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile full up --build -d
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile full ps
+```
+
+Verify the frontend through the gateway and backend health endpoints directly:
+
+```bash
+curl --fail http://localhost:8080/
+curl --fail http://localhost:8081/actuator/health
+curl --fail http://localhost:8082/actuator/health
+curl --fail http://localhost:8083/actuator/health
+curl --fail http://localhost:8084/actuator/health
+curl --fail http://localhost:8025/
+```
+
+The gateway intentionally blocks `/internal/**`; service-to-service calls use
+the Compose service hostnames and are not exposed through port 8080.
+
 ---
 
 ### Step 2: Build and Verify Backend Microservices

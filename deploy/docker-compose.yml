@@ -104,6 +104,8 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
+      frontend:
+        condition: service_healthy
       auth-service:
         condition: service_healthy
       parcel-service:
@@ -112,6 +114,24 @@ services:
         condition: service_healthy
       integration-service:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/dockerfiles/frontend.Dockerfile
+    container_name: swiftdrop-frontend
+    profiles:
+      - core
+      - full
+    mem_limit: 256m
+    ports:
+      - "${FRONTEND_PORT:-4200}:80"
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1/health"]
       interval: 10s
@@ -139,7 +159,7 @@ services:
       INTERNAL_NOTIFICATIONS_SERVICE_TOKEN: ${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:-swiftdrop-internal-notif-secret-2026}
       INTERNAL_MERCHANT_SERVICE_TOKEN: ${INTERNAL_MERCHANT_SERVICE_TOKEN:-swiftdrop-internal-merchant-secret-2026}
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     depends_on:
       postgres:
         condition: service_healthy

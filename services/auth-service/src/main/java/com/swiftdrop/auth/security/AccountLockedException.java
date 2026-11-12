@@ -17,6 +17,6 @@ public class AccountLockedException extends RuntimeException {
     }
 
     public AccountLockedException(String email, long lockExpiryEpochSeconds) {
-        super("Account " + email + " is temporarily locked until epoch " + lockExpiryEpochSeconds + " due to repeated failed login attempts.");
+        super("Login temporarily restricted. Please try again later.");
     }
 }

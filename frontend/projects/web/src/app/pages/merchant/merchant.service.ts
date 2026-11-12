@@ -1,13 +1,12 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import { Observable } from 'rxjs';
 import {
   MerchantOrderFilterParams,
   MerchantOrderListPage,
   OrderCounts,
   TestWebhookResult,
   WebhookDeliveryDetail,
-  WebhookDeliveryItem,
   WebhookDeliveryPage,
   WebhookSettings,
 } from './merchant.model';
@@ -82,12 +81,12 @@ export class MerchantService {
       override ? { targetUrlOverride: override } : {});
   }
 
-  getDeliveryLogs(statusFilter?: string): Observable<WebhookDeliveryItem[]> {
-    const params = statusFilter && statusFilter !== 'ALL'
-      ? new HttpParams().set('status', statusFilter)
-      : new HttpParams();
-    return this.http.get<WebhookDeliveryPage>(`${this.webhookUrl}/deliveries`, { params })
-      .pipe(map((page) => page.content));
+  getDeliveryLogs(statusFilter?: string, page = 0, size = 20): Observable<WebhookDeliveryPage> {
+    let params = new HttpParams().set('page', page).set('size', size);
+    if (statusFilter && statusFilter !== 'ALL') {
+      params = params.set('status', statusFilter);
+    }
+    return this.http.get<WebhookDeliveryPage>(`${this.webhookUrl}/deliveries`, { params });
   }
 
   getDeliveryDetail(deliveryId: string): Observable<WebhookDeliveryDetail> {
