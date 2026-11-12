@@ -33,6 +33,7 @@ public class MerchantProvisioningService {
     @Transactional
     public Result provision(UUID operation, MerchantProvisioningController.ProvisionRequest request) {
         String merchant = request.merchantId().toString();
+        lock("operation:" + operation);
         lock(merchant);
         String fingerprint = fingerprint(request);
         var existing = jdbc.queryForList("select operation_id, merchant_id, request_hash from merchant_provisioning where operation_id=? or merchant_id=?",

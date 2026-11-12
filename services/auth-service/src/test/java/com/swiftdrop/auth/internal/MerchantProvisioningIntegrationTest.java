@@ -164,6 +164,18 @@ class MerchantProvisioningIntegrationTest {
             assertThat(jdbc.queryForObject("select count(*) from clients",Integer.class)).isEqualTo(1);
         }
     }
+
+    @Test void concurrentCrossMerchantOperationCollisionIsAConflictWithoutOrphanAccounts() throws Exception {
+        String first=body();
+        String second=body().replace(merchant.toString(),UUID.randomUUID().toString()).replace("shop@example.test","other@example.test");
+        try(var pool=Executors.newFixedThreadPool(2)) {
+            var one=pool.submit(() -> mvc.perform(put(path()).header("X-Internal-Service-Token","recovery-test-merchant").contentType("application/json").content(first)).andReturn().getResponse().getStatus());
+            var two=pool.submit(() -> mvc.perform(put(path()).header("X-Internal-Service-Token","recovery-test-merchant").contentType("application/json").content(second)).andReturn().getResponse().getStatus());
+            assertThat(java.util.List.of(one.get(),two.get())).containsExactlyInAnyOrder(200,409);
+            assertThat(jdbc.queryForObject("select count(*) from users",Integer.class)).isEqualTo(1);
+            assertThat(jdbc.queryForObject("select count(*) from clients",Integer.class)).isEqualTo(1);
+        }
+    }
     @Test void invalidExpectedUserAndCrossOperationReplacementKeysConflict() throws Exception {
         provision();
         mvc.perform(put(path()).header("X-Internal-Service-Token","recovery-test-merchant").contentType("application/json")
