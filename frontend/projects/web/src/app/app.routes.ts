@@ -116,6 +116,11 @@ export const routes: Routes = [
     pathMatch: 'full',
   },
   {
+    path: 'track',
+    loadComponent: () =>
+      import('./pages/track.component').then((m) => m.TrackComponent),
+  },
+  {
     path: 'track/:trackingNo',
     loadComponent: () =>
       import('./pages/track.component').then((m) => m.TrackComponent),
