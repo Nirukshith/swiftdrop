@@ -14,3 +14,9 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: ${JWKS_URL:http://localhost:8081/.well-known/jwks.json}
+          issuer-uri: ${JWT_ISSUER:https://auth.swiftdrop.local}
+
+swiftdrop:
+  security:
+    oauth2:
+      audience: ${JWT_AUDIENCE:swiftdrop-api}

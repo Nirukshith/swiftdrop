@@ -74,8 +74,8 @@ class PricingAndZoneSecurityTest {
 
     @Test
     void unauthenticatedCannotManageZonesOrPricingRules() throws Exception {
-        mockMvc.perform(get("/api/v1/admin/zones")).andExpect(status().isForbidden());
-        mockMvc.perform(get("/api/v1/admin/pricing-rules")).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/admin/zones")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/admin/pricing-rules")).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -100,6 +100,38 @@ class PricingAndZoneSecurityTest {
     }
 
     @Test
+    @WithMockUser(authorities = "SCOPE_pricing:read")
+    void pricingScopeCanAccessInternalPricingQuote() throws Exception {
+        Zone pickup = new Zone("COLOMBO", Set.of("Colombo"), true, new BigDecimal("500.00"));
+        Zone dropoff = new Zone("GAMPAHA", Set.of("Gampaha"), true, new BigDecimal("500.00"));
+        when(zoneRepository.findByDistrictsContaining("Colombo")).thenReturn(Optional.of(pickup));
+        when(zoneRepository.findByDistrictsContaining("Gampaha")).thenReturn(Optional.of(dropoff));
+        when(pricingRuleRepository.findByActiveTrue()).thenReturn(List.of(
+                new PricingRule(PricingRule.Kind.WEIGHT_BAND, "UP_TO_5KG",
+                        BigDecimal.ZERO, new BigDecimal("5.00"), new BigDecimal("200.00"), true),
+                new PricingRule(PricingRule.Kind.SIZE, "MEDIUM", null, null,
+                        new BigDecimal("150.00"), true)));
+
+        mockMvc.perform(get("/internal/v1/pricing/quote")
+                        .param("pickupDistrict", "Colombo")
+                        .param("dropoffDistrict", "Gampaha")
+                        .param("weightKg", "2.5")
+                        .param("size", "MEDIUM"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(authorities = "SCOPE_other")
+    void authenticatedTokenWithoutPricingScopeOrDispatcherRoleIsForbidden() throws Exception {
+        mockMvc.perform(get("/internal/v1/pricing/quote")
+                        .param("pickupDistrict", "Colombo")
+                        .param("dropoffDistrict", "Gampaha")
+                        .param("weightKg", "2.5")
+                        .param("size", "MEDIUM"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @WithMockUser(roles = "ADMIN")
     void adminCannotAccessDispatcherOnlyInternalPricingQuote() throws Exception {
         mockMvc.perform(get("/internal/v1/pricing/quote")
@@ -117,6 +149,6 @@ class PricingAndZoneSecurityTest {
                         .param("dropoffDistrict", "Gampaha")
                         .param("weightKg", "2.5")
                         .param("size", "MEDIUM"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 }

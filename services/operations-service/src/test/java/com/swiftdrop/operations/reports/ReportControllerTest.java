@@ -87,7 +87,7 @@ class ReportControllerTest {
         mockMvc.perform(get("/api/v1/admin/reports/daily.csv")
                         .param("from", "2026-11-01")
                         .param("to", "2026-11-07"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
