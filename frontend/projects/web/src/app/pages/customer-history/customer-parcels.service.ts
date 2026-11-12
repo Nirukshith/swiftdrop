@@ -4,7 +4,8 @@ import { Observable } from 'rxjs';
 import { ParcelListQuery, ParcelPage } from './customer-history.model';
 
 /**
- * Reads the signed-in customer's parcels from M1's GET /api/v1/parcels (newest first).
+ * Reads the signed-in customer's parcels from M1's GET /api/v1/parcels. The contract defines no sort
+ * order, so pages make no "newest first" claim until M1 adds one.
  * The bearer token is added by the shared-auth interceptor. In `ng serve --configuration mock`
  * the MSW mock layer answers instead.
  */
