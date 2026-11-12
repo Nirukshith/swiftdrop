@@ -1,0 +1,150 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: nginx-gateway
+    app.kubernetes.io/part-of: swiftdrop
+data:
+  nginx.conf: |
+    events {}
+
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+
+        upstream auth_service {
+            server auth-service:8081;
+        }
+
+        upstream parcel_service {
+            server parcel-service:8082;
+        }
+
+        upstream operations_service {
+            server operations-service:8083;
+        }
+
+        upstream integration_service {
+            server integration-service:8084;
+        }
+
+        server {
+            listen 80;
+            server_name _;
+
+            proxy_set_header Host $host;
+
+            # Internal service-to-service APIs are never exposed by the gateway.
+            location ^~ /internal/ {
+                return 404;
+            }
+
+            location = /health {
+                access_log off;
+                return 200 "ok\n";
+            }
+
+            location /.well-known/jwks.json {
+                proxy_pass http://auth_service;
+            }
+
+            location /api/v1/auth {
+                proxy_pass http://auth_service;
+            }
+
+            location /api/v1/admin/users {
+                proxy_pass http://auth_service;
+            }
+
+            location /api/v1/parcels {
+                proxy_pass http://parcel_service;
+            }
+
+            location /api/v1/tracking {
+                proxy_pass http://parcel_service;
+            }
+
+            location /api/v1/operations {
+                proxy_pass http://operations_service;
+            }
+
+            location /api/v1/admin {
+                proxy_pass http://operations_service;
+            }
+
+            location /api/v1/integration {
+                proxy_pass http://integration_service;
+            }
+
+            location /api/v1/merchants {
+                proxy_pass http://integration_service;
+            }
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-gateway
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: nginx-gateway
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-gateway
+  template:
+    metadata:
+      labels:
+        app: nginx-gateway
+        app.kubernetes.io/name: nginx-gateway
+        app.kubernetes.io/part-of: swiftdrop
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              memory: "64Mi"
+              cpu: "200m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-gateway
+  namespace: swiftdrop
+  labels:
+    app.kubernetes.io/name: nginx-gateway
+    app.kubernetes.io/part-of: swiftdrop
+spec:
+  type: NodePort   # NodePort for Minikube external access
+  selector:
+    app: nginx-gateway
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30080   # Access via: minikube ip → http://<minikube-ip>:30080
+

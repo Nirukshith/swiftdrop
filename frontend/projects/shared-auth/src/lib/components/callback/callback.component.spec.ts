@@ -117,5 +117,44 @@ describe('CallbackComponent', () => {
     expect(component.errorMessage()).toContain('unexpected error occurred');
     expect(router.navigate).not.toHaveBeenCalled();
   });
+
+  describe('role-based navigation matrix', () => {
+    const roleRoutes: { role: string; expectedPath: string }[] = [
+      { role: 'CUSTOMER',   expectedPath: '/customer'   },
+      { role: 'MERCHANT',   expectedPath: '/merchant'   },
+      { role: 'COURIER',    expectedPath: '/courier'    },
+      { role: 'DISPATCHER', expectedPath: '/dispatcher' },
+      { role: 'ADMIN',      expectedPath: '/admin'      },
+    ];
+
+    roleRoutes.forEach(({ role, expectedPath }) => {
+      it(`should navigate to ${expectedPath} when role is ${role}`, async () => {
+        authServiceMock.userRole.mockReturnValue(role);
+        createComponent();
+        await fixture.whenStable();
+
+        expect(authServiceMock.initializeSession).toHaveBeenCalled();
+        expect(router.navigate).toHaveBeenCalledWith(
+          [expectedPath],
+          { replaceUrl: true }
+        );
+        expect(component.errorMessage()).toBeNull();
+      });
+    });
+  });
+
+  it('should not write any token to localStorage', async () => {
+    const setItemSpy = jest.spyOn(Storage.prototype, 'setItem');
+    createComponent();
+    await fixture.whenStable();
+
+    const tokenWrites = setItemSpy.mock.calls.filter(([key]) =>
+      key.toLowerCase().includes('token') ||
+      key.toLowerCase().includes('access') ||
+      key.toLowerCase().includes('refresh')
+    );
+    expect(tokenWrites).toHaveLength(0);
+    setItemSpy.mockRestore();
+  });
 });
 
