@@ -439,4 +439,48 @@ class CourierExecutionServiceTest {
             any()
         );
     }
+
+    @Test
+    @DisplayName("Status update: Successfully records DELIVERY_STATUS_UPDATED audit event")
+    void statusUpdateRecordsAuditOnSuccess() {
+        ParcelResponse parcel = createMockParcel(COURIER_A, "OUT_FOR_DELIVERY");
+        when(parcelServiceClient.getParcel(PARCEL_ID)).thenReturn(parcel);
+        when(parcelServiceClient.updateStatus(eq(PARCEL_ID), any())).thenReturn(
+            new ParcelResponse(PARCEL_ID, "SD-001", "DELIVERED", "cust-1", null, COURIER_A, null, null, 1.0, "SMALL", 100.0, 0, null, "Sunil", null, null, null, 1L, Instant.now(), Instant.now())
+        );
+
+        CourierStatusUpdateRequest req = new CourierStatusUpdateRequest("DELIVERED", null, "Sunil", "idem-audit-1");
+        CourierStatusUpdateResponse resp = courierExecutionService.updateDeliveryStatus(COURIER_A, PARCEL_ID, req);
+
+        assertThat(resp).isNotNull();
+        verify(deliveryProofAuditService).record(
+            eq(COURIER_A),
+            eq("COURIER"),
+            eq("DELIVERY_STATUS_UPDATED"),
+            eq("PARCEL"),
+            eq(PARCEL_ID.toString()),
+            any()
+        );
+    }
+
+    @Test
+    @DisplayName("Status update: Records audit rejection on unauthorized courier access")
+    void statusUpdateRecordsAuditOnUnauthorizedAccess() {
+        ParcelResponse parcel = createMockParcel(COURIER_B, "OUT_FOR_DELIVERY");
+        when(parcelServiceClient.getParcel(PARCEL_ID)).thenReturn(parcel);
+
+        CourierStatusUpdateRequest req = new CourierStatusUpdateRequest("DELIVERED", null, "Sunil", null);
+        assertThrows(ResponseStatusException.class, () ->
+            courierExecutionService.updateDeliveryStatus(COURIER_A, PARCEL_ID, req)
+        );
+
+        verify(deliveryProofAuditService).record(
+            eq(COURIER_A),
+            eq("COURIER"),
+            eq("DELIVERY_PROOF_REJECTED"),
+            eq("PARCEL"),
+            eq(PARCEL_ID.toString()),
+            any()
+        );
+    }
 }
