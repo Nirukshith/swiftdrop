@@ -4,6 +4,8 @@ Requires isolated running services and a prepared ADMIN account. See the M6-02
 verification document for environment variables and fixture setup.
 """
 import concurrent.futures
+import base64
+import hashlib
 import json
 import os
 import urllib.error
@@ -115,7 +117,18 @@ def main():
     if provider:
         quote_path = '/internal/v1/pricing/quote?pickupDistrict=Colombo&dropoffDistrict=Gampaha&weightKg=1.5&size=SMALL'
         expect(call(provider, quote_path), 401, 'current pricing provider rejects unauthenticated M6 call')
-        expect(call(provider, quote_path, token=first_token), 403, 'merchant token cannot satisfy dispatcher-only pricing policy')
+        expect(call(provider, quote_path, token=first_token), 401, 'current pricing validator rejects auth token without audience')
+        pricing = expect(call(AUTH, '/api/v1/auth/token', 'POST', {
+            'grant_type': 'client_credentials', 'client_id': os.environ['M6_VERIFY_PRICING_CLIENT_ID'],
+            'client_secret': os.environ['M6_VERIFY_PRICING_CLIENT_SECRET'], 'scope': 'pricing:read',
+        }), 200, 'real dedicated pricing service token')
+        encoded = pricing['access_token'].split('.')[1]
+        claims = json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
+        check(claims.get('scope') == 'pricing:read' and claims.get('role') != 'DISPATCHER',
+            'dedicated pricing scope without dispatcher elevation')
+        check(not claims.get('aud'), 'documented M10/M5 blocker: issued token has no audience')
+        expect(call(provider, quote_path, token=pricing['access_token']), 401,
+            'documented M10/M5 blocker: real scoped token rejected by pricing audience validation')
     address = {'line1': '10 Verification Road', 'city': 'Colombo', 'district': 'Colombo', 'postalCode': '00100'}
     payload = {'externalReference': 'm6-' + run_id, 'recipientName': 'Test Recipient',
         'recipientPhone': '+94770000000', 'pickupAddress': address,
@@ -126,6 +139,14 @@ def main():
     check(first['status'] == 'CREATED' and first['fee'] == 850, 'configured contract quote and real parcel result')
     replay = expect(call(INTEGRATION, path, 'POST', payload, first_token, 'same-key'), 201, 'same-key create replay')
     check(replay == first, 'create replay returns entire original response')
+    # Exercise the merged M1 replay contract with M6's exact downstream identity.
+    downstream_key = 'm6-' + hashlib.sha256((first_id + ':CREATE_ORDER:same-key').encode()).hexdigest()
+    internal_payload = dict(payload, merchantId=first_id, fee=850)
+    provider_replay = expect(call(PARCEL, '/internal/v1/parcels', 'POST', internal_payload,
+        first_token, downstream_key), 201, 'real M1 downstream creation replay')
+    check(provider_replay['id'] == first['parcelId'], 'M1 downstream replay preserves the original parcel')
+    expect(call(PARCEL, '/internal/v1/parcels', 'POST', dict(internal_payload, recipientName='Changed'),
+        first_token, downstream_key), 409, 'M1 downstream key rejects changed payload')
     conflicting = dict(payload, externalReference='different-' + run_id)
     expect(call(INTEGRATION, path, 'POST', conflicting, first_token, 'same-key'), 409, 'conflicting create-key reuse')
     other = expect(call(INTEGRATION, path, 'POST', payload, second_token, 'same-key'), 201, 'same key in another merchant tenant')

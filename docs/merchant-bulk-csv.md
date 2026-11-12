@@ -1,5 +1,11 @@
 # Merchant bulk CSV upload — #178
 
+Week 6 status for [#223](https://github.com/Nirukshith/swiftdrop/issues/223):
+see [the current verification and setup](m6-week6-merchant-completion-verification.md).
+M1 durable idempotency and M5 pricing scope validation are now merged. M6 uses
+dedicated pricing credentials; the remaining real-token audience mismatch and
+the separately tracked onboarding recovery work still prevent full closure.
+
 ## Workflow
 
 Sign in as a MERCHANT and open **Bulk CSV orders** from `/merchant`, or navigate
@@ -111,15 +117,19 @@ duplicate write over automatically retrying an ambiguous outcome.
 [Owner coordination](https://github.com/Nirukshith/swiftdrop/issues/178#issuecomment-6827127456)
 tracks M1/M5/M10 dependencies. Their packages and shared-auth are unchanged.
 
-1. **Pricing:** current real `/internal/v1/pricing/quote` requires DISPATCHER;
-   M6 has no agreed least-privilege service credential. Merchant tokens must not
-   be elevated. The real-service runner uses an explicit pricing fixture and
-   separately checks the provider's 401/403 policy. Full real pricing-chain
-   acceptance remains open.
-2. **M1 recovery:** the internal parcel controller still ignores its advertised
-   Idempotency-Key. The durable M6 guard prevents blind repeat writes, but cannot
-   identify a parcel that committed remotely while its response/local mapping
-   was lost. That outcome needs an agreed M1 replay/reconciliation operation.
+1. **Pricing:** PR #217 added `pricing:read` JWT authorization and issuer/audience
+   validation. M6 now exchanges dedicated service credentials through the merged
+   auth token endpoint. Auth-issued tokens currently omit the audience required
+   by operations, so even an authentic scoped token receives 401. The runtime
+   runner records this separately and uses an explicit pricing fixture that checks
+   for a bearer header for the remaining merchant workflow. Full real pricing-chain
+   acceptance remains open; M5/M10 own the issuer/validator agreement.
+2. **M1 recovery:** PR #216 now consumes the Idempotency-Key and durably scopes
+   creation/replay/conflicts to the merchant. The runtime check replays the exact
+   M6 downstream key and payload against real M1. M6 bulk still conservatively
+   reserves unknown outcomes: automatic recovery must also preserve the original
+   quote and account for provider responses reflecting current parcel status.
+   Do not remove reservations or claim automatic recovery of unknown writes.
 3. **M10 endpoint:** the supplied integration note names
    `/api/v1/auth/oauth2/token`; the merged auth contract/controller expose
    `/api/v1/auth/token`. Verification follows the merged endpoint. The baseline

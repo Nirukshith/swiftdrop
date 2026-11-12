@@ -59,6 +59,7 @@ export class MerchantBulkComponent implements OnDestroy {
   private subscription?: Subscription;
   private reader?: FileReader;
   private generation = 0;
+  private submittedKey: string | null = null;
   readonly rows = signal<PreviewRow[]>([]);
   readonly validRows = computed(() => this.rows().filter(row => !row.errors.length));
   readonly result = signal<BulkResult | null>(null);
@@ -95,13 +96,13 @@ export class MerchantBulkComponent implements OnDestroy {
   confirm() {
     if (this.busy() || this.reading() || this.submittedCsv || !this.validRows().length || !this.uploadKey().trim()) return;
     const payload = encodeMerchantCsv(this.validRows());
-    this.submittedCsv = payload.csv; this.sourceRows = payload.sourceRows;
+    this.submittedCsv = payload.csv; this.submittedKey = this.uploadKey(); this.sourceRows = payload.sourceRows;
     this.retry();
   }
   retry() {
-    if (this.busy() || !this.submittedCsv) return;
+    if (this.busy() || !this.submittedCsv || !this.submittedKey) return;
     this.busy.set(true); this.error.set('');
-    this.subscription = this.api.submit(this.submittedCsv, this.uploadKey()).pipe(finalize(() => this.busy.set(false))).subscribe({
+    this.subscription = this.api.submit(this.submittedCsv, this.submittedKey).pipe(finalize(() => this.busy.set(false))).subscribe({
       next: report => this.result.set(report),
       error: response => this.error.set(response?.error?.message || 'Upload response was not received. Check this upload with the same reference; do not submit it again with a new one.'),
     });
@@ -109,7 +110,7 @@ export class MerchantBulkComponent implements OnDestroy {
   reset() {
     if (this.busy()) return;
     this.generation++; this.reader?.abort(); this.reading.set(false); this.rows.set([]); this.result.set(null);
-    this.error.set(''); this.uploadKey.set(''); this.submittedCsv = null; this.sourceRows = {};
+    this.error.set(''); this.uploadKey.set(''); this.submittedCsv = null; this.submittedKey = null; this.sourceRows = {};
   }
   ngOnDestroy() { this.generation++; this.reader?.abort(); this.subscription?.unsubscribe(); }
 }

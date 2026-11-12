@@ -2,7 +2,8 @@
 
 Build all service JARs with Java 21 Maven verify first. Requires Docker, Python 3,
 Java 21. Uses loopback ports 19181-19185, 19192, 19194, and 19125. Creates only its own containers and cleans them up.
-Pricing uses a contract fixture because the current provider rejects M6 callers.
+Pricing uses a contract fixture that checks for a bearer header. The real provider is
+also probed with a real auth-issued pricing:read token to expose owner blockers.
 """
 import importlib.util
 import json
@@ -65,6 +66,9 @@ def wait_http(url, process=None):
 
 class PricingFixture(BaseHTTPRequestHandler):
     def do_GET(self):
+        if not self.headers.get('Authorization', '').startswith('Bearer '):
+            self.send_error(401)
+            return
         parsed = urllib.parse.urlparse(self.path)
         query = urllib.parse.parse_qs(parsed.query)
         if parsed.path != '/internal/v1/pricing/quote' or set(query) != {'pickupDistrict', 'dropoffDistrict', 'weightKg', 'size'}:
@@ -160,6 +164,22 @@ try:
         processes.append(proc)
         wait_http(f'http://127.0.0.1:{port}/actuator/health', proc)
         print('Ready: real ' + module + '-service', flush=True)
+        if module == 'auth':
+            def provision(path, body):
+                request = urllib.request.Request('http://127.0.0.1:19181' + path, method='POST',
+                    headers={'Content-Type': 'application/json', 'X-Internal-Service-Token': internal_token},
+                    data=json.dumps(body).encode())
+                with urllib.request.urlopen(request, timeout=20) as response:
+                    return json.load(response)
+            pricing_identity = secrets.token_hex(16)
+            provision('/internal/v1/users', {'email': 'm6-pricing@example.test',
+                'fullName': 'Isolated Pricing Client', 'phoneNumber': '+94770000000',
+                'role': 'MERCHANT', 'merchantId': pricing_identity, 'enabled': True})
+            pricing_client = provision('/internal/v1/clients', {'merchantId': pricing_identity,
+                'clientName': 'Isolated M6 pricing service', 'scopes': ['pricing:read']})
+            # Private fixture credentials configure only M6; no human role is elevated.
+            base_env.update(MERCHANT_PRICING_CLIENT_ID=pricing_client['clientId'],
+                MERCHANT_PRICING_CLIENT_SECRET=pricing_client['clientSecret'])
 
     request = urllib.request.Request('http://127.0.0.1:19181/internal/v1/users', method='POST',
         headers={'Content-Type': 'application/json', 'X-Internal-Service-Token': internal_token},
@@ -171,6 +191,8 @@ try:
     os.environ.update(M6_VERIFY_AUTH_URL='http://127.0.0.1:19181', M6_VERIFY_INTEGRATION_URL='http://127.0.0.1:19184',
         M6_VERIFY_PARCEL_URL='http://127.0.0.1:19182', M6_VERIFY_PRICING_PROVIDER_URL='http://127.0.0.1:19185',
         M6_VERIFY_ADMIN_EMAIL='m6-admin@example.test', M6_VERIFY_ADMIN_PASSWORD=admin_password,
+        M6_VERIFY_PRICING_CLIENT_ID=pricing_client['clientId'],
+        M6_VERIFY_PRICING_CLIENT_SECRET=pricing_client['clientSecret'],
         M6_VERIFY_INTERNAL_TOKEN=internal_token)
     path = ROOT / 'services/integration-service/src/test/resources/merchant/verify_real_parcel.py'
     spec = importlib.util.spec_from_file_location('m6_verifier', path)
