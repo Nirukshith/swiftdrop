@@ -9,20 +9,26 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.web.server.ResponseStatusException;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import com.swiftdrop.operations.courier.profile.CourierProfileOperations;
 
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+    "swiftdrop.proofs.storage-dir=${java.io.tmpdir}/swiftdrop/proofs-it"
+})
 @Testcontainers
 class CourierExecutionIntegrationTest {
 
@@ -35,6 +41,9 @@ class CourierExecutionIntegrationTest {
 
     @Autowired
     private DeliveryProofRepository deliveryProofRepository;
+
+    @Autowired
+    private CourierProfileOperations courierProfileOperations;
 
     @MockBean
     private ParcelServiceClient parcelServiceClient;
@@ -68,8 +77,9 @@ class CourierExecutionIntegrationTest {
     }
 
     @Test
-    @DisplayName("End-to-end: upload proof into PostgreSQL, verify repository record, and complete delivery")
-    void testUploadProofAndCompleteDelivery() {
+    @WithMockUser(username = COURIER_ID, roles = {"COURIER"})
+    @DisplayName("End-to-end: upload proof into PostgreSQL, verify repository record, complete delivery, and retrieve proof")
+    void testUploadProofAndCompleteDelivery() throws Exception {
         ParcelResponse outParcel = mockParcel("OUT_FOR_DELIVERY");
         ParcelResponse deliveredParcel = mockParcel("DELIVERED");
 
@@ -101,5 +111,47 @@ class CourierExecutionIntegrationTest {
         assertThat(statusResp).isNotNull();
         assertThat(statusResp.currentStatus()).isEqualTo("DELIVERED");
         assertThat(statusResp.previousStatus()).isEqualTo("OUT_FOR_DELIVERY");
+
+        // 4. Retrieve the uploaded proof through authorized operations
+        var proofResource = courierProfileOperations.getProof(proofResp.proofId().toString());
+        assertThat(proofResource).isNotNull();
+        assertThat(proofResource.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(proofResource.getBody()).isNotNull();
+        assertThat(proofResource.getBody().contentLength()).isEqualTo(validJpeg.length);
+    }
+
+    @Test
+    @WithMockUser(username = "other-courier-999", roles = {"COURIER"})
+    @DisplayName("Unauthorized proof retrieval is rejected with 403 Forbidden")
+    void testUnauthorizedProofRetrievalIsRejected() {
+        UUID proofId = UUID.randomUUID();
+        DeliveryProofEntity proof = DeliveryProofEntity.builder()
+            .id(proofId)
+            .parcelId(PARCEL_ID)
+            .courierId(COURIER_ID)
+            .proofType("PHOTO")
+            .proofUrl("/api/v1/courier/proofs/" + proofId)
+            .recipientName("Nimal Perera")
+            .filePath(System.getProperty("java.io.tmpdir") + "/dummy.jpg")
+            .mimeType("image/jpeg")
+            .fileSizeBytes(100L)
+            .uploadedAt(Instant.now())
+            .build();
+        deliveryProofRepository.save(proof);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            courierProfileOperations.getProof(proofId.toString())
+        );
+        assertThat(ex.getStatusCode().value()).isEqualTo(403);
+    }
+
+    @Test
+    @WithMockUser(username = COURIER_ID, roles = {"COURIER"})
+    @DisplayName("Missing proof retrieval returns 404 Not Found")
+    void testMissingProofRetrievalReturnsNotFound() {
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            courierProfileOperations.getProof(UUID.randomUUID().toString())
+        );
+        assertThat(ex.getStatusCode().value()).isEqualTo(404);
     }
 }

@@ -233,6 +233,15 @@ export class CourierService {
     );
   }
 
+  /**
+   * Retrieve uploaded delivery proof photo binary from GET /api/v1/courier/proofs/{proofId}
+   */
+  getProofPhoto(proofId: string): Observable<Blob> {
+    return this.http.get(`/api/v1/courier/proofs/${encodeURIComponent(proofId)}`, {
+      responseType: 'blob',
+    });
+  }
+
   // -------------------------------------------------------------------------
   // M9 Compatibility
   // -------------------------------------------------------------------------

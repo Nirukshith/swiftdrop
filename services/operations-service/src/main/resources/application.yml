@@ -18,3 +18,11 @@ management:
   endpoint:
     health:
       show-details: always
+
+swiftdrop:
+  proofs:
+    storage-dir: ${SWIFTDROP_PROOFS_STORAGE_DIR:/data/proofs}
+    max-size-bytes: 5242880
+  services:
+    parcel-service:
+      url: ${SWIFTDROP_SERVICES_PARCEL_SERVICE_URL:http://localhost:8082}

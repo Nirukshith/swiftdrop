@@ -26,6 +26,7 @@ public class CourierSecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/api/v1/courier/proofs/**").hasAnyRole("COURIER", "DISPATCHER", "ADMIN")
                 .requestMatchers("/api/v1/courier/**").hasRole("COURIER")
                 .anyRequest().authenticated()
             );

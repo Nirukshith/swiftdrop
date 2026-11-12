@@ -27,6 +27,7 @@ public class CourierExecutionService {
 
     private static final Logger log = LoggerFactory.getLogger(CourierExecutionService.class);
     private static final long DEFAULT_MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+    private static final java.time.ZoneId BUSINESS_ZONE = java.time.ZoneId.of("Asia/Colombo");
 
     private final ParcelServiceClient parcelServiceClient;
     private final DeliveryProofRepository deliveryProofRepository;
@@ -36,23 +37,19 @@ public class CourierExecutionService {
     public CourierExecutionService(
         ParcelServiceClient parcelServiceClient,
         DeliveryProofRepository deliveryProofRepository,
-        @Value("${swiftdrop.proofs.storage-dir:}") String storageDir,
+        @Value("${swiftdrop.proofs.storage-dir:/data/proofs}") String storageDir,
         @Value("${swiftdrop.proofs.max-size-bytes:5242880}") long maxSizeBytes
     ) {
         this.parcelServiceClient = parcelServiceClient;
         this.deliveryProofRepository = deliveryProofRepository;
-        if (storageDir == null || storageDir.isBlank() || "/data/proofs".equals(storageDir)) {
-            this.storageDir = Paths.get(System.getProperty("java.io.tmpdir"), "swiftdrop", "proofs").toString();
-        } else {
-            this.storageDir = storageDir;
-        }
+        this.storageDir = (storageDir != null && !storageDir.isBlank()) ? storageDir : "/data/proofs";
         this.maxSizeBytes = maxSizeBytes > 0 ? maxSizeBytes : DEFAULT_MAX_SIZE_BYTES;
     }
 
     public CourierDeliveriesResponse getTodaysDeliveries(String courierId, String dateStr, String statusFilter) {
         String effectiveDate = (dateStr != null && !dateStr.isBlank())
             ? dateStr
-            : LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE);
+            : LocalDate.now(BUSINESS_ZONE).format(DateTimeFormatter.ISO_LOCAL_DATE);
 
         ParcelPageResponse response = parcelServiceClient.getParcelsByCourierAndDate(courierId, effectiveDate);
         List<ParcelResponse> allParcels = response != null && response.content() != null
@@ -65,6 +62,10 @@ public class CourierExecutionService {
         int sequenceIndex = 1;
 
         for (ParcelResponse p : allParcels) {
+            if (p.courierId() != null && !p.courierId().equals(courierId)) {
+                continue;
+            }
+
             String status = p.status();
             boolean isCompleted = "DELIVERED".equalsIgnoreCase(status)
                 || "FAILED".equalsIgnoreCase(status)
@@ -102,7 +103,7 @@ public class CourierExecutionService {
 
         return new CourierDeliveriesResponse(
             effectiveDate,
-            cards.size(),
+            allParcels.size(),
             pendingCount,
             completedCount,
             cards
@@ -110,7 +111,7 @@ public class CourierExecutionService {
     }
 
     public CourierDeliveryDetail getDeliveryDetail(String courierId, UUID parcelId) {
-        ParcelResponse parcel = parcelServiceClient.getParcel(parcelId);
+        ParcelResponse parcel = fetchParcel(courierId, parcelId);
         if (parcel == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Delivery parcel not found: " + parcelId);
         }
@@ -161,7 +162,7 @@ public class CourierExecutionService {
         UUID parcelId,
         CourierStatusUpdateRequest request
     ) {
-        ParcelResponse parcel = parcelServiceClient.getParcel(parcelId);
+        ParcelResponse parcel = fetchParcel(courierId, parcelId);
         if (parcel == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Delivery parcel not found: " + parcelId);
         }
@@ -261,7 +262,7 @@ public class CourierExecutionService {
         }
 
         // Validate parcel existence and ownership
-        ParcelResponse parcel = parcelServiceClient.getParcel(parcelId);
+        ParcelResponse parcel = fetchParcel(courierId, parcelId);
         if (parcel == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Parcel not found with ID: " + parcelId);
         }
@@ -273,22 +274,14 @@ public class CourierExecutionService {
         String filename = parcelId + "-" + timestamp + "." + extension;
 
         Path targetDir = Paths.get(storageDir);
+        Path targetFile;
         try {
             Files.createDirectories(targetDir);
-            Path targetFile = targetDir.resolve(filename);
+            targetFile = targetDir.resolve(filename);
             Files.write(targetFile, bytes);
         } catch (IOException e) {
-            log.warn("Failed to write proof photo to configured storageDir: {}, falling back to temp dir", storageDir, e);
-            try {
-                Path fallbackDir = Paths.get(System.getProperty("java.io.tmpdir"), "swiftdrop", "proofs");
-                Files.createDirectories(fallbackDir);
-                Path targetFile = fallbackDir.resolve(filename);
-                Files.write(targetFile, bytes);
-                targetDir = fallbackDir;
-            } catch (IOException ex) {
-                log.error("Failed to write proof photo to fallback temp dir as well", ex);
-                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store proof file on disk", ex);
-            }
+            log.error("Failed to write proof photo to persistent storageDir: {}", storageDir, e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to store proof file on disk", e);
         }
 
         UUID proofId = UUID.randomUUID();
@@ -301,14 +294,24 @@ public class CourierExecutionService {
             .proofType("PHOTO")
             .proofUrl(proofUrl)
             .recipientName(recipientName != null && !recipientName.isBlank() ? recipientName.trim() : parcel.recipientName())
-            .filePath(targetDir.resolve(filename).toString())
+            .filePath(targetFile.toString())
             .fileSizeBytes(file.getSize())
             .mimeType(mimeType)
             .notes(notes)
             .uploadedAt(Instant.now())
             .build();
 
-        deliveryProofRepository.save(proofEntity);
+        try {
+            deliveryProofRepository.save(proofEntity);
+        } catch (Exception e) {
+            log.error("Failed to persist delivery proof metadata in database for parcel {}", parcelId, e);
+            try {
+                Files.deleteIfExists(targetFile);
+            } catch (IOException deleteEx) {
+                log.warn("Failed to clean up orphaned proof file {}", targetFile, deleteEx);
+            }
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to persist proof metadata", e);
+        }
 
         return new ProofUploadResponse(
             proofId,
@@ -318,6 +321,34 @@ public class CourierExecutionService {
             file.getSize(),
             proofEntity.getUploadedAt()
         );
+    }
+
+    private ParcelResponse fetchParcel(String courierId, UUID parcelId) {
+        try {
+            ParcelResponse p = parcelServiceClient.getParcel(parcelId);
+            if (p != null) {
+                return p;
+            }
+        } catch (ResponseStatusException rse) {
+            if (rse.getStatusCode().value() == 403 || rse.getStatusCode().value() == 404) {
+                return findInCourierAssignments(courierId, parcelId)
+                    .orElseThrow(() -> rse);
+            }
+            throw rse;
+        } catch (Exception ignored) {
+        }
+        return findInCourierAssignments(courierId, parcelId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Delivery parcel not found: " + parcelId));
+    }
+
+    private Optional<ParcelResponse> findInCourierAssignments(String courierId, UUID parcelId) {
+        ParcelPageResponse resp = parcelServiceClient.getParcelsByCourierAndDate(courierId, null);
+        if (resp != null && resp.content() != null) {
+            return resp.content().stream()
+                .filter(p -> p.id().equals(parcelId))
+                .findFirst();
+        }
+        return Optional.empty();
     }
 
     private void validateCourierOwnership(ParcelResponse parcel, String courierId) {
