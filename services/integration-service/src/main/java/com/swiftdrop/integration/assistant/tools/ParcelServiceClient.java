@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -15,6 +16,7 @@ public class ParcelServiceClient {
 
     private final RestClient restClient;
 
+    @Autowired
     public ParcelServiceClient(
             @Value("${services.parcel.base-url:http://localhost:8082}") String baseUrl,
             @Value("${swiftdrop.assistant.upstream-timeout:PT3S}") Duration timeout) {
