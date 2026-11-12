@@ -34,15 +34,17 @@ export class MerchantApprovalService {
 
   private lastPage = 0;
   private lastSize = 20;
+  private lastStatus: 'PENDING' | 'APPROVED' = 'PENDING';
 
-  loadMerchants(page = 0, size = 20): Observable<MerchantPage> {
+  loadMerchants(page = 0, size = 20, status: 'PENDING' | 'APPROVED' = this.lastStatus): Observable<MerchantPage> {
     this.loadingSignal.set(true);
     this.errorSignal.set(null);
     this.lastPage = page;
     this.lastSize = size;
+    this.lastStatus = status;
 
     const params = new HttpParams()
-      .set('status', 'PENDING')
+      .set('status', status)
       .set('page', page.toString())
       .set('size', size.toString());
 
@@ -74,6 +76,11 @@ export class MerchantApprovalService {
     return this.http.post<MerchantSummary>(`${this.baseUrl}/${merchantId}/reject`, request);
   }
 
+  recover(merchantId: string, key: string): Observable<MerchantApprovalResponse> {
+    return this.http.post<MerchantApprovalResponse>(`${this.baseUrl}/${merchantId}/recover-credentials`,
+      { confirmReplacement: true }, { headers: { 'Idempotency-Key': key } });
+  }
+
   clearError(): void {
     this.errorSignal.set(null);
   }
@@ -82,7 +89,8 @@ export class MerchantApprovalService {
     if (!error || typeof error !== 'object') return fallback;
     const response = error as { status?: number; error?: { message?: string }; message?: string };
     if (response.status === 409) {
-      return 'This merchant is no longer pending. Refresh the list and try again.';
+      return 'This merchant is no longer pending or requires credential recovery. Refresh the list. '
+        + (response.error?.message || '');
     }
     return response.error?.message || response.message || fallback;
   }
