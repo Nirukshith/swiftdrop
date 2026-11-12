@@ -54,6 +54,12 @@ For each write, persist `(merchantId, operation, idempotencyKey)`, a canonical r
 
 ## Bulk CSV proposal
 
+The M6 implementation and user-approved CSV limits for #178 are documented in
+[merchant-bulk-csv.md](merchant-bulk-csv.md), including the template, preview,
+durable row outcomes and remaining provider handoffs. That document describes
+current implemented behavior; the original planning proposal below is retained
+for context. Provider-supported retry/reconciliation remains unagreed.
+
 `text/csv`, UTF-8, one header row. Proposed columns (header spellings are case-sensitive in this draft):
 
 `externalReference,recipientName,recipientPhone,pickupLine1,pickupLine2,pickupCity,pickupDistrict,pickupPostalCode,dropoffLine1,dropoffLine2,dropoffCity,dropoffDistrict,dropoffPostalCode,size,weightKg`

@@ -23,31 +23,46 @@ public class MerchantOrderService {
     private final IdempotencyRequestHasher requestHasher;
     private final PricingQuoteClient pricingQuoteClient;
     private final ParcelClient parcelClient;
+    private final MerchantBulkStore bulkStore;
 
     public MerchantOrderService(MerchantRepository merchantRepository,
                                 MerchantOrderRepository orderRepository,
                                 MerchantOrderIdempotencyStore idempotencyStore,
                                 IdempotencyRequestHasher requestHasher,
                                 PricingQuoteClient pricingQuoteClient,
-                                ParcelClient parcelClient) {
+                                ParcelClient parcelClient, MerchantBulkStore bulkStore) {
         this.merchantRepository = merchantRepository;
         this.orderRepository = orderRepository;
         this.idempotencyStore = idempotencyStore;
         this.requestHasher = requestHasher;
         this.pricingQuoteClient = pricingQuoteClient;
         this.parcelClient = parcelClient;
+        this.bulkStore = bulkStore;
     }
 
     @Transactional
     public MerchantOrderIdempotencyStore.StoredResponse create(UUID merchantId, String idempotencyKey,
                                                                CreateMerchantOrderRequest request) {
-        Merchant merchant = merchantRepository.findById(merchantId)
+        return createInternal(merchantId, idempotencyKey, request, false);
+    }
+
+    @Transactional
+    public MerchantOrderIdempotencyStore.StoredResponse createFromBulk(UUID merchantId, String idempotencyKey,
+                                                                       CreateMerchantOrderRequest request) {
+        return createInternal(merchantId, idempotencyKey, request, true);
+    }
+
+    private MerchantOrderIdempotencyStore.StoredResponse createInternal(UUID merchantId, String idempotencyKey,
+                                                                       CreateMerchantOrderRequest request, boolean bulk) {
+        Merchant merchant = merchantRepository.findForOrder(merchantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
                         "Merchant credentials are invalid, inactive, or not approved for ordering"));
         if (!merchant.getStatus().canPlaceOrders()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Merchant credentials are invalid, inactive, or not approved for ordering");
         }
+
+        bulkStore.assertReferenceAvailable(merchantId, request.externalReference(), idempotencyKey, bulk);
 
         String hash = requestHasher.hash(CREATE_OPERATION, request);
         MerchantOrderIdempotencyStore.StoredResponse replay =
@@ -61,8 +76,13 @@ public class MerchantOrderService {
                     "External reference has already been used by this merchant");
         }
 
+        BigDecimal quote;
         try {
-            BigDecimal quote = pricingQuoteClient.quote(request);
+            quote = pricingQuoteClient.quote(request);
+        } catch (RestClientException | IllegalArgumentException | IllegalStateException exception) {
+            throw new PricingUnavailableException();
+        }
+        try {
             ParcelClient.InternalParcelResponse parcel = requestParcel(merchantId, request, quote, idempotencyKey);
             if (parcel == null || parcel.id() == null || parcel.id().isBlank()
                     || parcel.trackingNumber() == null || parcel.trackingNumber().isBlank()
@@ -88,6 +108,10 @@ public class MerchantOrderService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Order conflicts with an existing merchant order", exception);
         }
+    }
+
+    public static class PricingUnavailableException extends ResponseStatusException {
+        public PricingUnavailableException() { super(HttpStatus.BAD_GATEWAY, "Pricing service could not quote the merchant order"); }
     }
 
     private ParcelClient.InternalParcelResponse requestParcel(UUID merchantId, CreateMerchantOrderRequest request,

@@ -45,7 +45,14 @@ public class JpaAuditService implements AuditService {
         "credentials",
         "private_key",
         "privatekey",
-        "session"
+        "session",
+        "session_secret",
+        "sessionsecret",
+        "authorization",
+        "cookie",
+        "cookies",
+        "api_key",
+        "apikey"
     );
 
     private final AuditLogRepository auditLogRepository;
@@ -172,17 +179,69 @@ public class JpaAuditService implements AuditService {
         for (Map.Entry<String, Object> entry : details.entrySet()) {
             String key = entry.getKey();
             if (key == null) continue;
-            String lowerKey = key.trim().toLowerCase();
-            boolean isSensitive = SENSITIVE_KEYS.contains(lowerKey)
-                || lowerKey.endsWith("password")
-                || lowerKey.endsWith("secret")
-                || lowerKey.endsWith("token");
-            if (isSensitive) {
+            if (isSensitiveKey(key)) {
                 sanitized.put(key, "[REDACTED]");
             } else {
-                sanitized.put(key, entry.getValue());
+                sanitized.put(key, sanitizeValue(entry.getValue()));
             }
         }
         return Collections.unmodifiableMap(sanitized);
+    }
+
+    private static Object sanitizeValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> sanitizedMap = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String k = String.valueOf(entry.getKey());
+                if (isSensitiveKey(k)) {
+                    sanitizedMap.put(k, "[REDACTED]");
+                } else {
+                    sanitizedMap.put(k, sanitizeValue(entry.getValue()));
+                }
+            }
+            return Collections.unmodifiableMap(sanitizedMap);
+        }
+        if (value instanceof Iterable<?> iterable) {
+            List<Object> sanitizedList = new ArrayList<>();
+            for (Object item : iterable) {
+                sanitizedList.add(sanitizeValue(item));
+            }
+            return Collections.unmodifiableList(sanitizedList);
+        }
+        if (value.getClass().isArray() && !value.getClass().getComponentType().isPrimitive()) {
+            Object[] array = (Object[]) value;
+            List<Object> sanitizedList = new ArrayList<>(array.length);
+            for (Object item : array) {
+                sanitizedList.add(sanitizeValue(item));
+            }
+            return Collections.unmodifiableList(sanitizedList);
+        }
+        return value;
+    }
+
+    public static boolean isSensitiveKey(String key) {
+        if (key == null || key.isBlank()) {
+            return false;
+        }
+        String lowerKey = key.trim().toLowerCase(Locale.ROOT);
+        String stripped = lowerKey.replace("-", "").replace("_", "");
+
+        if (SENSITIVE_KEYS.contains(lowerKey) || SENSITIVE_KEYS.contains(stripped)) {
+            return true;
+        }
+        return stripped.contains("password")
+            || stripped.contains("secret")
+            || stripped.contains("token")
+            || stripped.contains("credential")
+            || stripped.contains("privatekey")
+            || stripped.contains("authorization")
+            || stripped.contains("cookie")
+            || stripped.contains("apikey")
+            || stripped.endsWith("sessionsecret")
+            || stripped.equals("code")
+            || (stripped.endsWith("code") && (stripped.contains("auth") || stripped.contains("oauth") || stripped.contains("reset")));
     }
 }

@@ -1,5 +1,9 @@
 # M6 Week 5 — Bulk CSV readiness (#178)
 
+This is the historical pre-implementation readiness snapshot from PR #195.
+See [merchant-bulk-csv.md](merchant-bulk-csv.md) for the subsequent M6 CSV
+implementation, verification procedure and remaining provider limitations.
+
 ## Decision
 
 Bulk upload is deferred on development `927dfa2aa7c0e2040027f437857c381971ddec0f`.

@@ -2,6 +2,7 @@ package com.swiftdrop.operations.courier.profile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.operations.dispatch.ProcessedEventRepository;
+import com.swiftdrop.operations.OperationsKafkaIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @Testcontainers
-class CourierProfileIntegrationTest {
+class CourierProfileIntegrationTest extends OperationsKafkaIntegrationTest {
     @Container
     @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
