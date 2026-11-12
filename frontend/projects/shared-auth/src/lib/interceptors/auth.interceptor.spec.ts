@@ -53,6 +53,22 @@ describe('authInterceptor', () => {
     req.flush({});
   });
 
+  it('should NOT attach Authorization header to external third-party requests (leak protection)', () => {
+    http.get('https://maps.googleapis.com/maps/api/geocode/json').subscribe();
+
+    const req = httpTesting.expectOne('https://maps.googleapis.com/maps/api/geocode/json');
+    expect(req.request.headers.get('Authorization')).toBeNull();
+    req.flush({});
+  });
+
+  it('should attach Authorization header to absolute swiftdrop domain requests', () => {
+    http.get('https://api.swiftdrop.local/api/v1/parcels/999').subscribe();
+
+    const req = httpTesting.expectOne('https://api.swiftdrop.local/api/v1/parcels/999');
+    expect(req.request.headers.get('Authorization')).toBe('Bearer initial-token-123');
+    req.flush({});
+  });
+
   it('should set withCredentials: true for auth endpoints', () => {
     http.post('/api/v1/auth/login', {}).subscribe();
 
