@@ -1,5 +1,7 @@
 package com.swiftdrop.auth.audit;
 
+import com.swiftdrop.common.security.CurrentUser;
+
 import java.util.Map;
 
 /**
@@ -32,8 +34,14 @@ public interface AuditService {
                         String targetType,
                         String targetId,
                         Map<String, Object> details) {
-        // Default fallback
-        record("SYSTEM", "SYSTEM", action, targetType, targetId, details);
+        CurrentUser currentUser = CurrentUser.get().orElse(null);
+        String actorId = (currentUser != null && currentUser.userId() != null && !currentUser.userId().isBlank())
+            ? currentUser.userId()
+            : "SYSTEM";
+        String actorRole = (currentUser != null && currentUser.role() != null && !currentUser.role().isBlank())
+            ? currentUser.role()
+            : (currentUser != null && !currentUser.roles().isEmpty() ? currentUser.roles().iterator().next() : "SYSTEM");
+        record(actorId, actorRole, action, targetType, targetId, details);
     }
 
     /**
@@ -41,3 +49,4 @@ public interface AuditService {
      */
     void record(AuditEvent event);
 }
+
