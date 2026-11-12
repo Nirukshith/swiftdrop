@@ -9,7 +9,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @SpringBootTest
 @Testcontainers
-class OperationsServiceApplicationTests {
+class OperationsServiceApplicationTests extends OperationsKafkaIntegrationTest {
 
     @Container
     @ServiceConnection
