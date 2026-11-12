@@ -154,4 +154,21 @@ class CourierExecutionIntegrationTest {
         );
         assertThat(ex.getStatusCode().value()).isEqualTo(404);
     }
+
+    @Test
+    @WithMockUser(username = "dispatcher-01", roles = {"DISPATCHER"})
+    @DisplayName("Authorized Dispatcher can retrieve delivery proof")
+    void testDispatcherCanRetrieveProof() throws Exception {
+        byte[] validJpeg = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0x00};
+        MockMultipartFile file = new MockMultipartFile("file", "disp.jpg", "image/jpeg", validJpeg);
+        when(parcelServiceClient.getParcel(PARCEL_ID)).thenReturn(mockParcel("OUT_FOR_DELIVERY"));
+
+        ProofUploadResponse proofResp = courierExecutionService.uploadProof(
+            COURIER_ID, PARCEL_ID, file, "Nimal Perera", "Notes"
+        );
+
+        var proofResource = courierProfileOperations.getProof(proofResp.proofId().toString());
+        assertThat(proofResource).isNotNull();
+        assertThat(proofResource.getStatusCode().is2xxSuccessful()).isTrue();
+    }
 }
