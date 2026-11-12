@@ -94,4 +94,33 @@ class TrackingMapperTest {
                 new StatusHistoryView(ParcelStatus.FAILED, ParcelStatus.CREATED, "Re-queued", T1)));
         assertThat(history.entries().get(0).fromStatus()).isEqualTo(ParcelStatus.FAILED);
     }
+
+    @Test
+    @DisplayName("Courier (re)assignment rows are not status changes: no duplicate Created row, no courier ids")
+    void assignmentRowsAreLeftOut() {
+        Instant assigned = T0.plusSeconds(60);
+        Instant reassigned = T0.plusSeconds(120);
+        Instant requeued = T2.plusSeconds(600);
+        List<StatusHistoryView> withAssignments = List.of(
+                new StatusHistoryView(ParcelStatus.CREATED, ParcelStatus.CREATED, "Parcel order created", T0),
+                new StatusHistoryView(ParcelStatus.CREATED, ParcelStatus.CREATED, "Assigned to courier courier-1", assigned),
+                new StatusHistoryView(ParcelStatus.CREATED, ParcelStatus.CREATED, "Reassigned to courier courier-2 from courier-1", reassigned),
+                new StatusHistoryView(ParcelStatus.CREATED, ParcelStatus.PICKED_UP, null, T1),
+                new StatusHistoryView(ParcelStatus.PICKED_UP, ParcelStatus.FAILED, "Recipient not home", T2),
+                new StatusHistoryView(ParcelStatus.FAILED, ParcelStatus.CREATED, "Re-queued", requeued),
+                new StatusHistoryView(ParcelStatus.CREATED, ParcelStatus.CREATED, "Assigned to courier courier-3", requeued.plusSeconds(60)));
+
+        ParcelHistoryResponse history = TrackingMapper.toHistory(parcel("X"), withAssignments);
+        assertThat(history.entries()).extracting(ParcelHistoryEntry::toStatus).containsExactly(
+                ParcelStatus.CREATED, ParcelStatus.PICKED_UP, ParcelStatus.FAILED, ParcelStatus.CREATED);
+        assertThat(history.entries().get(0).fromStatus()).as("creation").isNull();
+        assertThat(history.entries().get(3).fromStatus()).as("re-queue").isEqualTo(ParcelStatus.FAILED);
+        assertThat(history.entries()).noneMatch(entry -> entry.reason() != null && entry.reason().contains("courier"));
+
+        PublicTrackingResponse view = TrackingMapper.toPublic(parcel("X"), withAssignments);
+        assertThat(view.timeline()).extracting(PublicTimelineEntry::status).containsExactly(
+                ParcelStatus.CREATED, ParcelStatus.PICKED_UP, ParcelStatus.FAILED, ParcelStatus.CREATED);
+        assertThat(view.timeline().get(0).occurredAt()).isEqualTo(T0);
+        assertThat(view.lastUpdatedAt()).as("an assignment does not count as an update").isEqualTo(requeued);
+    }
 }
