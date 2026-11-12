@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/internal/v1/pricing")
-@PreAuthorize("hasRole('DISPATCHER')")
+@PreAuthorize("hasAuthority('SCOPE_pricing:read') or hasRole('DISPATCHER')")
 public class QuoteController {
 
     private final ZoneRepository zoneRepository;

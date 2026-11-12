@@ -1,19 +1,45 @@
 package com.swiftdrop.operations;
 
+import java.util.Collection;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    @Bean
+    public JwtDecoder jwtDecoder(
+        @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri:http://localhost:8081/.well-known/jwks.json}")
+        String jwksUri,
+        @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:https://auth.swiftdrop.local}")
+        String issuer,
+        @Value("${swiftdrop.security.oauth2.audience:swiftdrop-api}")
+        String audience
+    ) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwksUri)
+            .jwsAlgorithm(SignatureAlgorithm.RS256)
+            .build();
+        decoder.setJwtValidator(tokenValidator(issuer, audience));
+        return decoder;
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(
@@ -43,5 +69,34 @@ public class SecurityConfig {
         }
 
         return http.build();
+    }
+
+    static OAuth2TokenValidator<Jwt> tokenValidator(String issuer, String audience) {
+        return new DelegatingOAuth2TokenValidator<>(
+            JwtValidators.createDefaultWithIssuer(issuer),
+            new AudienceValidator(audience)
+        );
+    }
+
+    private static final class AudienceValidator implements OAuth2TokenValidator<Jwt> {
+
+        private final String audience;
+
+        private AudienceValidator(String audience) {
+            this.audience = audience;
+        }
+
+        @Override
+        public OAuth2TokenValidatorResult validate(Jwt token) {
+            Collection<String> audiences = token.getAudience();
+            if (audiences != null && audiences.contains(audience)) {
+                return OAuth2TokenValidatorResult.success();
+            }
+            return OAuth2TokenValidatorResult.failure(new OAuth2Error(
+                "invalid_token",
+                "The required audience is missing",
+                null
+            ));
+        }
     }
 }
