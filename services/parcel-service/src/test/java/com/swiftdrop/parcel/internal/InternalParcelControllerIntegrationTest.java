@@ -19,6 +19,9 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -45,6 +48,9 @@ class InternalParcelControllerIntegrationTest {
     private ParcelRepository parcelRepository;
 
     @Autowired
+    private MerchantParcelIdempotencyRepository merchantParcelIdempotencyRepository;
+
+    @Autowired
     private StatusHistoryRepository statusHistoryRepository;
 
     @MockBean
@@ -53,6 +59,7 @@ class InternalParcelControllerIntegrationTest {
     @BeforeEach
     void setUp() {
         statusHistoryRepository.deleteAll();
+        merchantParcelIdempotencyRepository.deleteAll();
         parcelRepository.deleteAll();
     }
 
@@ -325,6 +332,139 @@ class InternalParcelControllerIntegrationTest {
                 .andExpect(jsonPath("$.merchantId", is("mch-merchant-1")))
                 .andExpect(jsonPath("$.fee", is(1200.00)))
                 .andExpect(jsonPath("$.status", is("CREATED")));
+    }
+
+    @Test
+    @DisplayName("Merchant parcel creation replays the durable result for the same key and payload")
+    void testMerchantParcelIdempotentReplay() throws Exception {
+        InternalCreateParcelRequest request = merchantRequest("mch-merchant-1", "EXT-REPLAY");
+        InternalCreateParcelRequest equivalentRequest = new InternalCreateParcelRequest(
+                request.merchantId(),
+                request.externalReference(),
+                request.pickupAddress(),
+                request.dropoffAddress(),
+                new BigDecimal("3.0"),
+                request.size(),
+                new BigDecimal("1200.0"),
+                request.recipientName(),
+                request.recipientPhone()
+        );
+
+        String first = mockMvc.perform(post("/internal/v1/parcels")
+                        .header("Idempotency-Key", "merchant-key-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(equivalentRequest)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String replay = mockMvc.perform(post("/internal/v1/parcels")
+                        .header("Idempotency-Key", "merchant-key-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        ParcelResponse firstResponse = objectMapper.readValue(first, ParcelResponse.class);
+        ParcelResponse replayResponse = objectMapper.readValue(replay, ParcelResponse.class);
+        assertThat(replayResponse.id()).isEqualTo(firstResponse.id());
+        assertThat(replayResponse.trackingNumber()).isEqualTo(firstResponse.trackingNumber());
+        assertThat(parcelRepository.count()).isEqualTo(1);
+        assertThat(merchantParcelIdempotencyRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Merchant parcel idempotency rejects the same key with a different payload")
+    void testMerchantParcelIdempotencyConflict() throws Exception {
+        InternalCreateParcelRequest first = merchantRequest("mch-merchant-1", "EXT-FIRST");
+        InternalCreateParcelRequest different = merchantRequest("mch-merchant-1", "EXT-DIFFERENT");
+
+        mockMvc.perform(post("/internal/v1/parcels")
+                        .header("Idempotency-Key", "merchant-key-2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(first)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/internal/v1/parcels")
+                        .header("Idempotency-Key", "merchant-key-2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(different)))
+                .andExpect(status().isConflict());
+
+        assertThat(parcelRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Merchant parcel idempotency keys are isolated between merchants")
+    void testMerchantParcelIdempotencyMerchantIsolation() throws Exception {
+        InternalCreateParcelRequest merchantA = merchantRequest("mch-merchant-A", "EXT-A");
+        InternalCreateParcelRequest merchantB = merchantRequest("mch-merchant-B", "EXT-B");
+
+        mockMvc.perform(post("/internal/v1/parcels")
+                        .header("Idempotency-Key", "shared-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(merchantA)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/internal/v1/parcels")
+                        .header("Idempotency-Key", "shared-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(merchantB)))
+                .andExpect(status().isCreated());
+
+        assertThat(parcelRepository.count()).isEqualTo(2);
+        assertThat(merchantParcelIdempotencyRepository.count()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Concurrent merchant retries create one parcel for one idempotency key")
+    void testConcurrentMerchantParcelRetries() throws Exception {
+        InternalCreateParcelRequest request = merchantRequest("mch-merchant-concurrent", "EXT-CONCURRENT");
+        String body = objectMapper.writeValueAsString(request);
+        Callable<String> create = () -> mockMvc.perform(post("/internal/v1/parcels")
+                        .header("Idempotency-Key", "concurrent-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            List<String> responses = executor.invokeAll(List.of(create, create)).stream()
+                    .map(future -> {
+                        try {
+                            return future.get();
+                        } catch (Exception exception) {
+                            throw new RuntimeException(exception);
+                        }
+                    })
+                    .toList();
+            ParcelResponse first = objectMapper.readValue(responses.get(0), ParcelResponse.class);
+            ParcelResponse second = objectMapper.readValue(responses.get(1), ParcelResponse.class);
+            assertThat(second.id()).isEqualTo(first.id());
+            assertThat(parcelRepository.count()).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private InternalCreateParcelRequest merchantRequest(String merchantId, String externalReference) {
+        return new InternalCreateParcelRequest(
+                merchantId,
+                externalReference,
+                new AddressDto("100 Port Rd", null, "Colombo", "Colombo", "00100"),
+                new AddressDto("200 Kandy Rd", null, "Kandy", "Kandy", "20000"),
+                new BigDecimal("3.00"),
+                ParcelSize.LARGE,
+                new BigDecimal("1200.00"),
+                "Devinda Fernando",
+                "+94779998877"
+        );
     }
 
     @Test

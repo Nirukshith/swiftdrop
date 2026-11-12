@@ -3,6 +3,7 @@ package com.swiftdrop.parcel.parcel;
 import com.swiftdrop.parcel.address.District;
 import com.swiftdrop.parcel.internal.InternalCreateParcelRequest;
 import com.swiftdrop.parcel.internal.ParcelStatusUpdateRequest;
+import com.swiftdrop.common.security.CurrentUser;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -16,6 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,19 +29,25 @@ public class ParcelService {
     private final TrackingNumberGenerator trackingNumberGenerator;
     private final PricingQuoteClient pricingQuoteClient;
     private final ApplicationEventPublisher eventPublisher;
+    private final MerchantParcelIdempotencyRepository merchantParcelIdempotencyRepository;
+    private final MerchantParcelRequestHasher merchantParcelRequestHasher;
 
     public ParcelService(
             ParcelRepository parcelRepository,
             StatusHistoryRepository statusHistoryRepository,
             TrackingNumberGenerator trackingNumberGenerator,
             PricingQuoteClient pricingQuoteClient,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            MerchantParcelIdempotencyRepository merchantParcelIdempotencyRepository,
+            MerchantParcelRequestHasher merchantParcelRequestHasher
     ) {
         this.parcelRepository = parcelRepository;
         this.statusHistoryRepository = statusHistoryRepository;
         this.trackingNumberGenerator = trackingNumberGenerator;
         this.pricingQuoteClient = pricingQuoteClient;
         this.eventPublisher = eventPublisher;
+        this.merchantParcelIdempotencyRepository = merchantParcelIdempotencyRepository;
+        this.merchantParcelRequestHasher = merchantParcelRequestHasher;
     }
 
     @Transactional(readOnly = true)
@@ -98,12 +106,53 @@ public class ParcelService {
 
     @Transactional
     public ParcelResponse createMerchantParcel(InternalCreateParcelRequest request) {
+        return createMerchantParcel(request, null);
+    }
+
+    @Transactional
+    public ParcelResponse createMerchantParcel(InternalCreateParcelRequest request, String idempotencyKey) {
         validateDistricts(request.pickupAddress().district(), request.dropoffAddress().district());
+        String merchantId = trustedMerchantId(request.merchantId());
+
+        String normalizedKey = normalizeIdempotencyKey(idempotencyKey);
+        String requestHash = normalizedKey == null ? null : merchantParcelRequestHasher.hash(request);
+        if (normalizedKey != null) {
+            int reserved = merchantParcelIdempotencyRepository.reserve(
+                    merchantId,
+                    "CREATE_PARCEL",
+                    normalizedKey,
+                    requestHash,
+                    Instant.now()
+            );
+            if (reserved == 0) {
+                MerchantParcelIdempotency existing = merchantParcelIdempotencyRepository
+                        .findByMerchantIdAndOperationAndIdempotencyKey(
+                                merchantId, "CREATE_PARCEL", normalizedKey)
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Idempotency reservation could not be read after conflict"));
+                if (!existing.getRequestHash().equals(requestHash)) {
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT,
+                            "Idempotency-Key was already used with a different request body"
+                    );
+                }
+                if (existing.getParcelId() == null) {
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT,
+                            "A request with this Idempotency-Key is still processing"
+                    );
+                }
+                Parcel existingParcel = parcelRepository.findById(existing.getParcelId())
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Idempotency record references a missing parcel"));
+                return ParcelResponse.from(existingParcel);
+            }
+        }
 
         Parcel parcel = new Parcel();
         parcel.setTrackingNumber(trackingNumberGenerator.generate());
         parcel.setStatus(ParcelStatus.CREATED);
-        parcel.setMerchantId(request.merchantId());
+        parcel.setMerchantId(merchantId);
         parcel.setPickupAddress(AddressSnapshot.from(request.pickupAddress()));
         parcel.setDropoffAddress(AddressSnapshot.from(request.dropoffAddress()));
         parcel.setWeightKg(request.weightKg());
@@ -121,14 +170,48 @@ public class ParcelService {
                 saved.getId(),
                 ParcelStatus.CREATED,
                 ParcelStatus.CREATED,
-                request.merchantId(),
+                merchantId,
                 "Merchant order created"
         );
         statusHistoryRepository.save(initialHistory);
 
+        if (normalizedKey != null) {
+            int attached = merchantParcelIdempotencyRepository.attachParcel(
+                    merchantId,
+                    "CREATE_PARCEL",
+                    normalizedKey,
+                    saved.getId()
+            );
+            if (attached != 1) {
+                throw new IllegalStateException("Idempotency reservation was lost before completion");
+            }
+        }
+
         eventPublisher.publishEvent(ParcelDomainEvent.created(saved));
 
         return ParcelResponse.from(saved);
+    }
+
+    private String trustedMerchantId(String requestMerchantId) {
+        return CurrentUser.get()
+                .map(CurrentUser::merchantId)
+                .filter(claimMerchantId -> {
+                    if (!claimMerchantId.equals(requestMerchantId)) {
+                        throw new ResponseStatusException(
+                                HttpStatus.FORBIDDEN,
+                                "Merchant identity does not match the authenticated caller"
+                        );
+                    }
+                    return true;
+                })
+                .orElse(requestMerchantId);
+    }
+
+    private String normalizeIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return null;
+        }
+        return idempotencyKey.trim();
     }
 
     @Transactional(readOnly = true)
