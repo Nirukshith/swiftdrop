@@ -32,6 +32,7 @@ export class ReportsComponent implements OnInit {
   readonly failedDeliveries = computed(() =>
     this.rows().reduce((total, row) => total + row.failedDeliveries, 0)
   );
+  readonly hasDeliveries = computed(() => this.rows().some((row) => row.totalDeliveries > 0));
   readonly successRate = computed(() => {
     const total = this.totalDeliveries();
     return total === 0 ? 0 : this.successfulDeliveries() / total;
@@ -90,7 +91,10 @@ export class ReportsComponent implements OnInit {
   }
 
   private toDateInput(date: Date): string {
-    return date.toISOString().slice(0, 10);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   private downloadCsv(response: HttpResponse<Blob>): void {
