@@ -316,4 +316,27 @@ class DispatchEventListenerTest {
         verify(parcelSequenceRepository).save(any(ParcelSequenceEntity.class));
         verify(processedEventRepository).save(any(ProcessedEventEntity.class));
     }
+
+    @Test
+    @DisplayName("handleDlt handles exhausted retry messages without throwing exceptions")
+    void handleDlt_exhaustedRetries_handledGracefully() {
+        // Must complete without unhandled exceptions
+        listener.handleDlt("{\"eventId\":\"evt-err\"}", "parcel.assigned.v1.retry");
+    }
+
+    @Test
+    @DisplayName("processEvent ignores null event or blank eventId safely")
+    void processEvent_nullOrBlankEventId_ignoredSafely() {
+        listener.processEvent(null);
+
+        EventEnvelope blankEvent = new EventEnvelope(
+            "   ", "parcel.assigned.v1", Instant.now(), 1L, PARCEL_ID, "SD-123",
+            "CREATED", "CREATED", COURIER_1, null, null, "cust-1", null
+        );
+        listener.processEvent(blankEvent);
+
+        verifyNoInteractions(processedEventRepository);
+        verifyNoInteractions(courierWorkloadRepository);
+        verifyNoInteractions(parcelSequenceRepository);
+    }
 }
