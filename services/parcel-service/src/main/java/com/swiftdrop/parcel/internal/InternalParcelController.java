@@ -5,6 +5,7 @@ import com.swiftdrop.parcel.parcel.ParcelResponse;
 import com.swiftdrop.parcel.parcel.ParcelService;
 import com.swiftdrop.parcel.parcel.ParcelStatus;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -59,9 +60,10 @@ public class InternalParcelController {
 
     @PostMapping
     public ResponseEntity<ParcelResponse> createMerchantParcel(
+            @RequestHeader(value = "Idempotency-Key", required = false) @Size(max = 128) String idempotencyKey,
             @Valid @RequestBody InternalCreateParcelRequest request
     ) {
-        ParcelResponse response = parcelService.createMerchantParcel(request);
+        ParcelResponse response = parcelService.createMerchantParcel(request, idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }
