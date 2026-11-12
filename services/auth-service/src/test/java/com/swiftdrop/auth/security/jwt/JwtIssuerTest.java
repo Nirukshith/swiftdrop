@@ -80,6 +80,7 @@ class JwtIssuerTest {
 
         assertThat(claims.getSubject()).isEqualTo("usr-002");
         assertThat(claims.getIssuer()).isEqualTo(JwtIssuer.ISSUER);
+        assertThat(claims.getAudience()).containsExactly(JwtIssuer.AUDIENCE);
         assertThat(claims.getStringClaim(JwtClaims.EMAIL)).isEqualTo("bob@example.com");
         assertThat(claims.getStringClaim(JwtClaims.ROLE)).isEqualTo(Roles.COURIER);
         assertThat(claims.getStringListClaim(JwtClaims.ROLES)).containsExactly("ROLE_COURIER");
@@ -142,6 +143,7 @@ class JwtIssuerTest {
         JWTClaimsSet claims = SignedJWT.parse(token).getJWTClaimsSet();
 
         assertThat(claims.getSubject()).isEqualTo("sd_client_xyz");
+        assertThat(claims.getAudience()).containsExactly(JwtIssuer.AUDIENCE);
         assertThat(claims.getStringClaim(JwtClaims.ROLE)).isEqualTo(Roles.MERCHANT);
         assertThat(claims.getStringClaim(JwtClaims.MERCHANT_ID)).isEqualTo("mch-7701");
         assertThat(claims.getStringClaim(JwtClaims.SCOPE)).isEqualTo("parcels:create parcels:read");
@@ -326,5 +328,55 @@ class JwtIssuerTest {
                 assertThat(decodedJwt.getClaimAsString(JwtClaims.MERCHANT_ID)).isEqualTo("mch-test-123");
             }
         }
+    }
+
+    @Test
+    @DisplayName("Token decoder with audience validator accepts issued token with swiftdrop-api audience")
+    void audienceValidator_acceptsValidAudience() {
+        NimbusJwtDecoder audienceDecoder = NimbusJwtDecoder.withPublicKey(keyProvider.getPublicKey())
+                .signatureAlgorithm(SignatureAlgorithm.RS256)
+                .build();
+        audienceDecoder.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
+                org.springframework.security.oauth2.jwt.JwtValidators.createDefaultWithIssuer(JwtIssuer.ISSUER),
+                token -> {
+                    if (token.getAudience() != null && token.getAudience().contains(JwtIssuer.AUDIENCE)) {
+                        return org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.success();
+                    }
+                    return org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.failure(
+                            new org.springframework.security.oauth2.core.OAuth2Error("invalid_token", "Audience mismatch", null));
+                }
+        ));
+
+        String userToken = jwtIssuer.issueAccessToken("usr-001", "alice@example.com", Roles.CUSTOMER, null);
+        var decodedUser = audienceDecoder.decode(userToken);
+        assertThat(decodedUser.getAudience()).contains(JwtIssuer.AUDIENCE);
+
+        String clientToken = jwtIssuer.issueClientCredentialsToken("client-1", "mch-001", List.of("pricing:read"));
+        var decodedClient = audienceDecoder.decode(clientToken);
+        assertThat(decodedClient.getAudience()).contains(JwtIssuer.AUDIENCE);
+    }
+
+    @Test
+    @DisplayName("Token decoder with audience validator rejects token with unexpected audience")
+    void audienceValidator_rejectsMismatchedAudience() {
+        NimbusJwtDecoder foreignAudienceDecoder = NimbusJwtDecoder.withPublicKey(keyProvider.getPublicKey())
+                .signatureAlgorithm(SignatureAlgorithm.RS256)
+                .build();
+        foreignAudienceDecoder.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
+                org.springframework.security.oauth2.jwt.JwtValidators.createDefaultWithIssuer(JwtIssuer.ISSUER),
+                token -> {
+                    if (token.getAudience() != null && token.getAudience().contains("foreign-service-api")) {
+                        return org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.success();
+                    }
+                    return org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.failure(
+                            new org.springframework.security.oauth2.core.OAuth2Error("invalid_token", "Audience mismatch", null));
+                }
+        ));
+
+        String userToken = jwtIssuer.issueAccessToken("usr-001", "alice@example.com", Roles.CUSTOMER, null);
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.security.oauth2.jwt.BadJwtException.class,
+                () -> foreignAudienceDecoder.decode(userToken)
+        );
     }
 }
