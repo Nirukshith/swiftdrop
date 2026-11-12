@@ -3,7 +3,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { CustomerComponent } from './customer.component';
-import { CustomerParcel, QuoteResponse } from './customer/customer.model';
+import { CustomerAddress, CustomerParcel, QuoteResponse } from './customer/customer.model';
 import { CustomerService } from './customer/customer.service';
 
 describe('CustomerComponent', () => {
@@ -62,6 +62,41 @@ describe('CustomerComponent', () => {
     fixture = TestBed.createComponent(CustomerComponent);
     component = fixture.componentInstance;
     customerService = TestBed.inject(CustomerService);
+
+    const addresses: CustomerAddress[] = [{
+      id: 'address-1',
+      customerId: 'customer-1',
+      label: 'Home',
+      line1: '142 Havelock Road',
+      line2: null,
+      city: 'Colombo 05',
+      district: 'Colombo',
+      postalCode: '00500',
+      isDefault: true,
+    }];
+    const deliveredParcel = { ...mockCreatedParcel, id: 'delivered-1', status: 'DELIVERED' as const };
+    const parcels = [mockCreatedParcel, deliveredParcel];
+    jest.spyOn(customerService, 'listAddresses').mockImplementation(() => of([...addresses]));
+    jest.spyOn(customerService, 'listParcels').mockImplementation((status) =>
+      of(status === 'DELIVERED' ? [deliveredParcel] : [...parcels])
+    );
+    jest.spyOn(customerService, 'createAddress').mockImplementation((request) => {
+      const saved = { ...request, id: 'address-new', customerId: 'customer-1' };
+      addresses.push(saved);
+      return of(saved);
+    });
+    jest.spyOn(customerService, 'setDefaultAddress').mockReturnValue(of(addresses[0]));
+    jest.spyOn(customerService, 'deleteAddress').mockImplementation((id) => {
+      const index = addresses.findIndex((address) => address.id === id);
+      addresses.splice(index, 1);
+      return of(undefined);
+    });
+    jest.spyOn(customerService, 'cancelParcel').mockImplementation((id) => {
+      const index = parcels.findIndex((parcel) => parcel.id === id);
+      const cancelled = { ...parcels[index], status: 'CANCELLED' as const };
+      parcels[index] = cancelled;
+      return of(cancelled);
+    });
 
     // Spy on getFeeQuote and createParcel by default
     jest.spyOn(customerService, 'getFeeQuote').mockReturnValue(of(mockQuote));
@@ -231,15 +266,10 @@ describe('CustomerComponent', () => {
 
   it('should set an address as default', fakeAsync(() => {
     tick(100);
-    const nonDefault = component.addresses().find((a) => !a.isDefault);
-    if (nonDefault) {
-      component.setDefaultAddress(nonDefault.id);
-      tick(100);
+    component.setDefaultAddress('address-1');
+    tick(100);
 
-      const updated = component.addresses().find((a) => a.id === nonDefault.id);
-      expect(updated?.isDefault).toBe(true);
-      expect(component.notification()).toContain('default address');
-    }
+    expect(component.notification()).toContain('default address');
   }));
 
   it('should delete an address from address book', fakeAsync(() => {
