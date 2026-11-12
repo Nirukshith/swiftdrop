@@ -19,12 +19,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * progressive tarpitting delays, and multi-key bucket isolation (per-account, per-source IP,
  * and composite email+IP) to defend against brute-force attacks and victim denial-of-service.
  *
- * <p>Activated when {@code swiftdrop.security.lockout.enabled=true}.
+ * <p>Enabled by default; can be disabled explicitly for isolated development.
  *
  * <p>Owner: Member M7 (Security & Lockout)
  */
 @Component
-@ConditionalOnProperty(name = "swiftdrop.security.lockout.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "swiftdrop.security.lockout.enabled", havingValue = "true", matchIfMissing = true)
 public class SlidingWindowLoginGuard implements LoginGuard {
 
     private static final Logger log = LoggerFactory.getLogger(SlidingWindowLoginGuard.class);
@@ -95,13 +95,13 @@ public class SlidingWindowLoginGuard implements LoginGuard {
         // 1. Check Source IP lockout
         if (ipAddress != null && !ipAddress.isBlank()) {
             String ipKey = normalizeIp(ipAddress);
-            Long ipLockExpiry = lockouts.get(ipKey);
+            Long ipLockExpiry = lockouts.get(sourceLockKey(ipKey));
             if (ipLockExpiry != null) {
                 if (now < ipLockExpiry) {
-                    log.warn("Login attempt blocked for locked IP source: {}", ipKey);
-                    throw new AccountLockedException("IP address " + ipKey + " is temporarily locked until epoch " + ipLockExpiry + " due to excessive failed attempts.");
+                    log.warn("Login attempt blocked for locked source");
+                    throw new AccountLockedException("Login temporarily restricted. Please try again later.");
                 } else {
-                    lockouts.remove(ipKey);
+                    lockouts.remove(sourceLockKey(ipKey));
                 }
             }
         }
@@ -116,26 +116,32 @@ public class SlidingWindowLoginGuard implements LoginGuard {
                 Long compExpiry = lockouts.get(compKey);
                 if (compExpiry != null) {
                     if (now < compExpiry) {
-                        log.warn("Login attempt blocked for locked composite target: {}", compKey);
-                        throw new AccountLockedException(email, compExpiry);
+                        log.warn("Login attempt blocked for locked account and source pair");
+                        throw new AccountLockedException("Login temporarily restricted. Please try again later.");
                     } else {
                         lockouts.remove(compKey);
                     }
                 }
             }
 
-            Long accountExpiry = lockouts.get(emailKey);
-            if (accountExpiry != null) {
-                if (now < accountExpiry) {
-                    log.warn("Login attempt blocked for locked account: {}", emailKey);
-                    throw new AccountLockedException(email, accountExpiry);
-                } else {
-                    lockouts.remove(emailKey);
+            // Legacy email-only callers have no source bucket. Real login requests use
+            // the email+source pair so a hostile source cannot lock out the account owner.
+            if (ipAddress == null || ipAddress.isBlank()) {
+                Long accountExpiry = lockouts.get(accountLockKey(emailKey));
+                if (accountExpiry != null && now < accountExpiry) {
+                    throw new AccountLockedException("Login temporarily restricted. Please try again later.");
+                }
+                if (accountExpiry != null) {
+                    lockouts.remove(accountLockKey(emailKey));
                 }
             }
 
             // 3. Progressive tarpitting delay for repeated failures before hard lockout
-            int failures = getRecentFailureCount(accountAttempts.get(emailKey), now);
+            String delayKey = ipAddress == null || ipAddress.isBlank()
+                    ? emailKey : compositeKey(emailKey, normalizeIp(ipAddress));
+            int failures = getRecentFailureCount(
+                    ipAddress == null || ipAddress.isBlank()
+                            ? accountAttempts.get(delayKey) : compositeAttempts.get(delayKey), now);
             if (tarpitEnabled && failures >= tarpitThreshold) {
                 applyProgressiveDelay(failures);
             }
@@ -152,14 +158,14 @@ public class SlidingWindowLoginGuard implements LoginGuard {
         if (email != null && !email.isBlank()) {
             String emailKey = normalizeEmail(email);
             accountAttempts.remove(emailKey);
-            lockouts.remove(emailKey);
+            lockouts.remove(accountLockKey(emailKey));
 
             if (ipAddress != null && !ipAddress.isBlank()) {
                 String compKey = compositeKey(emailKey, normalizeIp(ipAddress));
                 compositeAttempts.remove(compKey);
                 lockouts.remove(compKey);
             }
-            log.debug("Cleared failure history on successful login for {}", emailKey);
+            log.debug("Cleared failure history on successful login");
         }
     }
 
@@ -177,10 +183,10 @@ public class SlidingWindowLoginGuard implements LoginGuard {
             String emailKey = normalizeEmail(email);
             int accountFails = recordAttempt(accountAttempts, emailKey, now);
 
-            if (accountFails >= maxAccountAttempts) {
+            if ((ipAddress == null || ipAddress.isBlank()) && accountFails >= maxAccountAttempts) {
                 long lockExpiry = now + lockoutDurationSeconds;
-                lockouts.put(emailKey, lockExpiry);
-                log.warn("Account {} locked until epoch {} ({} failed attempts)", emailKey, lockExpiry, accountFails);
+                lockouts.put(accountLockKey(emailKey), lockExpiry);
+                log.warn("Email-only login target locked after {} failed attempts", accountFails);
             }
 
             // Record composite (email, IP)
@@ -201,8 +207,8 @@ public class SlidingWindowLoginGuard implements LoginGuard {
 
             if (sourceFails >= maxSourceAttempts) {
                 long lockExpiry = now + lockoutDurationSeconds;
-                lockouts.put(ipKey, lockExpiry);
-                log.warn("IP source {} locked until epoch {} ({} failed attempts across accounts)", ipKey, lockExpiry, sourceFails);
+                lockouts.put(sourceLockKey(ipKey), lockExpiry);
+                log.warn("Login source locked after {} failed attempts", sourceFails);
             }
         }
     }
@@ -258,7 +264,15 @@ public class SlidingWindowLoginGuard implements LoginGuard {
     }
 
     private String compositeKey(String email, String ip) {
-        return email + "#" + ip;
+        return "pair:" + email + "#" + ip;
+    }
+
+    private String accountLockKey(String email) {
+        return "account:" + email;
+    }
+
+    private String sourceLockKey(String ip) {
+        return "source:" + ip;
     }
 
     // Helper inspection methods for testing and monitoring
@@ -271,12 +285,12 @@ public class SlidingWindowLoginGuard implements LoginGuard {
     }
 
     public boolean isAccountLocked(String email) {
-        Long expiry = lockouts.get(normalizeEmail(email));
+        Long expiry = lockouts.get(accountLockKey(normalizeEmail(email)));
         return expiry != null && nowSeconds() < expiry;
     }
 
     public boolean isSourceLocked(String ipAddress) {
-        Long expiry = lockouts.get(normalizeIp(ipAddress));
+        Long expiry = lockouts.get(sourceLockKey(normalizeIp(ipAddress)));
         return expiry != null && nowSeconds() < expiry;
     }
 

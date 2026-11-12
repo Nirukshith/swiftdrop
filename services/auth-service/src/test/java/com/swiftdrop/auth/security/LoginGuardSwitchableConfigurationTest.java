@@ -12,12 +12,22 @@ class LoginGuardSwitchableConfigurationTest {
             .withUserConfiguration(NoOpLoginGuard.class, SlidingWindowLoginGuard.class);
 
     @Test
-    @DisplayName("Default configuration loads NoOpLoginGuard when lockout is disabled or absent")
-    void defaultConfiguration_loadsNoOpLoginGuard() {
+    @DisplayName("Default configuration enables the production lockout guard")
+    void defaultConfiguration_loadsSlidingWindowLoginGuard() {
         contextRunner.run(context -> {
             assertThat(context).hasSingleBean(LoginGuard.class);
-            assertThat(context.getBean(LoginGuard.class)).isInstanceOf(NoOpLoginGuard.class);
+            assertThat(context.getBean(LoginGuard.class)).isInstanceOf(SlidingWindowLoginGuard.class);
         });
+    }
+
+    @Test
+    @DisplayName("Explicitly disabling lockout loads the fallback guard")
+    void disabledConfiguration_loadsNoOpLoginGuard() {
+        contextRunner.withPropertyValues("swiftdrop.security.lockout.enabled=false")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(LoginGuard.class);
+                    assertThat(context.getBean(LoginGuard.class)).isInstanceOf(NoOpLoginGuard.class);
+                });
     }
 
     @Test

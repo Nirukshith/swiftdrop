@@ -25,6 +25,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,6 +37,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.doAnswer;
 
 @SpringBootTest
 @Testcontainers
@@ -251,6 +255,10 @@ class WebhookIntegrationTest {
         assertThat(replayed.nextRetryAt()).isNull();
         assertThat(replayed.retryHistory()).hasSize(1);
 
+        assertThatThrownBy(() -> webhookService.retryDelivery(UUID.randomUUID(), failed.getDeliveryId()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("Webhook delivery not found");
+
         assertThatThrownBy(() -> webhookService.retryDelivery(merchantId, failed.getDeliveryId()))
                 .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
                 .hasMessageContaining("Only failed webhook deliveries can be retried");
@@ -261,6 +269,106 @@ class WebhookIntegrationTest {
         assertThat(deliveryRepository.findById(failed.getDeliveryId()).orElseThrow().getStatus())
                 .isEqualTo("SUCCESS");
         verify(dispatcher, times(1)).dispatch(eq(webhookUrl), anyString(), eq(failed.getDeliveryId().toString()), eq("{}"));
+    }
+
+    @Test
+    @DisplayName("Concurrent retry requests serialize and never duplicate a successful delivery")
+    void concurrentRetry_sendsOnlyOnce() throws Exception {
+        UUID merchantId = UUID.randomUUID();
+        String webhookUrl = "https://api.testmerchant.com/webhook";
+        webhookService.updateSettings(merchantId, new UpdateWebhookSettingsRequest(
+                webhookUrl, true, List.of("PARCEL_STATUS_CHANGED"), true));
+        WebhookDeliveryEntity failed = new WebhookDeliveryEntity();
+        failed.setDeliveryId(UUID.randomUUID());
+        failed.setEventId(UUID.randomUUID());
+        failed.setMerchantId(merchantId);
+        failed.setEventType("PARCEL_STATUS_CHANGED");
+        failed.setTargetUrl(webhookUrl);
+        failed.setPayload("{}");
+        failed.setStatus("FAILED");
+        failed.setAttempts(5);
+        deliveryRepository.saveAndFlush(failed);
+
+        CountDownLatch firstDispatch = new CountDownLatch(1);
+        CountDownLatch finishDispatch = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            firstDispatch.countDown();
+            if (!finishDispatch.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Timed out waiting to finish dispatch");
+            }
+            return new WebhookDispatcher.DispatchResult(true, 200, 10,
+                    Map.of(), Map.of(), null, null, null, null, null);
+        }).when(dispatcher).dispatch(eq(webhookUrl), anyString(), eq(failed.getDeliveryId().toString()), eq("{}"));
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var first = executor.submit(() -> webhookService.retryDelivery(merchantId, failed.getDeliveryId()));
+            assertThat(firstDispatch.await(5, TimeUnit.SECONDS)).isTrue();
+            var second = executor.submit(() -> webhookService.retryDelivery(merchantId, failed.getDeliveryId()));
+            finishDispatch.countDown();
+            assertThat(first.get(10, TimeUnit.SECONDS).status()).isEqualTo("SUCCESS");
+            assertThatThrownBy(() -> second.get(10, TimeUnit.SECONDS))
+                    .hasRootCauseInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        } finally {
+            finishDispatch.countDown();
+        }
+        verify(dispatcher, times(1)).dispatch(eq(webhookUrl), anyString(),
+                eq(failed.getDeliveryId().toString()), eq("{}"));
+    }
+
+    @Test
+    @DisplayName("Manual retry records a transient DNS failure without exposing its exception text")
+    void manualRetry_recordsSafeDnsFailure() {
+        UUID merchantId = UUID.randomUUID();
+        String webhookUrl = "https://api.testmerchant.com/webhook";
+        webhookService.updateSettings(merchantId, new UpdateWebhookSettingsRequest(
+                webhookUrl, true, List.of("PARCEL_STATUS_CHANGED"), true));
+        WebhookDeliveryEntity failed = new WebhookDeliveryEntity();
+        failed.setDeliveryId(UUID.randomUUID());
+        failed.setEventId(UUID.randomUUID());
+        failed.setMerchantId(merchantId);
+        failed.setEventType("PARCEL_STATUS_CHANGED");
+        failed.setTargetUrl(webhookUrl);
+        failed.setPayload("{}");
+        failed.setStatus("FAILED");
+        deliveryRepository.saveAndFlush(failed);
+        when(dispatcher.dispatch(eq(webhookUrl), anyString(), eq(failed.getDeliveryId().toString()), eq("{}")))
+                .thenThrow(new SsrfException("sensitive DNS failure text", true));
+
+        WebhookDeliveryDetailResponse result = webhookService.retryDelivery(merchantId, failed.getDeliveryId());
+
+        assertThat(result.status()).isEqualTo("FAILED");
+        assertThat(result.httpStatusCode()).isZero();
+        assertThat(result.retryHistory()).hasSize(1);
+        assertThat(result.retryHistory().get(0).errorMessage()).isEqualTo("Webhook DNS resolution failed");
+        assertThat(result.toString()).doesNotContain("sensitive DNS failure text");
+    }
+
+    @Test
+    @DisplayName("Delivery details suppress saved endpoint secrets and untrusted response bodies")
+    void deliveryDetails_redactHistoricalEndpointData() {
+        UUID merchantId = UUID.randomUUID();
+        WebhookDeliveryEntity delivery = new WebhookDeliveryEntity();
+        delivery.setDeliveryId(UUID.randomUUID());
+        delivery.setEventId(UUID.randomUUID());
+        delivery.setMerchantId(merchantId);
+        delivery.setEventType("PARCEL_STATUS_CHANGED");
+        delivery.setTargetUrl("https://merchant.example/webhook");
+        delivery.setPayload("{}");
+        delivery.setStatus("FAILED");
+        delivery.setAttempts(1);
+        delivery.setResponseHeaders("{\"Set-Cookie\":\"session=secret\",\"Content-Type\":\"application/json\"}");
+        delivery.setResponseBody("{\"token\":\"secret\"}");
+        delivery.setErrorSummary("token=secret");
+        delivery.addAttempt(new WebhookDeliveryAttemptEntity(delivery, 1, Instant.now(),
+                500, 10, false, "token=secret"));
+        deliveryRepository.saveAndFlush(delivery);
+
+        WebhookDeliveryDetailResponse detail = webhookService.getDeliveryDetail(merchantId, delivery.getDeliveryId());
+        assertThat(detail.responseHeaders()).containsOnlyKeys("Content-Type");
+        assertThat(detail.responseBody()).isNull();
+        assertThat(detail.retryHistory().get(0).errorMessage()).isEqualTo("Webhook delivery failed");
+        assertThat(webhookService.listDeliveries(merchantId, null, null, null, null, 0, 20)
+                .content().get(0).errorSummary()).isEqualTo("Webhook delivery failed");
     }
 
     @Test

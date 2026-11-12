@@ -164,10 +164,12 @@ describe('MerchantService', () => {
   });
 
   it('loads persisted delivery rows instead of manufactured test entries', async () => {
-    const result = firstValueFrom(service.getDeliveryLogs('FAILED'));
+    const result = firstValueFrom(service.getDeliveryLogs('FAILED', 2, 10));
     const req = httpMock.expectOne((request) => request.url === '/api/v1/merchant/webhooks/deliveries');
     expect(req.request.params.get('status')).toBe('FAILED');
-    req.flush({ content: [], totalElements: 0, totalPages: 0, page: 0, size: 20 });
-    expect(await result).toEqual([]);
+    expect(req.request.params.get('page')).toBe('2');
+    expect(req.request.params.get('size')).toBe('10');
+    req.flush({ content: [], totalElements: 21, totalPages: 3, page: 2, size: 10 });
+    expect((await result).totalElements).toBe(21);
   });
 });
