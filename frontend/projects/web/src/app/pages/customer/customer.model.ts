@@ -108,6 +108,14 @@ export interface CustomerParcel {
   updatedAt?: string;
 }
 
+export interface CustomerParcelPage {
+  content: CustomerParcel[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  size: number;
+}
+
 export interface QuoteBreakdown {
   dropoffZoneBaseFee: number;
   weightBandCharge: number;

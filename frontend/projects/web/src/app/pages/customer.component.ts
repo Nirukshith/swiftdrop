@@ -903,6 +903,14 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
 
               <button
                 type="button"
+                (click)="openAddressModal(addr)"
+                class="text-indigo-600 hover:text-indigo-800 font-bold"
+              >
+                Edit
+              </button>
+
+              <button
+                type="button"
                 (click)="deleteAddress(addr.id)"
                 class="text-rose-500 hover:text-rose-700 font-bold"
               >
@@ -924,7 +932,9 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
           class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150"
         >
           <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 class="text-base font-bold text-slate-900">Add New Address</h3>
+            <h3 class="text-base font-bold text-slate-900">
+              {{ editingAddressId() ? 'Edit Address' : 'Add New Address' }}
+            </h3>
             <button
               type="button"
               (click)="showAddressModal.set(false)"
@@ -1027,7 +1037,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             <button
               type="button"
               id="save-address-btn"
-              (click)="saveNewAddress()"
+              (click)="saveAddress()"
               [disabled]="!isAddressFormValid()"
               class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-sm"
             >
@@ -1096,6 +1106,7 @@ export class CustomerComponent implements OnInit {
 
   // Address modal state
   showAddressModal = signal<boolean>(false);
+  editingAddressId = signal<string | null>(null);
   newAddressForm = {
     label: '',
     line1: '',
@@ -1113,14 +1124,16 @@ export class CustomerComponent implements OnInit {
   }
 
   loadParcels(): void {
-    this.customerService.listParcels(this.selectedStatusFilter() || undefined).subscribe((p) => {
-      this.parcels.set(p);
+    this.customerService.listParcels(this.selectedStatusFilter() || undefined).subscribe({
+      next: (p) => this.parcels.set(p),
+      error: (err) => this.notification.set(this.apiErrorMessage(err, 'Unable to load parcels.')),
     });
   }
 
   loadAddresses(): void {
-    this.customerService.listAddresses().subscribe((addrs) => {
-      this.addresses.set(addrs);
+    this.customerService.listAddresses().subscribe({
+      next: (addrs) => this.addresses.set(addrs),
+      error: (err) => this.notification.set(this.apiErrorMessage(err, 'Unable to load addresses.')),
     });
   }
 
@@ -1245,21 +1258,32 @@ export class CustomerComponent implements OnInit {
         this.notification.set(`Delivery order ${cancelled.trackingNumber} has been cancelled.`);
       },
       error: (err) => {
-        this.notification.set(err.message || 'Failed to cancel parcel');
+        this.notification.set(this.apiErrorMessage(err, 'Failed to cancel parcel.'));
       },
     });
   }
 
-  openAddressModal(): void {
-    this.newAddressForm = {
-      label: '',
-      line1: '',
-      line2: '',
-      city: '',
-      district: 'Colombo',
-      postalCode: '',
-      isDefault: false,
-    };
+  openAddressModal(address?: CustomerAddress): void {
+    this.editingAddressId.set(address?.id || null);
+    this.newAddressForm = address
+      ? {
+          label: address.label,
+          line1: address.line1,
+          line2: address.line2 || '',
+          city: address.city,
+          district: address.district,
+          postalCode: address.postalCode,
+          isDefault: address.isDefault,
+        }
+      : {
+          label: '',
+          line1: '',
+          line2: '',
+          city: '',
+          district: 'Colombo',
+          postalCode: '',
+          isDefault: false,
+        };
     this.showAddressModal.set(true);
   }
 
@@ -1268,37 +1292,60 @@ export class CustomerComponent implements OnInit {
     return !!(f.label && f.line1 && f.city && f.district && f.postalCode);
   }
 
-  saveNewAddress(): void {
+  saveAddress(): void {
     if (!this.isAddressFormValid()) return;
-    this.customerService
-      .createAddress({
-        label: this.newAddressForm.label.trim(),
-        line1: this.newAddressForm.line1.trim(),
-        line2: this.newAddressForm.line2.trim() || null,
-        city: this.newAddressForm.city.trim(),
-        district: this.newAddressForm.district,
-        postalCode: this.newAddressForm.postalCode.trim(),
-        isDefault: this.newAddressForm.isDefault,
-      })
-      .subscribe((saved) => {
+    const isEditing = !!this.editingAddressId();
+    const request = {
+      label: this.newAddressForm.label.trim(),
+      line1: this.newAddressForm.line1.trim(),
+      line2: this.newAddressForm.line2.trim() || null,
+      city: this.newAddressForm.city.trim(),
+      district: this.newAddressForm.district,
+      postalCode: this.newAddressForm.postalCode.trim(),
+      isDefault: this.newAddressForm.isDefault,
+    };
+    const operation = this.editingAddressId()
+      ? this.customerService.updateAddress(this.editingAddressId()!, request)
+      : this.customerService.createAddress(request);
+    operation.subscribe({
+      next: (saved) => {
         this.loadAddresses();
         this.showAddressModal.set(false);
-        this.notification.set(`Address '${saved.label}' added to address book.`);
-      });
+        this.editingAddressId.set(null);
+        this.notification.set(
+          `Address '${saved.label}' ${isEditing ? 'updated' : 'added to address book'}.`
+        );
+      },
+      error: (err) => this.notification.set(this.apiErrorMessage(err, 'Unable to save address.')),
+    });
+  }
+
+  saveNewAddress(): void {
+    this.saveAddress();
   }
 
   setDefaultAddress(id: string): void {
-    this.customerService.setDefaultAddress(id).subscribe((updated) => {
-      this.loadAddresses();
-      this.notification.set(`'${updated.label}' is now your default address.`);
+    this.customerService.setDefaultAddress(id).subscribe({
+      next: (updated) => {
+        this.loadAddresses();
+        this.notification.set(`'${updated.label}' is now your default address.`);
+      },
+      error: (err) => this.notification.set(this.apiErrorMessage(err, 'Unable to set default address.')),
     });
   }
 
   deleteAddress(id: string): void {
-    this.customerService.deleteAddress(id).subscribe(() => {
-      this.loadAddresses();
-      this.notification.set('Address deleted.');
+    this.customerService.deleteAddress(id).subscribe({
+      next: () => {
+        this.loadAddresses();
+        this.notification.set('Address deleted.');
+      },
+      error: (err) => this.notification.set(this.apiErrorMessage(err, 'Unable to delete address.')),
     });
+  }
+
+  private apiErrorMessage(error: { error?: { message?: string }; message?: string }, fallback: string): string {
+    return error?.error?.message || error?.message || fallback;
   }
 
   getStatusBadgeClass(status: ParcelStatus): string {
