@@ -1,9 +1,7 @@
 package com.swiftdrop.integration.merchant;
 
-import static com.swiftdrop.integration.merchant.AuthProvisioningClient.*;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -12,18 +10,17 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class MerchantService {
 
     private final MerchantRepository merchantRepository;
-    private final AuthProvisioningClient authProvisioningClient;
+    private final MerchantRecoveryService recovery;
 
-    public MerchantService(MerchantRepository merchantRepository, AuthProvisioningClient authProvisioningClient) {
+    public MerchantService(MerchantRepository merchantRepository, MerchantRecoveryService recovery) {
         this.merchantRepository = merchantRepository;
-        this.authProvisioningClient = authProvisioningClient;
+        this.recovery = recovery;
     }
 
     public MerchantRegistrationResponse register(MerchantRegistrationRequest request) {
@@ -54,63 +51,11 @@ public class MerchantService {
     }
 
     public MerchantApprovalResponse approve(UUID merchantId) {
-        Merchant merchant = requirePending(merchantId);
-        try {
-            if (merchant.getAuthUserId() == null) {
-                AuthUserResponse user = authProvisioningClient.createMerchantUser(new AuthCreateUserRequest(
-                        merchant.getEmail(), null, merchant.getContactName(), merchant.getPhoneNumber(),
-                        "MERCHANT", merchant.getId().toString(), false));
-                validateAuthUser(user, merchant, null, false);
-                merchant.setAuthUserId(user.id());
-                merchant = merchantRepository.saveAndFlush(merchant);
-            }
-
-            AuthUserResponse activated = authProvisioningClient.activateUser(merchant.getAuthUserId());
-            validateAuthUser(activated, merchant, merchant.getAuthUserId(), true);
-            AuthClientCredentialsResponse credentials = authProvisioningClient.createClient(
-                    new AuthCreateClientRequest(merchant.getId().toString(), merchant.getBusinessName(), List.of()));
-            if (credentials == null || credentials.clientId() == null || credentials.clientId().isBlank()
-                    || credentials.clientSecret() == null || credentials.clientSecret().isBlank()
-                    || !merchant.getId().toString().equals(credentials.merchantId())) {
-                throw new IllegalStateException("Auth service returned invalid merchant credentials");
-            }
-
-            merchant.approve(credentials.clientId());
-            Merchant saved = merchantRepository.saveAndFlush(merchant);
-            // Never log or persist this secret in integration-service; auth-service stores its hash.
-            return new MerchantApprovalResponse(MerchantSummary.from(saved), credentials.clientId(), credentials.clientSecret());
-        } catch (RestClientException | IllegalStateException exception) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "Auth service could not provision merchant credentials", exception);
-        }
+        return recovery.approve(merchantId);
     }
 
     public MerchantSummary reject(UUID merchantId, String reason) {
-        Merchant merchant = requirePending(merchantId);
-        merchant.reject(reason.trim());
-        return MerchantSummary.from(merchantRepository.saveAndFlush(merchant));
-    }
-
-    private void validateAuthUser(AuthUserResponse user, Merchant merchant, String expectedUserId,
-                                  boolean expectedEnabled) {
-        if (user == null || user.id() == null || user.id().isBlank()
-                || (expectedUserId != null && !expectedUserId.equals(user.id()))
-                || !"MERCHANT".equals(user.role())
-                || !merchant.getId().toString().equals(user.merchantId())
-                || user.email() == null || !merchant.getEmail().equalsIgnoreCase(user.email().trim())
-                || user.enabled() != expectedEnabled) {
-            throw new IllegalStateException("Auth service returned an invalid merchant user state");
-        }
-    }
-
-    private Merchant requirePending(UUID merchantId) {
-        Merchant merchant = merchantRepository.findById(merchantId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Merchant not found"));
-        if (!merchant.getStatus().canTransitionTo(MerchantStatus.APPROVED)
-                && !merchant.getStatus().canTransitionTo(MerchantStatus.REJECTED)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Merchant is not pending");
-        }
-        return merchant;
+        return recovery.reject(merchantId, reason);
     }
 
     private String normalize(String value) {

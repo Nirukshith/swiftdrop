@@ -22,6 +22,33 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 class HttpAuthProvisioningClientTest {
 
+    @Test
+    void recoveryUsesTheAgreedStableOperationAndServiceCredential() {
+        var op=java.util.UUID.randomUUID(); var merchant=java.util.UUID.randomUUID(); var replacement=java.util.UUID.randomUUID();
+        String response="{\"operationId\":\""+op+"\",\"merchantId\":\""+merchant+"\",\"clientId\":\"same-client\",\"credentialRecoveryRequired\":true}";
+        mockServer.expect(requestTo("http://localhost:8081/internal/v1/merchant-provisioning/"+op))
+                .andExpect(method(HttpMethod.PUT)).andExpect(header("X-Internal-Service-Token","swiftdrop-internal-merchant-secret-2026"))
+                .andExpect(content().json("{\"merchantId\":\""+merchant+"\",\"email\":\"shop@example.test\",\"fullName\":\"Owner\",\"phoneNumber\":\"+94771234567\",\"expectedUserId\":null,\"actorId\":\"verified-admin\"}",true))
+                .andRespond(withSuccess(response,MediaType.APPLICATION_JSON));
+        mockServer.expect(requestTo("http://localhost:8081/internal/v1/merchant-provisioning/"+op))
+                .andExpect(method(HttpMethod.GET)).andRespond(withSuccess(response,MediaType.APPLICATION_JSON));
+        mockServer.expect(requestTo("http://localhost:8081/internal/v1/merchant-provisioning/"+op+"/credentials"))
+                .andExpect(method(HttpMethod.POST)).andExpect(content().json("{\"replacementId\":\""+replacement+"\",\"actorId\":\"verified-admin\",\"confirmReplacement\":true}",true))
+                .andRespond(withSuccess(response,MediaType.APPLICATION_JSON));
+        var result=client.provision(op,new AuthProvisioningClient.ProvisioningRequest(merchant,"shop@example.test","Owner","+94771234567",null,"verified-admin"));
+        assertThat(result.credentialRecoveryRequired()).isTrue();
+        assertThat(client.provisioningStatus(op).clientId()).isEqualTo("same-client");
+        assertThat(client.replaceCredential(op,new AuthProvisioningClient.ReplacementRequest(replacement,"verified-admin",true)).clientSecret()).isNull();
+        mockServer.verify();
+    }
+
+    @Test
+    void provisioningResponseStringDoesNotExposeSecretOrContactData() {
+        var response=new AuthProvisioningClient.ProvisioningResponse(java.util.UUID.randomUUID(),java.util.UUID.randomUUID(),
+                new AuthProvisioningClient.AuthUserResponse("u","private@example.test","Private","private-phone","MERCHANT","m",true),"client","one-time-private-secret",false);
+        assertThat(response.toString()).doesNotContain("one-time-private-secret","private@example.test","private-phone");
+    }
+
     private MockRestServiceServer mockServer;
     private ObjectMapper objectMapper;
     private HttpAuthProvisioningClient client;

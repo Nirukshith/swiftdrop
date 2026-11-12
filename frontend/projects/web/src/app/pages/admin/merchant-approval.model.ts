@@ -9,6 +9,7 @@ export interface MerchantSummary {
   status: MerchantStatus;
   rejectionReason: string | null;
   createdAt: string;
+  credentialRecoveryAvailable?: boolean;
 }
 
 export interface MerchantPage {
