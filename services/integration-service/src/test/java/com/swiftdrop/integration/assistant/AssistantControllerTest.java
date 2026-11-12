@@ -1,67 +1,106 @@
 package com.swiftdrop.integration.assistant;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.*;
+
 import com.swiftdrop.integration.assistant.client.FakeLlmClient;
 import com.swiftdrop.integration.assistant.client.LlmClient;
 import com.swiftdrop.integration.assistant.controller.AssistantController;
 import com.swiftdrop.integration.assistant.dto.ChatMessageRequest;
 import com.swiftdrop.integration.assistant.dto.ChatMessageResponse;
+import com.swiftdrop.integration.assistant.service.AssistantService;
 import com.swiftdrop.integration.assistant.tools.AssistantTools;
-import com.swiftdrop.integration.assistant.tools.AssistantToolsImpl;
+import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.ResponseEntity;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 class AssistantControllerTest {
 
-    private LlmClient llmClient;
-    private AssistantController controller;
     private AssistantTools tools;
+    private AssistantController controller;
+    private Jwt customerJwt;
 
     @BeforeEach
     void setUp() {
-        llmClient = new FakeLlmClient();
-        controller = new AssistantController(llmClient);
-        tools = new AssistantToolsImpl();
+        tools = mock(AssistantTools.class);
+        controller = new AssistantController(new AssistantService(new FakeLlmClient(), tools));
+        customerJwt = Jwt.withTokenValue("customer-token").header("alg", "none")
+                .subject("customer-1").claim("role", "CUSTOMER").build();
     }
 
     @Test
-    void testChatFeeEstimateQuestion() {
-        ChatMessageRequest request = new ChatMessageRequest("How much to send 2 kg to Kandy?", null);
-        ResponseEntity<ChatMessageResponse> response = controller.chat(request, null, null);
+    void answersWithFactsReturnedForOwnedParcel() {
+        when(tools.getParcelByTrackingNumber("SD-20261024-ABC123", "customer-token"))
+                .thenReturn(new AssistantTools.ParcelLookupResult(
+                        "SD-20261024-ABC123", "IN_TRANSIT", null, true, Instant.parse("2026-10-24T10:00:00Z"), null));
 
-        assertNotNull(response);
+        var response = controller.chat(
+                new ChatMessageRequest("Where is parcel SD-20261024-ABC123?", null), customerJwt, null);
+
         assertEquals(200, response.getStatusCode().value());
-        assertNotNull(response.getBody());
-        assertTrue(response.getBody().reply().contains("650.00 LKR"));
-        assertNotNull(response.getBody().conversationId());
+        assertTrue(response.getBody().reply().contains("IN_TRANSIT"));
+        verify(tools).getParcelByTrackingNumber("SD-20261024-ABC123", "customer-token");
     }
 
     @Test
-    void testChatTrackingStatusQuestion() {
-        ChatMessageRequest request = new ChatMessageRequest("Where is my parcel?", "conv-test-123");
-        ResponseEntity<ChatMessageResponse> response = controller.chat(request, null, null);
+    void asksForTrackingNumberWhenParcelQuestionIsAmbiguous() {
+        ChatMessageResponse response = controller.chat(
+                new ChatMessageRequest("Where is my parcel?", "conv-1"), customerJwt, null).getBody();
 
-        assertNotNull(response);
-        assertEquals(200, response.getStatusCode().value());
-        assertNotNull(response.getBody());
-        assertEquals("conv-test-123", response.getBody().conversationId());
-        assertTrue(response.getBody().reply().contains("OUT_FOR_DELIVERY"));
+        assertEquals("Please provide the tracking number so I can check the correct parcel.", response.reply());
+        verifyNoInteractions(tools);
     }
 
     @Test
-    void testAssistantToolsSkeleton() {
-        var status = tools.getParcelStatus("SD-20261024-001", "mock-token");
-        assertEquals("SD-20261024-001", status.trackingNumber());
-        assertEquals("OUT_FOR_DELIVERY", status.status());
+    void rejectsUnsupportedQuestionWithoutCallingTools() {
+        ChatMessageResponse response = controller.chat(
+                new ChatMessageRequest("Can you tell me the weather?", null), customerJwt, null).getBody();
 
-        var fee = tools.estimateFee(2.0, "MEDIUM", "Kandy", "mock-token");
-        assertEquals("Kandy", fee.destinationDistrict());
-        assertNotNull(fee.estimatedFee());
+        assertTrue(response.reply().contains("SwiftDrop parcels"));
+        verifyNoInteractions(tools);
+    }
 
-        var recent = tools.listMyRecentParcels("mock-token");
-        assertNotNull(recent);
-        assertFalse(recent.isEmpty());
+    @Test
+    void reportsUnavailableParcelWithoutInventingDetails() {
+        when(tools.getParcelByTrackingNumber(anyString(), anyString()))
+                .thenThrow(new com.swiftdrop.integration.assistant.tools.AssistantToolsImpl.ParcelNotFoundException());
+
+        ChatMessageResponse response = controller.chat(
+                new ChatMessageRequest("What is the status of SD-20261024-ABC123?", null), customerJwt, null).getBody();
+
+        assertTrue(response.reply().contains("could not find"));
+    }
+
+    @Test
+    void groundsFeeAnswerInPricingToolResult() {
+        when(tools.estimateFee("Colombo", "Kandy", 2.0, "MEDIUM", "customer-token"))
+                .thenReturn(new AssistantTools.FeeEstimateResult(2.0, "MEDIUM", "Kandy",
+                        java.math.BigDecimal.valueOf(650), "LKR"));
+
+        ChatMessageResponse response = controller.chat(
+                new ChatMessageRequest("What is the fee from Colombo to Kandy for 2 kg medium?", null),
+                customerJwt, null).getBody();
+
+        assertTrue(response.reply().contains("650"));
+        verify(tools).estimateFee("Colombo", "Kandy", 2.0, "MEDIUM", "customer-token");
+    }
+
+    @Test
+    void reportsProviderUnavailableWithoutExposingProviderDetails() {
+        LlmClient unavailable = (prompt, conversationId, token) -> {
+            throw new IllegalStateException("provider secret");
+        };
+        AssistantController unavailableController =
+                new AssistantController(new AssistantService(unavailable, tools));
+        when(tools.getCustomerParcels(null, 0, 20, "customer-token")).thenReturn(List.of());
+
+        ChatMessageResponse response = unavailableController.chat(
+                new ChatMessageRequest("Show my recent parcels", null), customerJwt, null).getBody();
+
+        assertTrue(response.reply().contains("temporarily unavailable"));
+        assertTrue(!response.reply().contains("provider secret"));
     }
 }

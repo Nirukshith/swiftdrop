@@ -92,8 +92,18 @@ export class AdminUsersService {
   public createStaffUser(payload: CreateStaffUserRequest): Observable<UserSummary> {
     return this.http.post<UserSummary>(this.baseUrl, payload).pipe(
       tap((created) => {
-        // Optimistically insert into the current user list and update total count
-        this.usersSignal.update((users) => [created, ...users]);
+        // Reconcile against current active filters and pagination
+        const matchesRole =
+          !this.lastFilterParams.role ||
+          this.lastFilterParams.role === created.role;
+        const matchesEnabled =
+          this.lastFilterParams.enabled === undefined ||
+          this.lastFilterParams.enabled === created.enabled;
+
+        if (matchesRole && matchesEnabled && (this.lastFilterParams.page ?? 0) === 0) {
+          const pageSize = this.lastFilterParams.size ?? 20;
+          this.usersSignal.update((users) => [created, ...users].slice(0, pageSize));
+        }
         this.totalElementsSignal.update((total) => total + 1);
       })
     );

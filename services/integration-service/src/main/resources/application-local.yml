@@ -17,3 +17,7 @@ spring:
       resourceserver:
         jwt:
           jwk-set-uri: ${JWKS_URL:http://localhost:8081/.well-known/jwks.json}
+
+swiftdrop:
+  assistant:
+    llm-provider: ${ASSISTANT_PROVIDER:fake}

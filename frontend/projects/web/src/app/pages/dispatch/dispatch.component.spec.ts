@@ -413,13 +413,14 @@ describe('DispatchComponent (Real API Integration)', () => {
       expect(component.toastType()).toBe('success');
     });
 
-    it('should handle re-queue API errors gracefully', () => {
+    it('should handle re-queue API errors gracefully and refresh failed queue on conflict', () => {
       dispatchServiceSpy.requeueParcel.mockReturnValue(
         throwError(() => ({
           status: 400,
           error: { message: 'Parcel is not in FAILED status' },
         }))
       );
+      dispatchServiceSpy.loadFailedParcels.mockClear();
 
       const failedParcel = mockFailedParcels[0];
       component.openRequeueModal(failedParcel);
@@ -429,6 +430,7 @@ describe('DispatchComponent (Real API Integration)', () => {
       expect(component.isSubmittingRequeue()).toBe(false);
       expect(component.toastType()).toBe('error');
       expect(component.toastMessage()).toContain('Parcel is not in FAILED status');
+      expect(dispatchServiceSpy.loadFailedParcels).toHaveBeenCalled();
     });
   });
 
