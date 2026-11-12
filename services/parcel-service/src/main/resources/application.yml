@@ -22,3 +22,9 @@ management:
   endpoint:
     health:
       show-details: always
+
+swiftdrop:
+  security:
+    internal:
+      tokens:
+        pricing-service: ${INTERNAL_PRICING_SERVICE_TOKEN:swiftdrop-internal-pricing-secret-2026}

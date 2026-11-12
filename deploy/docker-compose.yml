@@ -190,6 +190,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWKS_URL: http://auth-service:8081/.well-known/jwks.json
       SWIFTDROP_PRICING_QUOTE_URL: http://operations-service:8083/internal/v1/pricing/quote
+      INTERNAL_PRICING_SERVICE_TOKEN: ${INTERNAL_PRICING_SERVICE_TOKEN:-swiftdrop-internal-pricing-secret-2026}
     ports:
       - "8082:8082"
     depends_on:
@@ -220,6 +221,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWKS_URL: http://auth-service:8081/.well-known/jwks.json
       SWIFTDROP_SERVICES_PARCEL_SERVICE_URL: http://parcel-service:8082
+      INTERNAL_PRICING_SERVICE_TOKEN: ${INTERNAL_PRICING_SERVICE_TOKEN:-swiftdrop-internal-pricing-secret-2026}
     ports:
       - "8083:8083"
     depends_on:
@@ -253,6 +255,7 @@ services:
       JWKS_URL: http://auth-service:8081/.well-known/jwks.json
       INTERNAL_NOTIFICATIONS_SERVICE_TOKEN: ${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:-swiftdrop-internal-notif-secret-2026}
       INTERNAL_MERCHANT_SERVICE_TOKEN: ${INTERNAL_MERCHANT_SERVICE_TOKEN:-swiftdrop-internal-merchant-secret-2026}
+      INTERNAL_PRICING_SERVICE_TOKEN: ${INTERNAL_PRICING_SERVICE_TOKEN:-swiftdrop-internal-pricing-secret-2026}
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
     ports:
