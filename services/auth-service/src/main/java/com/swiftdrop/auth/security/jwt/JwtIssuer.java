@@ -44,6 +44,9 @@ public class JwtIssuer {
     /** Standard issuer URI – matches DevJwtTokenMinter.DEV_ISSUER in common. */
     public static final String ISSUER = "https://auth.swiftdrop.local";
 
+    /** Standard audience identifier – matches resource server configuration (e.g. operations-service). */
+    public static final String AUDIENCE = "swiftdrop-api";
+
     private final JwtKeyProvider keyProvider;
 
     public JwtIssuer(JwtKeyProvider keyProvider) {
@@ -81,6 +84,7 @@ public class JwtIssuer {
 
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
                 .issuer(ISSUER)
+                .audience(AUDIENCE)
                 .subject(clientId)
                 .issueTime(Date.from(now))
                 .expirationTime(Date.from(exp))
@@ -103,6 +107,7 @@ public class JwtIssuer {
 
         JWTClaimsSet.Builder builder = new JWTClaimsSet.Builder()
                 .issuer(ISSUER)
+                .audience(AUDIENCE)
                 .subject(userId)
                 .issueTime(Date.from(now))
                 .expirationTime(Date.from(exp))

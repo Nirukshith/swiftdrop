@@ -27,8 +27,10 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     authReq = authReq.clone({ withCredentials: true });
   }
 
-  // Attach in-memory access token if present
-  if (token && !req.headers.has('Authorization')) {
+  // Attach in-memory access token if present (prevent cross-domain leaks to third-party URLs)
+  const isExternalUrl = (req.url.startsWith('http://') || req.url.startsWith('https://')) &&
+                        !req.url.includes('swiftdrop');
+  if (token && !isExternalUrl && !req.headers.has('Authorization')) {
     authReq = authReq.clone({
       setHeaders: {
         Authorization: `Bearer ${token}`,
