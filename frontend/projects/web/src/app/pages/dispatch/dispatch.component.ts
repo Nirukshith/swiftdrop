@@ -1257,6 +1257,11 @@ export class DispatchComponent implements OnInit, OnDestroy {
           err?.message ||
           'Failed to re-queue parcel. Please try again.';
         this.showToast(errorMsg, 'error');
+
+        if (err?.status === 400 || err?.status === 409) {
+          this.retryLoadFailed();
+          this.retryLoadQueue();
+        }
       },
     });
   }

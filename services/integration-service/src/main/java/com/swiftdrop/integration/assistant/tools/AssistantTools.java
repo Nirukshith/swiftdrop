@@ -1,29 +1,39 @@
 package com.swiftdrop.integration.assistant.tools;
 
-import com.swiftdrop.integration.assistant.dto.FeeEstimateResult;
-import com.swiftdrop.integration.assistant.dto.ParcelStatusResult;
-import com.swiftdrop.integration.assistant.dto.RecentParcelItem;
 import java.util.List;
 
-/**
- * Backend tools contract executable by the LLM.
- * Calls existing REST APIs using the caller's JWT token to preserve permission isolation.
- */
 public interface AssistantTools {
+    ParcelLookupResult getParcelByTrackingNumber(String trackingNumber, String callerToken);
+    List<ParcelLookupResult> getCustomerParcels(String status, int page, int size, String callerToken);
+    ParcelHistoryResult getTrackingHistory(String trackingNumber, String callerToken);
+    DeliveryInfoResult getDeliveryInformation(String trackingNumber, String callerToken);
+    ParcelSummaryResult getParcelSummary(String callerToken);
+    FeeEstimateResult estimateFee(
+            String pickupDistrict, String destinationDistrict, double weightKg, String sizeCategory, String callerToken);
 
-    /**
-     * Tool 1: Look up current parcel status.
-     * Refuses access if the parcel belongs to a different customer.
-     */
-    ParcelStatusResult getParcelStatus(String trackingNo, String callerToken);
+    record ParcelLookupResult(
+            String trackingNumber,
+            String status,
+            String destinationDistrict,
+            boolean courierAssigned,
+            java.time.Instant lastUpdated,
+            java.math.BigDecimal fee) {
+    }
 
-    /**
-     * Tool 2: Estimate delivery fee using drop-off zone base fee, weight, and size.
-     */
-    FeeEstimateResult estimateFee(Double weightKg, String sizeCategory, String destinationDistrict, String callerToken);
+    record ParcelHistoryResult(String trackingNumber, String currentStatus, List<HistoryEntry> entries) {
+    }
 
-    /**
-     * Tool 3: List the caller's recent parcels.
-     */
-    List<RecentParcelItem> listMyRecentParcels(String callerToken);
+    record HistoryEntry(String status, java.time.Instant occurredAt) {
+    }
+
+    record DeliveryInfoResult(String trackingNumber, String status, boolean courierAssigned, String destinationDistrict) {
+    }
+
+    record ParcelSummaryResult(int total, java.util.Map<String, Integer> statusCounts) {
+    }
+
+    record FeeEstimateResult(
+            double weightKg, String sizeCategory, String destinationDistrict,
+            java.math.BigDecimal estimatedFee, String currency) {
+    }
 }
