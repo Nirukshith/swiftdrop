@@ -31,13 +31,16 @@
     @if (reportsService.exportError()) {
       <p class="mt-3 text-sm text-rose-600" role="alert">{{ reportsService.exportError() }}</p>
     }
+    <p class="mt-3 text-sm text-slate-500">
+      Zone analytics are unavailable because the approved parcel event contract does not include zone or district data.
+    </p>
   </ui-card>
 
   @if (reportsService.loading()) {
     <p class="rounded-lg bg-white p-6 text-sm text-slate-500 shadow-sm" role="status">Loading delivery reports...</p>
   } @else if (reportsService.error()) {
     <p class="rounded-lg bg-rose-50 p-6 text-sm text-rose-700" role="alert">{{ reportsService.error() }}</p>
-  } @else if (rows().length === 0) {
+  } @else if (rows().length === 0 || !hasDeliveries()) {
     <p class="rounded-lg bg-white p-6 text-sm text-slate-600 shadow-sm">No delivery report data is available for this date range.</p>
   } @else {
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

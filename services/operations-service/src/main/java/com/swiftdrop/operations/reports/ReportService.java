@@ -9,6 +9,9 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class ReportService {
@@ -35,10 +38,30 @@ public class ReportService {
     @Transactional(readOnly = true)
     public List<DailyReportRow> getDailyReport(LocalDate from, LocalDate to) {
         validateRange(from, to);
-        return dailyReportRepository.findByReportDateBetweenOrderByReportDate(from, to)
+        Map<LocalDate, DailyReportAggregate> aggregates = dailyReportRepository
+                .findByReportDateBetweenOrderByReportDate(from, to)
                 .stream()
-                .map(this::toRow)
+                .collect(Collectors.toMap(DailyReportAggregate::getReportDate, Function.identity()));
+
+        return from.datesUntil(to.plusDays(1))
+                .map(reportDate -> toRow(reportDate, aggregates.get(reportDate)))
                 .toList();
+    }
+
+    private DailyReportRow toRow(LocalDate reportDate, DailyReportAggregate aggregate) {
+        if (aggregate == null) {
+            return new DailyReportRow(reportDate, 0, 0, 0, 0.0);
+        }
+
+        int total = aggregate.getTotalDeliveries();
+        double successRate = total == 0 ? 0.0 : (double) aggregate.getSuccessfulDeliveries() / total;
+        return new DailyReportRow(
+                reportDate,
+                total,
+                aggregate.getSuccessfulDeliveries(),
+                aggregate.getFailedDeliveries(),
+                successRate
+        );
     }
 
     @Transactional
@@ -83,18 +106,6 @@ public class ReportService {
 
         processedEventRepository.save(new ReportProcessedEvent(
                 event.eventId(), event.eventType(), event.parcelId()));
-    }
-
-    private DailyReportRow toRow(DailyReportAggregate aggregate) {
-        int total = aggregate.getTotalDeliveries();
-        double successRate = total == 0 ? 0.0 : (double) aggregate.getSuccessfulDeliveries() / total;
-        return new DailyReportRow(
-                aggregate.getReportDate(),
-                total,
-                aggregate.getSuccessfulDeliveries(),
-                aggregate.getFailedDeliveries(),
-                successRate
-        );
     }
 
     private void validateRange(LocalDate from, LocalDate to) {

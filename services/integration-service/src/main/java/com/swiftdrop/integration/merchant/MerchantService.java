@@ -60,18 +60,19 @@ public class MerchantService {
                 AuthUserResponse user = authProvisioningClient.createMerchantUser(new AuthCreateUserRequest(
                         merchant.getEmail(), null, merchant.getContactName(), merchant.getPhoneNumber(),
                         "MERCHANT", merchant.getId().toString(), false));
-                if (user == null || user.id() == null || user.id().isBlank()) {
-                    throw new IllegalStateException("Auth service returned no user identifier");
-                }
+                validateAuthUser(user, merchant, null, false);
                 merchant.setAuthUserId(user.id());
                 merchant = merchantRepository.saveAndFlush(merchant);
             }
 
-            authProvisioningClient.activateUser(merchant.getAuthUserId());
+            AuthUserResponse activated = authProvisioningClient.activateUser(merchant.getAuthUserId());
+            validateAuthUser(activated, merchant, merchant.getAuthUserId(), true);
             AuthClientCredentialsResponse credentials = authProvisioningClient.createClient(
                     new AuthCreateClientRequest(merchant.getId().toString(), merchant.getBusinessName(), List.of()));
-            if (credentials == null || credentials.clientId() == null || credentials.clientSecret() == null) {
-                throw new IllegalStateException("Auth service returned incomplete client credentials");
+            if (credentials == null || credentials.clientId() == null || credentials.clientId().isBlank()
+                    || credentials.clientSecret() == null || credentials.clientSecret().isBlank()
+                    || !merchant.getId().toString().equals(credentials.merchantId())) {
+                throw new IllegalStateException("Auth service returned invalid merchant credentials");
             }
 
             merchant.approve(credentials.clientId());
@@ -88,6 +89,18 @@ public class MerchantService {
         Merchant merchant = requirePending(merchantId);
         merchant.reject(reason.trim());
         return MerchantSummary.from(merchantRepository.saveAndFlush(merchant));
+    }
+
+    private void validateAuthUser(AuthUserResponse user, Merchant merchant, String expectedUserId,
+                                  boolean expectedEnabled) {
+        if (user == null || user.id() == null || user.id().isBlank()
+                || (expectedUserId != null && !expectedUserId.equals(user.id()))
+                || !"MERCHANT".equals(user.role())
+                || !merchant.getId().toString().equals(user.merchantId())
+                || user.email() == null || !merchant.getEmail().equalsIgnoreCase(user.email().trim())
+                || user.enabled() != expectedEnabled) {
+            throw new IllegalStateException("Auth service returned an invalid merchant user state");
+        }
     }
 
     private Merchant requirePending(UUID merchantId) {

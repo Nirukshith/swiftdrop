@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Signal, signal } from '@angular/core';
+import { Signal, signal, WritableSignal } from '@angular/core';
 import { HttpHeaders, HttpResponse } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
@@ -9,7 +9,7 @@ import { ReportsService } from './reports.service';
 describe('ReportsComponent', () => {
   let fixture: ComponentFixture<ReportsComponent>;
   let reportsService: {
-    rows: Signal<ReadonlyArray<{
+    rows: WritableSignal<ReadonlyArray<{
       reportDate: string;
       totalDeliveries: number;
       successfulDeliveries: number;
@@ -57,6 +57,20 @@ describe('ReportsComponent', () => {
     expect(element.textContent).toContain('80%');
     expect(element.textContent).toContain('Daily delivery trend');
     expect(element.textContent).toContain('Success versus failure');
+  });
+
+  it('renders the empty state when the selected range contains only zero rows', () => {
+    reportsService.rows.set([{
+      reportDate: '2026-11-01',
+      totalDeliveries: 0,
+      successfulDeliveries: 0,
+      failedDeliveries: 0,
+      successRate: 0,
+    }]);
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent)
+      .toContain('No delivery report data is available for this date range.');
   });
 
   it('does not call the API for an invalid date range', () => {
