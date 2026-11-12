@@ -1,138 +1,172 @@
-# M6 Week 6 merchant completion — #223
+# M6 Week 6 completion — #223
 
-Base: `development` commit `5a2b107`. Scope is M6's merchant package, bulk UI,
-corresponding tests/runtime fixtures, and merchant documentation. Existing work
-in the original checkout was preserved in place; this branch uses a fresh worktree.
+Implementation is split by the existing tracked issues. All PRs target development
+and remain unmerged for owner/maintainer review:
 
-## Changes
+1. [#261 recovery contract](https://github.com/Nirukshith/swiftdrop/pull/261).
+2. [#266 onboarding recovery](https://github.com/Nirukshith/swiftdrop/pull/266),
+   implementing #207 against that contract.
+3. [#260 merchant bulk/pricing integration](https://github.com/Nirukshith/swiftdrop/pull/260),
+   consuming recovery and completing #223. Merge in this order after review.
 
-The merchant pricing adapter now uses the merged OAuth client-credentials
-contract (`POST /api/v1/auth/token`, JSON request) to request only `pricing:read`.
-It sends that dedicated bearer token to the real pricing URL, never the incoming
-merchant bearer token. Tokens are cached only in memory, refreshed before expiry,
-and invalidated after a quote 401. There is no automatic HTTP retry. Missing
-credentials, failed exchange, invalid token metadata, and missing scope fail
-before a parcel is requested. Exchange errors do not propagate upstream response
-bodies that could contain credentials.
+The user explicitly confirmed M10/M5 owner agreement and approved the cross-member
+implementation and same-client ADMIN-confirmed credential replacement policy.
+The original checkout's uncommitted work was preserved; isolated worktrees were used.
+The final combined development baseline was `cc37191`.
 
-Bulk confirmation freezes its upload key alongside the submitted CSV. Explicit
-check/replay keeps both original values even if the editable signal changes.
-Existing row validation, per-merchant reservations, partial results, and unknown
-outcome guards remain in use.
+## Implemented scope
 
-## Configuration
+| Requirement | Final behaviour/evidence |
+| --- | --- |
+| ME-01 onboarding | Public registration remains PENDING; ADMIN approval/rejection retains isolation and validates provider associations. |
+| ME-02 credential handoff/recovery | Stable operation committed before auth; atomic provider provisioning and non-secret replay; explicit replacement on the same client after a lost handoff. No duplicate user/client and no raw-secret persistence. |
+| ME-03 secured order API | Approved merchant JWT association, request/key validation, real pricing and real M1 creation/replay/conflict are verified. |
+| ME-06 M6 bulk slice | Template, UTF-8 CSV preview, row validation, independent partial results, upload limits, stable upload/row keys, durable original quote and explicit safe reconciliation. M7 webhook slices are unchanged. |
+| Authorization and failures | ADMIN-only recovery, service-caller restrictions, merchant state/tenant guards, invalid inputs, unknown outcomes, concurrent retries and changed-key/file conflicts are tested. |
+| Dependencies | M1 #205 replay (#216) and merged M10 audience support (#262/#264) are consumed. #207 has its own PR #266 rather than being silently bundled/replaced. |
 
-Set these in the integration-service process environment through the deployment's
-secret configuration; do not commit their values:
+New bulk attempts persist their accepted quote independently before the parcel
+request. Replaying the same confirmed file/key can resume WAITING rows and recover
+unknown commits with M1's stable downstream identity. Completed rows do not repeat
+writes; successful rows survive other row failures. The provider's current parcel
+status is retained when reconstructing a lost mapping, including PICKED_UP.
+
+Recovery never retrieves a stored raw secret. Normal onboarding retries reconcile
+identifiers; ADMIN confirmation is required to replace an unknown secret on that
+same client. A replacement replay does not rotate twice. Another lost one-time
+replacement requires another explicit confirmation with a new key. Old secrets
+cannot obtain new tokens; already-issued stateless access tokens retain normal expiry.
+The admin UI offers Pending/Approved selection, recovery confirmation, transient
+handoff display/clearing and protection against overlapping handoffs.
+
+## Configuration and manual workflow
+
+Privately configure the integration-service pricing identity, provisioned by M10
+with only pricing:read scope:
 
 | Variable | Purpose |
 | --- | --- |
-| `MERCHANT_PRICING_CLIENT_ID` | Dedicated client provisioned by M10 for the integration service |
-| `MERCHANT_PRICING_CLIENT_SECRET` | That client's secret; used only for token exchange |
-| `SERVICES_AUTH_BASE_URL` | Auth-service base URL; defaults to `http://localhost:8081` |
-| `SERVICES_OPERATIONS_BASE_URL` | Operations-service base URL; defaults to `http://localhost:8083` |
+| MERCHANT_PRICING_CLIENT_ID | Dedicated machine client ID; ordinary merchant clients are not granted pricing access. |
+| MERCHANT_PRICING_CLIENT_SECRET | Dedicated client secret; never commit its value. |
+| SERVICES_AUTH_BASE_URL | Existing auth base URL; default http://localhost:8081. |
+| SERVICES_OPERATIONS_BASE_URL | Existing operations base URL; default http://localhost:8083. |
+| SERVICES_PARCEL_BASE_URL | Existing parcel base URL; default http://localhost:8082. |
+| INTERNAL_MERCHANT_SERVICE_TOKEN | Existing internal caller credential, matching auth and integration. |
 
-M10 must provision a client allowed to request `pricing:read`. Do not grant that
-scope to ordinary merchant clients or grant a human DISPATCHER/ADMIN role to the
-service. The current auth API ties clients to an enabled user/merchant association;
-the isolated runner creates a disposable dedicated association through those
-existing APIs. Production identity provisioning and audience agreement belong to
-M10/M5. Missing configuration fails closed with the merchant API's existing 502.
-No deployment/platform or provider source is changed in this PR.
+The M6 pricing client exchanges credentials through the merged JSON token endpoint
+`/api/v1/auth/token`, caches bearer tokens only in memory, refreshes before expiry,
+and invalidates rejected tokens without automatic write retry. Missing credentials
+or failed pricing fails before parcel creation. Existing role/scope/audience
+validation and gateway internal-route restrictions remain in force. No deployment
+or shared-auth code is changed by these PRs.
 
-## Reproducible verification
+For a manual demo, register the business, approve it as ADMIN and acknowledge the
+one-time API credential handoff. An approved merchant without a browser password
+can use the existing Forgot password/email reset flow before signing in to the
+merchant portal; the OAuth client secret is an API credential, not a browser
+password. Open `/merchant/bulk`, download the template, preview valid/invalid rows,
+confirm creation, then check/replay using the retained upload reference. For a
+lost credential handoff, the ADMIN selects the Pending or Approved list and
+explicitly confirms **Recover credentials**. Browser steps are provided for
+reproduction; an interactive browser session is not claimed as executed evidence.
 
-Use Java 21 and Node 22. The frontend commands run from `frontend/`.
+## Exact verification commands
+
+Java 21.0.13, Node 22.23.4 and Docker. A local verification checkout combined the
+separate PR branches; no GitHub PR was merged.
 
 ```sh
 mvn -B verify -pl services/auth-service,services/parcel-service,services/operations-service,services/integration-service -am
+mvn -B verify -pl services/auth-service -am
 cd frontend
 npm ci
 npm test -- --ci
 npm run build
 cd ..
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s services/integration-service/src/test/resources/merchant -p test_fault_proxy.py -v
 python3 services/integration-service/src/test/resources/merchant/run_isolated_verification.py
 ```
 
-The runner creates private, disposable PostgreSQL/Kafka/Mailpit fixtures and real
-auth, parcel, operations, and integration JVMs. It generates credentials in memory,
-uses private temporary service logs, checks actual token issuance and real pricing
-authorization, then verifies registration, approval/rejection, order validation,
-M1 creation/replay/conflict, cancellation, CSV partial outcomes, tenant isolation,
-and duplicate prevention. Pricing for successful order creation remains an
-explicit fixture; it now requires a bearer header. This is HTTP integration
-evidence, not an interactive browser session or a fully real pricing chain.
-
-Recorded automated results (Java 21.0.13 / Node 22.23.4):
-
 | Check | Result |
 | --- | --- |
-| Full Maven reactor above | BUILD SUCCESS; 791 tests; zero failures/errors/skips |
-| common | 13 tests passed |
-| auth-service | 187 tests passed |
-| parcel-service | 218 tests passed |
-| operations-service | 131 tests passed |
-| integration-service in full reactor | 242 tests passed, including 14 new pricing consumer tests |
-| `npm ci` | Passed; lockfile unchanged |
-| `npm test -- --ci` | 65 suites / 483 tests passed |
-| `npm run build` | Production build passed |
+| Combined full Maven reactor | BUILD SUCCESS; 836 tests; zero failures/errors/skips |
+| common / auth / parcel / operations / integration in that run | 13 / 218 / 218 / 137 / 250 |
+| Final auth check after operation-collision guard | BUILD SUCCESS; common 13 + auth 219; zero failures/errors/skips |
+| Latest module evidence combined | 837 tests: common 13, auth 219, parcel 218, operations 137, integration 250 |
+| Node 22 npm ci | Passed; lockfile unchanged |
+| Frontend tests | 65 suites / 489 tests passed |
+| Production build | Passed |
+| Fault-proxy real HTTP framing tests | 2 passed |
+| Isolated real-service HTTP workflow | 146 checks passed; exit 0; disposable fixtures cleaned up |
 
-The new consumer tests cover exact credential-exchange payload, token caching,
-expiry refresh, rejected-token invalidation, missing configuration, sanitized
-exchange errors, invalid/insufficient token metadata, dedicated bearer forwarding,
-401/403 without automatic retry, and invalid quote responses. Existing onboarding,
-CSV parser/API/preview, tenant isolation, concurrency, reservation/recovery, and
-parcel lifecycle suites all passed. No tests were skipped, deleted, or weakened.
-A temporary default-port Kafka test broker was removed after Maven verification.
+The last auth guard was checked in the complete auth module after the full reactor.
+The runtime used that verified auth JAR; source equality with the combined checkout
+was checked. Other service JARs came from the passing full reactor. The 837 figure
+is latest module evidence, not a claim that the full reactor was rerun after that
+one guard. No test was skipped, deleted or weakened. Existing validation/denial
+cases were adapted to the new atomic provisioning contract.
 
-The final contract review additionally covered auth's optional response `scope`:
-an omitted scope is accepted for the explicitly requested `pricing:read`; an
-explicit response lacking that scope is rejected. The pricing provider remains
-responsible for validating the signed token and its actual permissions.
+The initial combined build caught newly merged audience overlap and then a newly
+merged standalone test's constructor setup. Work stopped after two failures; the
+user authorized correction and continuation. M10's merged audience implementation
+and the security test assertions were retained. Corrected full verification passed.
+The initial runtime exposed chunked-body forwarding missing from the test proxy.
+After a real HTTP framing test/fix, the complete workflow passed. The framing
+suite required loopback socket permission; its initial sandbox bind was blocked
+before tests could run. No application policy was weakened to make tests pass.
 
-After that refinement, `mvn -B verify -pl services/integration-service -am`
-passed again: **common 13 + integration 243 tests**, zero failures/errors/skips,
-including **15 pricing consumer tests**. The full reactor and runtime results
-were recorded before that compatibility refinement; unchanged provider modules
-were not rerun. The final module run also used a temporary default-port Kafka
-broker for existing Spring test contexts; it was removed afterward.
+## Real workflow and fault evidence
 
-Runtime result: **109 checks passed**, exit 0, with all isolated fixtures cleaned
-up. Sanitized evidence:
+The runner starts real auth, operations, parcel and integration JVMs with disposable
+PostgreSQL/Kafka/Mailpit. Dedicated machine credentials and DISPATCHER pricing data
+are provisioned through existing authorized APIs. The seeded verification price is
+500 + 250 + 100 = 850 LKR; these are isolated test data, not new production pricing
+requirements. Successful pricing, provisioning and parcel creation are real.
+
+Loopback-only fault proxies discard selected SUCCESSFUL provider responses after
+commit and return a gateway error. They never fabricate a successful business
+response. The test proxy handles Java chunked request bodies. Private credentials
+stay in memory/private fixture environment and are never printed.
+
+Sanitized terminal evidence:
 
 ```text
-PASS real dedicated pricing service token: HTTP 200
-PASS dedicated pricing scope without dispatcher elevation
-PASS documented M10/M5 blocker: issued token has no audience
-PASS documented M10/M5 blocker: real scoped token rejected by pricing audience validation: HTTP 401
-PASS real M1 downstream creation replay: HTTP 201
-PASS M1 downstream replay preserves the original parcel
-PASS M1 downstream key rejects changed payload: HTTP 409
-PASS bulk replay, duplicates and malformed files added no extra parcels
+PASS real scoped pricing quote: HTTP 200
+PASS ordinary merchant token cannot read internal pricing: HTTP 403
+PASS injected lost auth provisioning response after commit: HTTP 502
+PASS normal retry reconciles without silently rotating credentials: HTTP 409
+PASS same replacement key does not rotate or reveal a secret again: HTTP 409
+PASS explicit new confirmation recovers credential handoff: HTTP 200
+PASS recovery retains the original client and approves the merchant
+PASS replaced old secret cannot obtain another token: HTTP 401
+PASS bulk records lost real parcel response: HTTP 200
+PASS exactly one real parcel committed before retry
+PASS change real pricing after ambiguous parcel commit: HTTP 200
+PASS recovery pins 850 LKR instead of requoting at the new price
+PASS recovery respects the provider current lifecycle state
+PASS lost-response recovery created no duplicate parcel
 ALL REAL-SERVICE MERCHANT ORDER CHECKS PASSED
 Isolated runtime fixtures cleaned up
 ```
 
-The 109 checks establish the fixture-qualified merchant workflow and the actual
-provider blocker, not full real-pricing success or onboarding crash recovery.
-The M1 HTTP check replays an existing committed creation with M6's exact key and
-payload; it does not inject a network failure or kill a process after commit.
+The 146 checks also cover registration/approval/rejection, credential exchange,
+input validation and failure correction, tenant-isolated order lists, M1 downstream
+replay/conflict, cancellation lifecycle/ownership, malformed CSV, row errors,
+partial results, concurrent/repeated uploads and authorization. A real PostgreSQL
+trigger separately verifies a local M6 persistence failure after provider completion.
 
-## Remaining work and ownership
+## Operational limits
 
-- [#207](https://github.com/Nirukshith/swiftdrop/issues/207), M6/M10: safe recovery
-  after auth activation/client provisioning partially commits or loses its response.
-  The merged onboarding flow retains the existing pending state/retry tests;
-  this issue does not replace or silently implement the separate recovery contract.
-- [#208](https://github.com/Nirukshith/swiftdrop/issues/208), M5/M10: align the
-  token issuer with operations' required audience. PR #217 merged scoped access
-  but auth's `JwtIssuer.issueClientCredentialsToken` still emits no `aud` claim.
-  Operations `SecurityConfig` requires `swiftdrop-api`. Do not disable validation
-  or mint a fake successful service token as end-to-end evidence.
-- [#205](https://github.com/Nirukshith/swiftdrop/issues/205), M1: PR #216's durable
-  creation replay is consumed and verified; no provider code is duplicated here.
-  M6's ambiguous bulk writes remain reserved until controlled reconciliation can
-  preserve the original quote/payload and respect current provider lifecycle state.
+- Legacy ambiguous bulk attempts created BEFORE quote persistence stay reserved
+  when the original quote cannot be recovered. Never guess it or delete a guard
+  to force another creation. New version-1 attempts support the verified replay.
+- Ambiguous multiple legacy auth clients are denied for controlled operator
+  reconciliation; no arbitrary client is selected and no secret is read from storage.
+- Operation/upload checkpoints have no automatic deletion/expiry job. Existing
+  stateless access tokens expire normally after a secret replacement.
+- M10's audience support is reused from development. This feature does not claim
+  to close every separately tracked #208 consumer task or modify M1 customer code.
 
-Keep `Refs #223` in the PR while recovery and full real pricing are incomplete.
-Do not close #223 or mark all acceptance criteria satisfied based on fixture tests.
+Implementation and verification are complete for #223's merchant scope, with the
+above migration/operational safeguards documented. Release requires maintainer
+review and the stated PR merge order; no PR was merged by the agent.
