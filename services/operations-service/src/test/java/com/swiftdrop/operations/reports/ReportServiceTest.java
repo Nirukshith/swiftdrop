@@ -97,6 +97,24 @@ class ReportServiceTest {
                 .isInstanceOf(ResponseStatusException.class);
     }
 
+    @Test
+    void returnsEveryInclusiveDateWithZeroRowsForMissingAggregates() {
+        DailyReportAggregate aggregate = new DailyReportAggregate(LocalDate.of(2026, 11, 2));
+        aggregate.recordSuccess();
+        when(dailyReportRepository.findByReportDateBetweenOrderByReportDate(
+                LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 3)))
+                .thenReturn(java.util.List.of(aggregate));
+
+        assertThat(service.getDailyReport(
+                LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 3)))
+                .extracting(DailyReportRow::reportDate, DailyReportRow::totalDeliveries)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(LocalDate.of(2026, 11, 1), 0),
+                        org.assertj.core.groups.Tuple.tuple(LocalDate.of(2026, 11, 2), 1),
+                        org.assertj.core.groups.Tuple.tuple(LocalDate.of(2026, 11, 3), 0)
+                );
+    }
+
     private EventEnvelope event(String id, long sequence, String status, Instant occurredAt) {
         return new EventEnvelope(
                 id,

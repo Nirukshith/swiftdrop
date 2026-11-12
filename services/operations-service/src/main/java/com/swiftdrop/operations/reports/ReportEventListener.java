@@ -46,6 +46,7 @@ public class ReportEventListener {
 
     @DltHandler
     public void handleDlt(String payload, @Header(KafkaHeaders.RECEIVED_TOPIC) String topic) {
-        log.error("Exhausted retry attempts for report event from topic {}", topic);
+        log.error("Exhausted retry attempts for report event from topic {}. Payload was not applied",
+                topic);
     }
 }
