@@ -330,4 +330,51 @@ class WorkloadCounterTest {
         workloadCounter.apply(deliverEvent);
         assertEquals(0, workloadCounter.getActiveCount(courierA));
     }
+
+    @Test
+    @DisplayName("Re-queue invariance: FAILED decrements workload, re-queue to CREATED does not decrement again")
+    void testRequeueDoesNotDecrementWorkload() {
+        String courierA = "courier-A";
+        String parcel1 = "parcel-1";
+
+        // 1. Initial assignment (seq 1): count becomes 1
+        workloadCounter.apply(createEnvelope(
+                WorkloadCounter.TOPIC_PARCEL_ASSIGNED,
+                1L,
+                parcel1,
+                "CREATED",
+                "CREATED",
+                courierA,
+                null
+        ));
+        assertEquals(1, workloadCounter.getActiveCount(courierA));
+
+        // 2. Delivery fails (seq 2, terminal): count becomes 0
+        workloadCounter.apply(createEnvelope(
+                WorkloadCounter.TOPIC_PARCEL_STATUS_CHANGED,
+                2L,
+                parcel1,
+                "OUT_FOR_DELIVERY",
+                WorkloadCounter.STATUS_FAILED,
+                courierA,
+                null
+        ));
+        assertEquals(0, workloadCounter.getActiveCount(courierA));
+
+        // 3. Dispatcher re-queues parcel: status transitions from FAILED to CREATED (seq 3, non-terminal)
+        // Previous courier was already cleared and workload already decremented upon failure.
+        EventEnvelope requeueStatusEvent = createEnvelope(
+                WorkloadCounter.TOPIC_PARCEL_STATUS_CHANGED,
+                3L,
+                parcel1,
+                WorkloadCounter.STATUS_FAILED,
+                "CREATED",
+                null,
+                null
+        );
+
+        boolean applied = workloadCounter.apply(requeueStatusEvent);
+        assertTrue(applied);
+        assertEquals(0, workloadCounter.getActiveCount(courierA), "Re-queue to CREATED must not decrement courier workload further");
+    }
 }

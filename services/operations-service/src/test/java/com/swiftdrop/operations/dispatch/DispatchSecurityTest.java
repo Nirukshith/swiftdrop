@@ -57,6 +57,22 @@ class DispatchSecurityTest {
     }
 
     @Test
+    @WithMockUser(username = "customer", roles = {"CUSTOMER"})
+    @DisplayName("GET /api/v1/dispatch/parcels returns 403 Forbidden for CUSTOMER role")
+    void dispatchParcels_forbiddenForCustomer() throws Exception {
+        mockMvc.perform(get("/api/v1/dispatch/parcels"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "merchant", roles = {"MERCHANT"})
+    @DisplayName("GET /api/v1/dispatch/parcels returns 403 Forbidden for MERCHANT role")
+    void dispatchParcels_forbiddenForMerchant() throws Exception {
+        mockMvc.perform(get("/api/v1/dispatch/parcels"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("GET /api/v1/dispatch/parcels rejects unauthenticated request")
     void dispatchParcels_unauthenticated() throws Exception {
         mockMvc.perform(get("/api/v1/dispatch/parcels"))
@@ -78,6 +94,22 @@ class DispatchSecurityTest {
     @WithMockUser(username = "admin", roles = {"ADMIN"})
     @DisplayName("GET /api/v1/dispatch/parcels/failed returns 403 Forbidden for ADMIN role")
     void failedParcels_forbiddenForAdmin() throws Exception {
+        mockMvc.perform(get("/api/v1/dispatch/parcels/failed"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "customer", roles = {"CUSTOMER"})
+    @DisplayName("GET /api/v1/dispatch/parcels/failed returns 403 Forbidden for CUSTOMER role")
+    void failedParcels_forbiddenForCustomer() throws Exception {
+        mockMvc.perform(get("/api/v1/dispatch/parcels/failed"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "merchant", roles = {"MERCHANT"})
+    @DisplayName("GET /api/v1/dispatch/parcels/failed returns 403 Forbidden for MERCHANT role")
+    void failedParcels_forbiddenForMerchant() throws Exception {
         mockMvc.perform(get("/api/v1/dispatch/parcels/failed"))
             .andExpect(status().isForbidden());
     }
