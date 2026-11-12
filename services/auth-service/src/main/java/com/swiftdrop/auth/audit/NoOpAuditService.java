@@ -20,12 +20,29 @@ public class NoOpAuditService implements AuditService {
     @Override
     public void record(String actorId, String actorRole, String action,
                        String targetType, String targetId, Map<String, Object> details) {
+        Map<String, Object> sanitized = JpaAuditService.sanitizeDetails(details);
         log.info("[AUDIT] actor={} role={} action={} target={}:{} details={}",
-            actorId, actorRole, action, targetType, targetId, details);
+            actorId, actorRole, action, targetType, targetId, sanitized);
     }
 
     @Override
     public void record(AuditEvent event) {
-        log.info("[AUDIT-EVENT] {}", event);
+        if (event == null) {
+            return;
+        }
+        Map<String, Object> sanitized = JpaAuditService.sanitizeDetails(event.details());
+        AuditEvent sanitizedEvent = new AuditEvent(
+            event.eventId(),
+            event.occurredAt(),
+            event.actorId(),
+            event.actorRole(),
+            event.action(),
+            event.targetType(),
+            event.targetId(),
+            event.ipAddress(),
+            event.correlationId(),
+            sanitized
+        );
+        log.info("[AUDIT-EVENT] {}", sanitizedEvent);
     }
 }

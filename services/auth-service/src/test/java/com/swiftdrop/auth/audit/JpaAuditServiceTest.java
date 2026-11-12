@@ -102,6 +102,48 @@ class JpaAuditServiceTest {
     }
 
     @Test
+    @DisplayName("sanitizeDetails recursively redacts nested maps and collections")
+    @SuppressWarnings("unchecked")
+    void sanitizeDetails_recursivelyRedactsNestedStructures() {
+        Map<String, Object> nestedMap = Map.of(
+            "accessToken", "bearer.secret.token",
+            "authCode", "oauth_code_12345",
+            "cookie", "session_id=abcdef",
+            "apiKey", "api_key_secret_999",
+            "innerSafe", "ok"
+        );
+
+        Map<String, Object> input = Map.of(
+            "authContext", nestedMap,
+            "userProfiles", java.util.List.of(
+                Map.of("rawPassword", "pass1", "label", "first"),
+                Map.of("privateKey", "---RSA---", "label", "second")
+            ),
+            "credentialsList", java.util.List.of("direct-secret-1", "direct-secret-2"),
+            "topSafe", 123
+        );
+
+        Map<String, Object> sanitized = JpaAuditService.sanitizeDetails(input);
+
+        assertThat(sanitized.get("topSafe")).isEqualTo(123);
+        assertThat(sanitized.get("credentialsList")).isEqualTo("[REDACTED]");
+
+        Map<String, Object> sanitizedNested = (Map<String, Object>) sanitized.get("authContext");
+        assertThat(sanitizedNested.get("accessToken")).isEqualTo("[REDACTED]");
+        assertThat(sanitizedNested.get("authCode")).isEqualTo("[REDACTED]");
+        assertThat(sanitizedNested.get("cookie")).isEqualTo("[REDACTED]");
+        assertThat(sanitizedNested.get("apiKey")).isEqualTo("[REDACTED]");
+        assertThat(sanitizedNested.get("innerSafe")).isEqualTo("ok");
+
+        java.util.List<Map<String, Object>> sanitizedList = (java.util.List<Map<String, Object>>) sanitized.get("userProfiles");
+        assertThat(sanitizedList).hasSize(2);
+        assertThat(sanitizedList.get(0).get("rawPassword")).isEqualTo("[REDACTED]");
+        assertThat(sanitizedList.get(0).get("label")).isEqualTo("first");
+        assertThat(sanitizedList.get(1).get("privateKey")).isEqualTo("[REDACTED]");
+        assertThat(sanitizedList.get(1).get("label")).isEqualTo("second");
+    }
+
+    @Test
     @DisplayName("record() rethrows repository exceptions for visibility")
     void record_rethrowsPersistenceExceptions() {
         when(auditLogRepository.save(org.mockito.ArgumentMatchers.any()))

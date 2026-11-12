@@ -89,6 +89,16 @@ describe('CallbackComponent', () => {
     expect(component.errorMessage()).toContain('account is disabled');
   });
 
+  it('should display security error message when state_mismatch error parameter is present', async () => {
+    queryParamMapMock.set('error', 'state_mismatch');
+    createComponent();
+    await fixture.whenStable();
+
+    expect(authServiceMock.initializeSession).not.toHaveBeenCalled();
+    expect(component.isLoading()).toBe(false);
+    expect(component.errorMessage()).toContain('invalid or expired security state');
+  });
+
   it('should display generic error message for other error parameters', async () => {
     queryParamMapMock.set('error', 'server_error');
     createComponent();
