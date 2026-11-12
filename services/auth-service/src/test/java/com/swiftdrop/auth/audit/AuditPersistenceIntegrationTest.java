@@ -168,4 +168,46 @@ class AuditPersistenceIntegrationTest {
         assertThat(details.get("refreshToken")).isEqualTo("[REDACTED]");
         assertThat(details.get("attemptCount")).isEqualTo(2);
     }
+
+    @Test
+    @DisplayName("Courier authentication events (success & failure) persist to PostgreSQL and survive across service re-query")
+    void courierAuthenticationAuditPersistence_successAndFailure() {
+        // 1. Record successful courier login
+        auditService.record(
+            "courier-it-001",
+            "COURIER",
+            "USER_LOGIN_SUCCESS",
+            "USER",
+            "courier-it-001",
+            Map.of("email", "courier@swiftdrop.lk", "authMethod", "PASSWORD")
+        );
+
+        // 2. Record failed courier login attempt
+        auditService.record(
+            "ANONYMOUS",
+            "ANONYMOUS",
+            "USER_LOGIN_FAILED",
+            "USER",
+            "courier@swiftdrop.lk",
+            Map.of("email", "courier@swiftdrop.lk", "reason", "INVALID_CREDENTIALS", "password", "SecretPass123!")
+        );
+
+        // 3. Query PostgreSQL via AdminAuditService
+        AuditLogPageResponse successLogs = adminAuditService.getAuditLogs(
+            "USER_LOGIN_SUCCESS", "courier-it-001", "USER", null, null, 0, 10
+        );
+        assertThat(successLogs.totalElements()).isEqualTo(1);
+        AuditRecordResponse successRecord = successLogs.content().get(0);
+        assertThat(successRecord.actorRole()).isEqualTo("COURIER");
+        assertThat(successRecord.details()).containsEntry("email", "courier@swiftdrop.lk");
+
+        AuditLogPageResponse failedLogs = adminAuditService.getAuditLogs(
+            "USER_LOGIN_FAILED", "ANONYMOUS", "USER", null, null, 0, 10
+        );
+        assertThat(failedLogs.totalElements()).isEqualTo(1);
+        AuditRecordResponse failedRecord = failedLogs.content().get(0);
+        assertThat(failedRecord.details()).containsEntry("reason", "INVALID_CREDENTIALS");
+        // Ensure sensitive password was redacted
+        assertThat(failedRecord.details().get("password")).isEqualTo("[REDACTED]");
+    }
 }

@@ -34,6 +34,9 @@ class CourierExecutionServiceTest {
     @Mock
     private DeliveryProofRepository deliveryProofRepository;
 
+    @Mock
+    private DeliveryProofAuditService deliveryProofAuditService;
+
     @TempDir
     Path tempDir;
 
@@ -48,6 +51,7 @@ class CourierExecutionServiceTest {
         courierExecutionService = new CourierExecutionService(
             parcelServiceClient,
             deliveryProofRepository,
+            deliveryProofAuditService,
             tempDir.toString(),
             5 * 1024 * 1024 // 5 MB
         );
@@ -391,5 +395,48 @@ class CourierExecutionServiceTest {
 
         assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         verify(deliveryProofRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Proof upload: Successfully records DELIVERY_PROOF_UPLOADED audit event")
+    void proofUploadRecordsAuditOnSuccess() {
+        byte[] validJpegBytes = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0x00, 0x10};
+        MockMultipartFile file = new MockMultipartFile("file", "proof.jpg", "image/jpeg", validJpegBytes);
+
+        ParcelResponse parcel = createMockParcel(COURIER_A, "OUT_FOR_DELIVERY");
+        when(parcelServiceClient.getParcel(PARCEL_ID)).thenReturn(parcel);
+        when(deliveryProofRepository.save(any(DeliveryProofEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ProofUploadResponse response = courierExecutionService.uploadProof(COURIER_A, PARCEL_ID, file, "Sunil", "Notes");
+
+        assertThat(response).isNotNull();
+        verify(deliveryProofAuditService).record(
+            eq(COURIER_A),
+            eq("COURIER"),
+            eq("DELIVERY_PROOF_UPLOADED"),
+            eq("DELIVERY_PROOF"),
+            eq(response.proofId().toString()),
+            any()
+        );
+    }
+
+    @Test
+    @DisplayName("Proof upload: Records DELIVERY_PROOF_REJECTED audit event when validation fails")
+    void proofUploadRecordsAuditOnRejection() {
+        byte[] corruptedBytes = new byte[]{0x00, 0x01, 0x02, 0x03};
+        MockMultipartFile file = new MockMultipartFile("file", "bad.jpg", "image/jpeg", corruptedBytes);
+
+        assertThrows(ResponseStatusException.class, () ->
+            courierExecutionService.uploadProof(COURIER_A, PARCEL_ID, file, "Sunil", null)
+        );
+
+        verify(deliveryProofAuditService).record(
+            eq(COURIER_A),
+            eq("COURIER"),
+            eq("DELIVERY_PROOF_REJECTED"),
+            eq("PARCEL"),
+            eq(PARCEL_ID.toString()),
+            any()
+        );
     }
 }
