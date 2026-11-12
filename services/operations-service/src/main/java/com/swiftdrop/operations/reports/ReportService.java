@@ -115,10 +115,20 @@ public class ReportService {
                 || event.trackingNumber() == null || event.trackingNumber().isBlank()
                 || event.eventType() == null || !ACCEPTED_EVENT_TYPES.contains(event.eventType())
                 || event.occurredAt() == null || event.sequence() == null || event.sequence() < 1
-                || event.fromStatus() == null || event.fromStatus().isBlank()
-                || event.toStatus() == null || !STATUS_VALUES.contains(event.toStatus())) {
+                || !hasValidStatuses(event)) {
             throw new IllegalArgumentException("Reporting event is missing required envelope fields");
         }
+    }
+
+    private boolean hasValidStatuses(EventEnvelope event) {
+        if (PARCEL_CREATED.equals(event.eventType())) {
+            return "NONE".equals(event.fromStatus()) && "CREATED".equals(event.toStatus());
+        }
+        return STATUS_CHANGED.equals(event.eventType())
+                && event.fromStatus() != null
+                && STATUS_VALUES.contains(event.fromStatus())
+                && event.toStatus() != null
+                && STATUS_VALUES.contains(event.toStatus());
     }
 
     private void validateRange(LocalDate from, LocalDate to) {
