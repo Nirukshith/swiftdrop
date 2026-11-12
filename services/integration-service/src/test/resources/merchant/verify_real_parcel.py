@@ -19,12 +19,14 @@ for endpoint in [AUTH, INTEGRATION, PARCEL, os.environ.get('M6_VERIFY_PRICING_PR
         raise ValueError('Verification requires isolated services on loopback URLs')
 
 
-def call(base, path, method='GET', body=None, token=None, key=None):
+def call(base, path, method='GET', body=None, token=None, key=None, internal_token=None):
     headers = {'Content-Type': 'application/json'}
     if token:
         headers['Authorization'] = 'Bearer ' + token
     if key:
         headers['Idempotency-Key'] = key
+    if internal_token:
+        headers['X-Internal-Service-Token'] = internal_token
     request = urllib.request.Request(base + path, method=method, headers=headers,
         data=None if body is None else json.dumps(body).encode())
     try:
@@ -77,6 +79,38 @@ def main():
 
     first_id, first_token = merchant('first')
     second_id, second_token = merchant('second')
+    pending = expect(call(INTEGRATION, '/api/v1/merchants/register', 'POST', {
+        'businessName': 'M6 Pending Verification', 'contactName': 'Verification Contact',
+        'email': f'm6-{run_id}-pending@example.test', 'phoneNumber': '+94770000000',
+    }), 201, 'pending merchant registration')
+    pending_list = expect(call(INTEGRATION, '/api/v1/admin/merchants?status=PENDING', token=admin),
+        200, 'M5 pending approval list contract')
+    check(any(m['id'] == pending['id'] and m['status'] == 'PENDING' for m in pending_list['content']),
+        'pending merchant is visible to admin')
+    check(all('clientSecret' not in m for m in pending_list['content']), 'pending list never exposes a secret')
+    # Fixture-only M10 provisioning creates an inactive account/client to exercise negative token issuance.
+    internal_token = os.environ['M6_VERIFY_INTERNAL_TOKEN']
+    expect(call(AUTH, '/internal/v1/users', 'POST', {
+        'email': pending['email'], 'fullName': pending['contactName'], 'phoneNumber': pending['phoneNumber'],
+        'role': 'MERCHANT', 'merchantId': pending['id'], 'enabled': False,
+    }, internal_token=internal_token), 201, 'M10 inactive user fixture')
+    inactive_client = expect(call(AUTH, '/internal/v1/clients', 'POST', {
+        'merchantId': pending['id'], 'clientName': 'M6 inactive test fixture', 'scopes': ['parcels:create'],
+    }, internal_token=internal_token), 201, 'M10 inactive client fixture')
+    inactive_grant = {'grant_type': 'client_credentials', 'client_id': inactive_client['clientId'],
+        'client_secret': inactive_client['clientSecret']}
+    expect(call(AUTH, '/api/v1/auth/token', 'POST', inactive_grant), 403, 'pending inactive account cannot obtain a token')
+    rejected = expect(call(INTEGRATION, f'/api/v1/admin/merchants/{pending["id"]}/reject', 'POST',
+        {'reason': '  Business details not verified  '}, admin), 200, 'M5 rejection action contract')
+    check(rejected['status'] == 'REJECTED' and rejected['rejectionReason'] == 'Business details not verified',
+        'rejection persists the trimmed reason')
+    expect(call(INTEGRATION, f'/api/v1/admin/merchants/{pending["id"]}/approve', 'POST', {}, admin),
+        409, 'rejected merchant cannot be approved')
+    expect(call(AUTH, '/api/v1/auth/token', 'POST', inactive_grant), 403, 'rejected inactive account remains unable to obtain a token')
+    approved_list = expect(call(INTEGRATION, '/api/v1/admin/merchants?status=APPROVED', token=admin),
+        200, 'M5 approved merchant list contract')
+    check({m['id'] for m in approved_list['content']} == {first_id, second_id}, 'only approved merchants appear in approved list')
+    check(all('clientSecret' not in m for m in approved_list['content']), 'approved list never redisplays credentials')
     provider = os.environ.get('M6_VERIFY_PRICING_PROVIDER_URL')
     if provider:
         quote_path = '/internal/v1/pricing/quote?pickupDistrict=Colombo&dropoffDistrict=Gampaha&weightKg=1.5&size=SMALL'
@@ -106,6 +140,29 @@ def main():
     parcels = expect(call(PARCEL, '/internal/v1/parcels?page=0&size=100'), 200, 'read parcel-service verification fixture')
     relevant = [p for p in parcels['content'] if p['merchantId'] in [first_id, second_id]]
     check(len(relevant) == 3, 'replays and conflicts caused no duplicate parcel side effects')
+    first_orders = expect(call(INTEGRATION, path, token=first_token), 200, 'first merchant order listing')
+    second_orders = expect(call(INTEGRATION, path, token=second_token), 200, 'second merchant order listing')
+    check({o['orderId'] for o in first_orders['content']} == {first['orderId'], third['orderId']},
+        'first merchant listing excludes the second tenant')
+    check({o['orderId'] for o in second_orders['content']} == {other['orderId']},
+        'second merchant listing excludes the first tenant')
+    invalid = dict(payload, externalReference='invalid-input-' + run_id, weightKg=0)
+    expect(call(INTEGRATION, path, 'POST', invalid, first_token, 'invalid-input'), 400, 'merchant input validation')
+    expect(call(INTEGRATION, path, 'POST', payload, first_token), 400, 'idempotency key is required')
+    # This value satisfies M6's merged positive-weight contract but fails M1's 0.10 kg domain minimum.
+    upstream_invalid = dict(payload, externalReference='parcel-failure-' + run_id, weightKg=0.01)
+    expect(call(INTEGRATION, path, 'POST', upstream_invalid, first_token, 'parcel-failure-key'),
+        422, 'real M1 validation failure uses the merchant contract without an order')
+    after_failure = expect(call(PARCEL, '/internal/v1/parcels?page=0&size=100'), 200, 'inspect failed parcel creation')
+    check(len([p for p in after_failure['content'] if p['merchantId'] in [first_id, second_id]]) == 3,
+        'failed creation produced no parcel side effect')
+    after_failure_orders = expect(call(INTEGRATION, path, token=first_token), 200, 'inspect failed merchant order mapping')
+    check(after_failure_orders['totalElements'] == 2, 'failed creation produced no merchant mapping')
+    corrected = dict(upstream_invalid, weightKg=1.5)
+    recovered = expect(call(INTEGRATION, path, 'POST', corrected, first_token, 'parcel-failure-key'),
+        201, 'retry after M1 validation failure can reuse the rolled-back key')
+    check(expect(call(INTEGRATION, path, 'POST', corrected, first_token, 'parcel-failure-key'),
+        201, 'recovered creation replays') == recovered, 'recovered creation returns the original result')
 
     cancel_path = f'{path}/{first["orderId"]}/cancel'
     cancel_body = {'reason': 'M6 verification duplicate order'}

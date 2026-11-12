@@ -1,4 +1,4 @@
-"""Run the M6-02 verification in disposable PostgreSQL/Kafka and real service JVMs.
+"""Run the M6 onboarding/order verification in disposable PostgreSQL/Kafka and real service JVMs.
 
 Build all service JARs with Java 21 Maven verify first. Requires Docker, Python 3,
 Java 21. Uses loopback ports 19181-19185, 19192, 19194, and 19125. Creates only its own containers and cleans them up.
@@ -26,8 +26,8 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[6]
 JAVA = str(Path(os.environ['JAVA_HOME']) / 'bin/java') if os.environ.get('JAVA_HOME') else shutil.which('java')
 DOCKER = shutil.which('docker')
-RUN = 'swiftdrop-m6-111-' + secrets.token_hex(4) + '-'
-LOG_DIR = Path(tempfile.mkdtemp(prefix='swiftdrop-m6-111-'))
+RUN = 'swiftdrop-m6-week4-' + secrets.token_hex(4) + '-'
+LOG_DIR = Path(tempfile.mkdtemp(prefix='swiftdrop-m6-week4-'))
 processes = []
 containers = []
 logs = []
@@ -168,7 +168,8 @@ try:
             raise RuntimeError('Admin fixture provisioning failed')
     os.environ.update(M6_VERIFY_AUTH_URL='http://127.0.0.1:19181', M6_VERIFY_INTEGRATION_URL='http://127.0.0.1:19184',
         M6_VERIFY_PARCEL_URL='http://127.0.0.1:19182', M6_VERIFY_PRICING_PROVIDER_URL='http://127.0.0.1:19185',
-        M6_VERIFY_ADMIN_EMAIL='m6-admin@example.test', M6_VERIFY_ADMIN_PASSWORD=admin_password)
+        M6_VERIFY_ADMIN_EMAIL='m6-admin@example.test', M6_VERIFY_ADMIN_PASSWORD=admin_password,
+        M6_VERIFY_INTERNAL_TOKEN=internal_token)
     path = ROOT / 'services/integration-service/src/test/resources/merchant/verify_real_parcel.py'
     spec = importlib.util.spec_from_file_location('m6_verifier', path)
     verifier = importlib.util.module_from_spec(spec)

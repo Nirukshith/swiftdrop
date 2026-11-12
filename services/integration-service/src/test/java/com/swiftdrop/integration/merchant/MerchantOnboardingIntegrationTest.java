@@ -1,6 +1,9 @@
 package com.swiftdrop.integration.merchant;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
@@ -17,6 +20,8 @@ import com.swiftdrop.integration.merchant.AuthProvisioningClient.AuthCreateClien
 import com.swiftdrop.integration.merchant.AuthProvisioningClient.AuthCreateUserRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -61,6 +66,7 @@ class MerchantOnboardingIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Registration submitted for administrator review."));
 
         org.assertj.core.api.Assertions.assertThat(merchantRepository.count()).isEqualTo(1);
+        org.mockito.Mockito.verifyNoInteractions(authProvisioningClient);
     }
 
     @Test
@@ -181,6 +187,126 @@ class MerchantOnboardingIntegrationTest {
         mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/reject", merchant.getId())
                         .contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().isConflict());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing", "blank-id", "wrong-role", "wrong-merchant", "wrong-email", "active"})
+    @WithMockUser(roles = "ADMIN")
+    void invalidCreatedUserCannotBeLinkedOrActivated(String variant) throws Exception {
+        Merchant merchant = register("invalid-user@example.test");
+        AuthUserResponse response = "missing".equals(variant) ? null : new AuthUserResponse(
+                "blank-id".equals(variant) ? " " : "usr-validation",
+                "wrong-email".equals(variant) ? "other@example.test" : merchant.getEmail(),
+                merchant.getContactName(), merchant.getPhoneNumber(),
+                "wrong-role".equals(variant) ? "ADMIN" : "MERCHANT",
+                "wrong-merchant".equals(variant) ? java.util.UUID.randomUUID().toString() : merchant.getId().toString(),
+                "active".equals(variant));
+        when(authProvisioningClient.createMerchantUser(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/approve", merchant.getId()))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.clientSecret").doesNotExist());
+        Merchant saved = merchantRepository.findById(merchant.getId()).orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(saved.getStatus()).isEqualTo(MerchantStatus.PENDING);
+        org.assertj.core.api.Assertions.assertThat(saved.getAuthUserId()).isNull();
+        org.assertj.core.api.Assertions.assertThat(saved.getClientId()).isNull();
+        verify(authProvisioningClient, never()).activateUser(any());
+        verify(authProvisioningClient, never()).createClient(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing", "disabled", "wrong-id", "wrong-role", "wrong-merchant", "wrong-email"})
+    @WithMockUser(roles = "ADMIN")
+    void invalidActivationCannotIssueCredentialsOrApprove(String variant) throws Exception {
+        Merchant merchant = register("invalid-activation@example.test");
+        stubCreatedUser(merchant);
+        AuthUserResponse response = "missing".equals(variant) ? null : new AuthUserResponse(
+                "wrong-id".equals(variant) ? "usr-other" : "usr-validation",
+                "wrong-email".equals(variant) ? "other@example.test" : merchant.getEmail(),
+                merchant.getContactName(), merchant.getPhoneNumber(),
+                "wrong-role".equals(variant) ? "CUSTOMER" : "MERCHANT",
+                "wrong-merchant".equals(variant) ? java.util.UUID.randomUUID().toString() : merchant.getId().toString(),
+                !"disabled".equals(variant));
+        when(authProvisioningClient.activateUser("usr-validation")).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/approve", merchant.getId()))
+                .andExpect(status().isBadGateway());
+        Merchant saved = merchantRepository.findById(merchant.getId()).orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(saved.getStatus()).isEqualTo(MerchantStatus.PENDING);
+        org.assertj.core.api.Assertions.assertThat(saved.getAuthUserId()).isEqualTo("usr-validation");
+        org.assertj.core.api.Assertions.assertThat(saved.getClientId()).isNull();
+        verify(authProvisioningClient, never()).createClient(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing", "null-id", "blank-id", "null-secret", "blank-secret", "wrong-merchant"})
+    @WithMockUser(roles = "ADMIN")
+    void invalidCredentialsRemainPendingAndAreNeverHandedToAdmin(String variant) throws Exception {
+        Merchant merchant = register("invalid-client@example.test");
+        stubCreatedUser(merchant);
+        when(authProvisioningClient.activateUser("usr-validation"))
+                .thenReturn(authUser(merchant, true));
+        AuthClientCredentialsResponse response = "missing".equals(variant) ? null : new AuthClientCredentialsResponse(
+                "null-id".equals(variant) ? null : "blank-id".equals(variant) ? " " : "client-validation",
+                "null-secret".equals(variant) ? null : "blank-secret".equals(variant) ? " " : "test-only-secret",
+                "wrong-merchant".equals(variant) ? java.util.UUID.randomUUID().toString() : merchant.getId().toString(),
+                merchant.getBusinessName(), java.util.List.of("parcels:create"));
+        when(authProvisioningClient.createClient(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/approve", merchant.getId()))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.clientId").doesNotExist())
+                .andExpect(jsonPath("$.clientSecret").doesNotExist())
+                .andExpect(content().string(not(containsString("test-only-secret"))));
+        Merchant saved = merchantRepository.findById(merchant.getId()).orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(saved.getStatus()).isEqualTo(MerchantStatus.PENDING);
+        org.assertj.core.api.Assertions.assertThat(saved.getClientId()).isNull();
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void failedActivationCanRetryUsingTheSameProvisionedUser() throws Exception {
+        Merchant merchant = register("activation-retry@example.test");
+        stubCreatedUser(merchant);
+        when(authProvisioningClient.activateUser("usr-validation"))
+                .thenThrow(new org.springframework.web.client.ResourceAccessException("Auth unavailable"))
+                .thenReturn(authUser(merchant, true));
+        when(authProvisioningClient.createClient(any())).thenReturn(new AuthClientCredentialsResponse(
+                "client-validation", "test-only-secret", merchant.getId().toString(), merchant.getBusinessName(),
+                java.util.List.of("parcels:create")));
+        mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/approve", merchant.getId()))
+                .andExpect(status().isBadGateway());
+        verify(authProvisioningClient, never()).createClient(any());
+        mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/approve", merchant.getId()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.merchant.status").value("APPROVED"));
+        verify(authProvisioningClient, times(1)).createMerchantUser(any());
+        verify(authProvisioningClient, times(2)).activateUser("usr-validation");
+        var order = org.mockito.Mockito.inOrder(authProvisioningClient);
+        order.verify(authProvisioningClient).createMerchantUser(new AuthCreateUserRequest(merchant.getEmail(), null,
+                merchant.getContactName(), merchant.getPhoneNumber(), "MERCHANT", merchant.getId().toString(), false));
+        order.verify(authProvisioningClient, times(2)).activateUser("usr-validation");
+        order.verify(authProvisioningClient).createClient(any());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void rejectionDoesNotCreateActivateOrIssueCredentials() throws Exception {
+        Merchant merchant = register("reject-no-auth@example.test");
+        mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/reject", merchant.getId())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Business not verified\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("REJECTED"));
+        mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/approve", merchant.getId()))
+                .andExpect(status().isConflict());
+        org.mockito.Mockito.verifyNoInteractions(authProvisioningClient);
+    }
+
+    private void stubCreatedUser(Merchant merchant) {
+        when(authProvisioningClient.createMerchantUser(any())).thenReturn(authUser(merchant, false));
+    }
+
+    private AuthUserResponse authUser(Merchant merchant, boolean enabled) {
+        return new AuthUserResponse("usr-validation", merchant.getEmail(), merchant.getContactName(),
+                merchant.getPhoneNumber(), "MERCHANT", merchant.getId().toString(), enabled);
     }
 
     private Merchant register(String email) throws Exception {
