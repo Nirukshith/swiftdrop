@@ -237,6 +237,33 @@ public class CourierExecutionService {
         ParcelResponse updated = parcelServiceClient.updateStatus(parcelId, clientRequest);
         String newStatus = updated != null && updated.status() != null ? updated.status() : targetStatus;
 
+        if (deliveryProofAuditService != null) {
+            try {
+                Map<String, Object> auditDetails = new HashMap<>();
+                auditDetails.put("previousStatus", currentStatus);
+                auditDetails.put("currentStatus", newStatus);
+                if (request.reason() != null && !request.reason().isBlank()) {
+                    auditDetails.put("reason", request.reason());
+                }
+                if (request.recipientName() != null && !request.recipientName().isBlank()) {
+                    auditDetails.put("recipientName", request.recipientName());
+                }
+                if (request.idempotencyKey() != null && !request.idempotencyKey().isBlank()) {
+                    auditDetails.put("idempotencyKey", request.idempotencyKey());
+                }
+                deliveryProofAuditService.record(
+                    courierId,
+                    "COURIER",
+                    "DELIVERY_STATUS_UPDATED",
+                    "PARCEL",
+                    parcelId.toString(),
+                    auditDetails
+                );
+            } catch (Exception ex) {
+                log.warn("Failed to record delivery status update audit for parcel {}: {}", parcelId, ex.getMessage());
+            }
+        }
+
         return new CourierStatusUpdateResponse(
             parcel.id(),
             parcel.trackingNumber(),
@@ -412,9 +439,11 @@ public class CourierExecutionService {
 
     private void validateCourierOwnership(ParcelResponse parcel, String courierId) {
         if (parcel.courierId() == null || parcel.courierId().isBlank()) {
+            auditRejection(courierId, parcel.id(), "UNASSIGNED_PARCEL_ACCESS_ATTEMPT");
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: parcel " + parcel.id() + " is not assigned to any courier");
         }
         if (!parcel.courierId().equals(courierId)) {
+            auditRejection(courierId, parcel.id(), "UNAUTHORIZED_COURIER_ACCESS_ATTEMPT");
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: courier is not assigned to parcel " + parcel.id());
         }
     }
