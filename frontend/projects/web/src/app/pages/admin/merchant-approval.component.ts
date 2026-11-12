@@ -101,7 +101,7 @@ type Action = 'approve' | 'reject';
                       <div class="flex justify-end gap-2">
                         <button type="button" class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-indigo-300 hover:text-indigo-600" (click)="selected.set(merchant)">Details</button>
                         <button type="button" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50" [disabled]="isSubmitting() || handoff() !== null" (click)="openApprove(merchant)">Approve</button>
-                        <button type="button" class="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50" [disabled]="isSubmitting()" (click)="openReject(merchant)">Reject</button>
+                        <button type="button" class="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50" [disabled]="isSubmitting() || handoff() !== null" (click)="openReject(merchant)">Reject</button>
                       </div>
                     </td>
                   </tr>
@@ -143,8 +143,8 @@ type Action = 'approve' | 'reject';
           </dl>
           @if (merchant.status === 'PENDING') {
             <div class="mt-6 flex justify-end gap-2">
-              <button type="button" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white" (click)="openApprove(merchant)">Approve</button>
-              <button type="button" class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white" (click)="openReject(merchant)">Reject</button>
+              <button type="button" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" [disabled]="isSubmitting() || handoff() !== null" (click)="openApprove(merchant)">Approve</button>
+              <button type="button" class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" [disabled]="isSubmitting() || handoff() !== null" (click)="openReject(merchant)">Reject</button>
             </div>
           }
         </section>
@@ -216,7 +216,7 @@ export class MerchantApprovalComponent implements OnInit, OnDestroy {
   }
 
   openReject(merchant: MerchantSummary): void {
-    if (merchant.status !== 'PENDING') return;
+    if (merchant.status !== 'PENDING' || this.isSubmitting() || this.handoff()) return;
     this.selected.set(merchant);
     this.action.set('reject');
     this.reason.set('');
@@ -258,7 +258,7 @@ export class MerchantApprovalComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.merchantService.reject(merchant.id, { reason: trimmedReason }).subscribe({
+    this.merchantService.reject(merchant.id, { reason: trimmedReason }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (result) => this.completeAction(result),
       error: (error: unknown) => this.failAction(error),
     });

@@ -141,6 +141,44 @@ class AdminUserServiceTest {
     }
 
     @Test
+    @DisplayName("createStaffUser rejects ADMIN role to prevent unauthorized privilege provisioning")
+    void createStaffUser_rejectsAdminRole() {
+        CreateStaffUserRequest request = new CreateStaffUserRequest(
+            "admin2@swiftdrop.lk",
+            "SecurePass#2026",
+            "Admin User",
+            "+94771234567",
+            "ADMIN"
+        );
+
+        assertThatThrownBy(() -> adminUserService.createStaffUser(request))
+            .isInstanceOf(InvalidStaffRoleException.class)
+            .hasMessageContaining("COURIER or DISPATCHER");
+
+        verifyNoInteractions(adminUserRepository);
+        verifyNoInteractions(authEventPublisher);
+    }
+
+    @Test
+    @DisplayName("createStaffUser rejects MERCHANT role")
+    void createStaffUser_rejectsMerchantRole() {
+        CreateStaffUserRequest request = new CreateStaffUserRequest(
+            "merchant@swiftdrop.lk",
+            "SecurePass#2026",
+            "Merchant User",
+            "+94771234567",
+            "MERCHANT"
+        );
+
+        assertThatThrownBy(() -> adminUserService.createStaffUser(request))
+            .isInstanceOf(InvalidStaffRoleException.class)
+            .hasMessageContaining("COURIER or DISPATCHER");
+
+        verifyNoInteractions(adminUserRepository);
+        verifyNoInteractions(authEventPublisher);
+    }
+
+    @Test
     @DisplayName("createStaffUser rejects duplicate email address")
     void createStaffUser_rejectsDuplicateEmail() {
         CreateStaffUserRequest request = new CreateStaffUserRequest(

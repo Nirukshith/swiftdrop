@@ -115,6 +115,38 @@ class ReportServiceTest {
                 );
     }
 
+    @Test
+    void rejectsEventsOutsideTheReportEnvelopeContract() {
+        EventEnvelope invalid = new EventEnvelope(
+                "event-invalid",
+                "PARCEL_ASSIGNED",
+                Instant.parse("2026-11-01T10:00:00Z"),
+                1L,
+                "parcel-1",
+                "SD-20261101-1",
+                "CREATED",
+                "CREATED",
+                null,
+                null,
+                null,
+                "customer-1",
+                null
+        );
+
+        assertThatThrownBy(() -> service.processEvent(invalid))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(processedEventRepository, sequenceRepository, dailyReportRepository);
+    }
+
+    @Test
+    void rejectsNonPositiveSequencesBeforePersistingAnyProjectionState() {
+        EventEnvelope invalid = event("event-invalid", 0, "DELIVERED", Instant.parse("2026-11-01T10:00:00Z"));
+
+        assertThatThrownBy(() -> service.processEvent(invalid))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(processedEventRepository, sequenceRepository, dailyReportRepository);
+    }
+
     private EventEnvelope event(String id, long sequence, String status, Instant occurredAt) {
         return new EventEnvelope(
                 id,

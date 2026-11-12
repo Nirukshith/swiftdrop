@@ -144,6 +144,37 @@ describe('MerchantApprovalComponent', () => {
     expect(service.approve).not.toHaveBeenCalled();
   });
 
+  it('prevents conflicting rejection actions during submission or credential handoff', () => {
+    component.isSubmitting.set(true);
+    component.openReject(merchant);
+    expect(component.action()).toBeNull();
+
+    component.isSubmitting.set(false);
+    component.handoff.set({
+      merchantId: merchant.id,
+      status: 'APPROVED',
+      clientId: 'client-1',
+      clientSecret: 'one-time-test-secret',
+      secretAvailableOnce: true,
+    });
+    component.openReject(merchant);
+    expect(component.action()).toBeNull();
+  });
+
+  it('cancels a pending rejection when leaving the page', () => {
+    const response = new Subject<MerchantSummary>();
+    service.reject.mockReturnValueOnce(response);
+    component.openReject(merchant);
+    component.reason.set('Not verified');
+    component.confirmAction();
+    fixture.destroy();
+
+    response.next({ ...merchant, status: 'REJECTED', rejectionReason: 'Not verified' });
+    response.complete();
+
+    expect(component.feedback()).toBeNull();
+  });
+
   it('shows action errors and releases the submit lock', () => {
     service.approve.mockReturnValueOnce(throwError(() => ({ status: 409 })));
     component.openApprove(merchant);
