@@ -11,7 +11,20 @@ class FaultProxy(BaseHTTPRequestHandler):
         if self.path == '/__verification/faults':
             self.respond(200, json.dumps({'injected': len(self.server.dropped), 'operationIds': list(self.server.auth_operations)}).encode(), 'application/json')
             return
-        data = self.rfile.read(int(self.headers.get('Content-Length', '0')))
+        if self.headers.get('Transfer-Encoding', '').lower() == 'chunked':
+            chunks = []
+            while True:
+                length = int(self.rfile.readline().split(b';', 1)[0].strip(), 16)
+                if not length:
+                    while self.rfile.readline().strip():
+                        pass
+                    break
+                chunks.append(self.rfile.read(length))
+                if self.rfile.read(2) != b'\r\n':
+                    raise ValueError('Invalid chunk framing in verification request')
+            data = b''.join(chunks)
+        else:
+            data = self.rfile.read(int(self.headers.get('Content-Length', '0')))
         headers = {key: value for key, value in self.headers.items()
                    if key.lower() not in {'host', 'connection', 'content-length', 'transfer-encoding'}}
         request = urllib.request.Request(self.server.upstream + self.path, method=self.command,
