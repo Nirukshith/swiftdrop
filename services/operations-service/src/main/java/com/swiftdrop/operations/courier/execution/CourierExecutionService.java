@@ -273,11 +273,14 @@ public class CourierExecutionService {
         long timestamp = Instant.now().getEpochSecond();
         String filename = parcelId + "-" + timestamp + "." + extension;
 
-        Path targetDir = Paths.get(storageDir);
+        Path targetDir = Paths.get(storageDir).toAbsolutePath().normalize();
         Path targetFile;
         try {
             Files.createDirectories(targetDir);
-            targetFile = targetDir.resolve(filename);
+            targetFile = targetDir.resolve(filename).normalize();
+            if (!targetFile.startsWith(targetDir)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid file path traversal");
+            }
             Files.write(targetFile, bytes);
         } catch (IOException e) {
             log.error("Failed to write proof photo to persistent storageDir: {}", storageDir, e);
@@ -352,7 +355,10 @@ public class CourierExecutionService {
     }
 
     private void validateCourierOwnership(ParcelResponse parcel, String courierId) {
-        if (parcel.courierId() == null || !parcel.courierId().equals(courierId)) {
+        if (parcel.courierId() == null || parcel.courierId().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: parcel " + parcel.id() + " is not assigned to any courier");
+        }
+        if (!parcel.courierId().equals(courierId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: courier is not assigned to parcel " + parcel.id());
         }
     }
