@@ -8,6 +8,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -18,8 +19,12 @@ public class ReportService {
 
     static final ZoneId REPORT_ZONE = ZoneId.of("Asia/Colombo");
     private static final String STATUS_CHANGED = "PARCEL_STATUS_CHANGED";
+    private static final String PARCEL_CREATED = "PARCEL_CREATED";
     private static final String DELIVERED = "DELIVERED";
     private static final String FAILED = "FAILED";
+    private static final Set<String> ACCEPTED_EVENT_TYPES = Set.of(PARCEL_CREATED, STATUS_CHANGED);
+    private static final Set<String> STATUS_VALUES = Set.of(
+            "CREATED", "PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "FAILED", "CANCELLED");
 
     private final DailyReportRepository dailyReportRepository;
     private final ReportProcessedEventRepository processedEventRepository;
@@ -66,11 +71,7 @@ public class ReportService {
 
     @Transactional
     public void processEvent(EventEnvelope event) {
-        if (event == null || event.eventId() == null || event.eventId().isBlank()
-                || event.parcelId() == null || event.parcelId().isBlank()
-                || event.sequence() == null || event.occurredAt() == null) {
-            throw new IllegalArgumentException("Reporting event is missing required envelope fields");
-        }
+        validateEvent(event);
 
         if (processedEventRepository.existsById(event.eventId())) {
             return;
@@ -106,6 +107,18 @@ public class ReportService {
 
         processedEventRepository.save(new ReportProcessedEvent(
                 event.eventId(), event.eventType(), event.parcelId()));
+    }
+
+    private void validateEvent(EventEnvelope event) {
+        if (event == null || event.eventId() == null || event.eventId().isBlank()
+                || event.parcelId() == null || event.parcelId().isBlank()
+                || event.trackingNumber() == null || event.trackingNumber().isBlank()
+                || event.eventType() == null || !ACCEPTED_EVENT_TYPES.contains(event.eventType())
+                || event.occurredAt() == null || event.sequence() == null || event.sequence() < 1
+                || event.fromStatus() == null || event.fromStatus().isBlank()
+                || event.toStatus() == null || !STATUS_VALUES.contains(event.toStatus())) {
+            throw new IllegalArgumentException("Reporting event is missing required envelope fields");
+        }
     }
 
     private void validateRange(LocalDate from, LocalDate to) {
