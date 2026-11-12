@@ -26,7 +26,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+    "swiftdrop.proofs.storage-dir=${java.io.tmpdir}/swiftdrop/proofs-it"
+})
 @Testcontainers
 class CourierExecutionIntegrationTest {
 
