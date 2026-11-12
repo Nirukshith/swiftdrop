@@ -29,6 +29,22 @@ describe('MerchantApprovalService', () => {
 
   afterEach(() => httpMock.verify());
 
+  it('sends explicit recovery confirmation and stable replacement identity without caching secrets', () => {
+    service.recover('m-1','replacement-key').subscribe();
+    const request=httpMock.expectOne('/api/v1/admin/merchants/m-1/recover-credentials');
+    expect(request.request.headers.get('Idempotency-Key')).toBe('replacement-key');
+    expect(request.request.body).toEqual({confirmReplacement:true});
+    request.flush({merchant:{...merchant,status:'APPROVED'},clientId:'same-client',clientSecret:'one-time'});
+    expect(service.merchants()).toEqual([]);
+  });
+
+  it('retains approved status across refresh for lost-handoff recovery', () => {
+    service.loadMerchants(0,20,'APPROVED').subscribe();
+    httpMock.expectOne('/api/v1/admin/merchants?status=APPROVED&page=0&size=20').flush(page);
+    service.refresh().subscribe();
+    httpMock.expectOne('/api/v1/admin/merchants?status=APPROVED&page=0&size=20').flush(page);
+  });
+
   it('loads pending merchants using contract pagination', () => {
     service.loadMerchants(1, 10).subscribe();
     const request = httpMock.expectOne('/api/v1/admin/merchants?status=PENDING&page=1&size=10');

@@ -8,7 +8,7 @@ import { MerchantSummary } from './merchant-approval.model';
 import { MerchantCredentialsComponent } from '../merchant/merchant-credentials.component';
 import { MerchantApiCredentials } from '../merchant/merchant.model';
 
-type Action = 'approve' | 'reject';
+type Action = 'approve' | 'reject' | 'recover';
 
 @Component({
   selector: 'app-merchant-approval',
@@ -31,8 +31,11 @@ type Action = 'approve' | 'reject';
 
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p class="text-sm font-semibold text-slate-700">Pending merchants</p>
-          <p class="text-xs text-slate-500">{{ merchantService.totalElements() }} awaiting review</p>
+          <label for="merchant-list-status" class="text-sm font-semibold text-slate-700">Merchant status</label>
+          <select id="merchant-list-status" [ngModel]="listStatus()" (ngModelChange)="changeStatus($event)" class="ml-2 rounded border p-2">
+            <option value="PENDING">Pending</option><option value="APPROVED">Approved</option>
+          </select>
+          <p class="text-xs text-slate-500">{{ merchantService.totalElements() }} merchants</p>
         </div>
         <div class="flex gap-2">
           <a routerLink="/admin" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:text-indigo-600">Admin overview</a>
@@ -100,8 +103,13 @@ type Action = 'approve' | 'reject';
                     <td class="px-5 py-4">
                       <div class="flex justify-end gap-2">
                         <button type="button" class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-indigo-300 hover:text-indigo-600" (click)="selected.set(merchant)">Details</button>
+                        @if (merchant.status === 'PENDING') {
                         <button type="button" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50" [disabled]="isSubmitting() || handoff() !== null" (click)="openApprove(merchant)">Approve</button>
                         <button type="button" class="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50" [disabled]="isSubmitting() || handoff() !== null" (click)="openReject(merchant)">Reject</button>
+                        }
+                        @if (merchant.credentialRecoveryAvailable) {
+                          <button type="button" class="rounded border px-3 py-1.5 text-xs font-semibold" [disabled]="isSubmitting() || handoff() !== null" (click)="openRecover(merchant)">Recover credentials</button>
+                        }
                       </div>
                     </td>
                   </tr>
@@ -155,8 +163,13 @@ type Action = 'approve' | 'reject';
       @if (selected(); as merchant) {
         <div class="fixed inset-0 z-20 flex items-center justify-center bg-slate-900/50 p-4" role="presentation">
           <section class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" role="dialog" aria-modal="true" [attr.aria-labelledby]="currentAction + '-merchant-title'">
-            <h2 [id]="currentAction + '-merchant-title'" class="text-xl font-bold text-slate-900">{{ currentAction === 'approve' ? 'Approve merchant?' : 'Reject merchant?' }}</h2>
+            <h2 [id]="currentAction + '-merchant-title'" class="text-xl font-bold text-slate-900">{{ currentAction === 'recover' ? 'Replace lost credentials?' : (currentAction === 'approve' ? 'Approve merchant?' : 'Reject merchant?') }}</h2>
             <p class="mt-2 text-sm text-slate-600">Confirm this action for <strong>{{ merchant.businessName }}</strong>.</p>
+            @if (currentAction === 'recover') {
+              <p class="mt-4 text-sm text-amber-900">This replaces the secret on the existing client. The old secret will stop obtaining new tokens. Already issued tokens keep their normal expiry.</p>
+              <label class="mt-4 block"><input type="checkbox" [ngModel]="confirmReplacement()" (ngModelChange)="confirmReplacement.set($event)" /> I confirm replacement of the lost secret.</label>
+              <p class="mt-2 text-xs">Retry keeps the same recovery reference. If its one-time response was already lost, close this dialog and explicitly confirm a new recovery.</p>
+            }
             @if (currentAction === 'reject') {
               <label for="rejection-reason" class="mt-5 block text-sm font-semibold text-slate-700">Rejection reason</label>
               <textarea id="rejection-reason" class="mt-2 min-h-28 w-full rounded-lg border border-slate-300 p-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200" maxlength="1000" [ngModel]="reason()" (ngModelChange)="reason.set($event)" aria-describedby="rejection-help"></textarea>
@@ -165,7 +178,7 @@ type Action = 'approve' | 'reject';
             @if (reasonError()) { <p class="mt-1 text-xs text-rose-600" role="alert">{{ reasonError() }}</p> }
             <div class="mt-6 flex justify-end gap-2">
               <button type="button" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700" [disabled]="isSubmitting()" (click)="closeAction()">Cancel</button>
-              <button type="button" class="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" [class.bg-emerald-600]="currentAction === 'approve'" [class.bg-rose-600]="currentAction === 'reject'" [disabled]="isSubmitting()" (click)="confirmAction()">{{ isSubmitting() ? 'Submitting…' : (currentAction === 'approve' ? 'Confirm approval' : 'Confirm rejection') }}</button>
+              <button type="button" class="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" [class.bg-emerald-600]="currentAction === 'approve'" [class.bg-rose-600]="currentAction === 'reject'" [disabled]="isSubmitting()" (click)="confirmAction()">{{ isSubmitting() ? 'Submitting…' : (currentAction === 'recover' ? 'Confirm replacement' : (currentAction === 'approve' ? 'Confirm approval' : 'Confirm rejection')) }}</button>
             </div>
           </section>
         </div>
@@ -176,6 +189,9 @@ type Action = 'approve' | 'reject';
 export class MerchantApprovalComponent implements OnInit, OnDestroy {
   private readonly destroyRef = inject(DestroyRef);
   readonly merchantService = inject(MerchantApprovalService);
+  readonly listStatus = signal<'PENDING' | 'APPROVED'>('PENDING');
+  readonly confirmReplacement = signal(false);
+  private replacementKey = '';
   readonly selected = signal<MerchantSummary | null>(null);
   readonly action = signal<Action | null>(null);
   readonly reason = signal('');
@@ -223,6 +239,17 @@ export class MerchantApprovalComponent implements OnInit, OnDestroy {
     this.reasonError.set(null);
   }
 
+  changeStatus(status: 'PENDING' | 'APPROVED'): void {
+    this.listStatus.set(status);
+    this.merchantService.loadMerchants(0, this.merchantService.pageSize(), status).subscribe({ error: () => undefined });
+  }
+
+  openRecover(merchant: MerchantSummary): void {
+    if (!merchant.credentialRecoveryAvailable || !['PENDING', 'APPROVED'].includes(merchant.status) || this.isSubmitting() || this.handoff()) return;
+    this.selected.set(merchant); this.action.set('recover'); this.reasonError.set(null);
+    this.confirmReplacement.set(false); this.replacementKey = crypto.randomUUID();
+  }
+
   closeAction(): void {
     if (!this.isSubmitting()) this.action.set(null);
   }
@@ -230,7 +257,8 @@ export class MerchantApprovalComponent implements OnInit, OnDestroy {
   confirmAction(): void {
     const merchant = this.selected();
     const currentAction = this.action();
-    if (!merchant || merchant.status !== 'PENDING' || !currentAction || this.isSubmitting()) return;
+    if (!merchant || !currentAction || this.isSubmitting() || (currentAction !== 'recover' && merchant.status !== 'PENDING')) return;
+    if (currentAction === 'recover' && !this.confirmReplacement()) { this.reasonError.set('Confirm replacement of the lost secret.'); return; }
 
     const trimmedReason = this.reason().trim();
     if (currentAction === 'reject' && (trimmedReason.length < 1 || trimmedReason.length > 1000)) {
@@ -240,8 +268,9 @@ export class MerchantApprovalComponent implements OnInit, OnDestroy {
 
     this.isSubmitting.set(true);
     this.reasonError.set(null);
-    if (currentAction === 'approve') {
-      this.merchantService.approve(merchant.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    if (currentAction === 'approve' || currentAction === 'recover') {
+      const request = currentAction === 'recover' ? this.merchantService.recover(merchant.id, this.replacementKey) : this.merchantService.approve(merchant.id);
+      request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
         next: (result) => {
           this.handoffBusinessName.set(result.merchant.businessName);
           this.handoff.set({
@@ -275,5 +304,6 @@ export class MerchantApprovalComponent implements OnInit, OnDestroy {
   private failAction(error: unknown): void {
     this.reasonError.set(this.merchantService.messageFor(error, 'The merchant action could not be completed.'));
     this.isSubmitting.set(false);
+    this.reload();
   }
 }
