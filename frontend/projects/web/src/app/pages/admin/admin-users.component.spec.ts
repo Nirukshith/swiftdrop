@@ -169,6 +169,7 @@ describe('AdminUsersComponent', () => {
     expect(component.toastMessage()).toContain('created successfully');
     expect(component.isCreateUserModalOpen()).toBe(false);
     expect(component.newUserPassword).toBe(''); // sensitive field cleared
+    expect(adminUsersServiceMock.loadUsers).toHaveBeenCalled();
   });
 
   it('should handle HTTP 409 duplicate email by keeping modal open and displaying error', () => {
