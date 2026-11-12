@@ -1,7 +1,9 @@
 package com.swiftdrop.integration.webhook;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +19,11 @@ public interface WebhookDeliveryRepository extends JpaRepository<WebhookDelivery
         JpaSpecificationExecutor<WebhookDeliveryEntity> {
 
     Optional<WebhookDeliveryEntity> findByDeliveryIdAndMerchantId(UUID deliveryId, UUID merchantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT d FROM WebhookDeliveryEntity d WHERE d.deliveryId = :deliveryId AND d.merchantId = :merchantId")
+    Optional<WebhookDeliveryEntity> findForRetry(@Param("deliveryId") UUID deliveryId,
+                                                  @Param("merchantId") UUID merchantId);
 
     Optional<WebhookDeliveryEntity> findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(UUID eventId, UUID merchantId);
 

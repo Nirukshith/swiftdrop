@@ -256,6 +256,7 @@ class WebhookControllerTest {
         mockMvc.perform(get("/api/v1/merchant/webhooks/deliveries")
                         .with(merchantJwt()))
                 .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].deliveryId").value(deliveryId.toString()))
                 .andExpect(jsonPath("$.content[0].status").value("SUCCESS"));
@@ -290,6 +291,7 @@ class WebhookControllerTest {
         mockMvc.perform(get("/api/v1/merchant/webhooks/deliveries/" + deliveryId)
                         .with(merchantJwt()))
                 .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.deliveryId").value(deliveryId.toString()))
                 .andExpect(jsonPath("$.status").value("SUCCESS"))
                 .andExpect(jsonPath("$.retryHistory[0].httpStatusCode").value(200));
@@ -334,7 +336,25 @@ class WebhookControllerTest {
         mockMvc.perform(post("/api/v1/merchant/webhooks/deliveries/" + deliveryId + "/retry")
                         .with(merchantJwt()))
                 .andExpect(status().isAccepted())
+                .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.attempts").value(2))
                 .andExpect(jsonPath("$.status").value("SUCCESS"));
+    }
+
+    @Test
+    @DisplayName("Retry requires a merchant JWT and ignores spoofed merchant headers")
+    void retryDelivery_requiresMerchantIdentity() throws Exception {
+        UUID deliveryId = UUID.randomUUID();
+        mockMvc.perform(post("/api/v1/merchant/webhooks/deliveries/" + deliveryId + "/retry")
+                        .header("X-Merchant-Id", merchantId.toString()))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/merchant/webhooks/deliveries/" + deliveryId + "/retry")
+                        .with(jwt().jwt(token -> token.subject("customer-user")
+                                        .claim("role", "CUSTOMER")
+                                        .claim("merchantId", merchantId.toString()))
+                                .authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                        .header("X-Merchant-Id", merchantId.toString()))
+                .andExpect(status().isForbidden());
+        verify(webhookService, never()).retryDelivery(any(), any());
     }
 }

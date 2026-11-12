@@ -159,7 +159,7 @@ services:
       INTERNAL_NOTIFICATIONS_SERVICE_TOKEN: ${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:-swiftdrop-internal-notif-secret-2026}
       INTERNAL_MERCHANT_SERVICE_TOKEN: ${INTERNAL_MERCHANT_SERVICE_TOKEN:-swiftdrop-internal-merchant-secret-2026}
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     depends_on:
       postgres:
         condition: service_healthy
