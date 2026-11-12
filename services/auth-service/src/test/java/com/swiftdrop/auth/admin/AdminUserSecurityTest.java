@@ -60,6 +60,22 @@ class AdminUserSecurityTest {
     }
 
     @Test
+    @WithMockUser(username = "customer", roles = {"CUSTOMER"})
+    @DisplayName("GET /api/v1/admin/users returns 403 Forbidden for CUSTOMER role")
+    void adminUsers_forbiddenForCustomer() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/users"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "merchant", roles = {"MERCHANT"})
+    @DisplayName("GET /api/v1/admin/users returns 403 Forbidden for MERCHANT role")
+    void adminUsers_forbiddenForMerchant() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/users"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("GET /api/v1/admin/users returns 401 Unauthorized when unauthenticated")
     void adminUsers_unauthenticated() throws Exception {
         mockMvc.perform(get("/api/v1/admin/users"))
