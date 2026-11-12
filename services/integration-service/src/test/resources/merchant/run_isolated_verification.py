@@ -102,7 +102,9 @@ try:
     containers.append(name)
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
-        check = subprocess.run([DOCKER, 'exec', name, 'pg_isready', '-U', 'm6verify'], capture_output=True)
+        # The image's temporary initialization server accepts Unix-socket probes
+        # before restarting. Wait for the final TCP listener before creating DBs.
+        check = subprocess.run([DOCKER, 'exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'm6verify'], capture_output=True)
         if check.returncode == 0:
             break
         time.sleep(1)

@@ -1,0 +1,2 @@
+externalReference,recipientName,recipientPhone,pickupLine1,pickupLine2,pickupCity,pickupDistrict,pickupPostalCode,dropoffLine1,dropoffLine2,dropoffCity,dropoffDistrict,dropoffPostalCode,size,weightKg
+example-001,Recipient Name,+94771234567,12 Main Road,,Colombo,Colombo,00700,45 Lake Road,,Gampaha,Gampaha,11000,SMALL,1.50
