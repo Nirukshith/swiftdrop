@@ -19,16 +19,16 @@ for endpoint in [AUTH, INTEGRATION, PARCEL, os.environ.get('M6_VERIFY_PRICING_PR
         raise ValueError('Verification requires isolated services on loopback URLs')
 
 
-def call(base, path, method='GET', body=None, token=None, key=None, internal_token=None):
-    headers = {'Content-Type': 'application/json'}
+def call(base, path, method='GET', body=None, token=None, key=None, internal_token=None, content_type='application/json'):
+    headers = {'Content-Type': content_type}
     if token:
         headers['Authorization'] = 'Bearer ' + token
     if key:
         headers['Idempotency-Key'] = key
     if internal_token:
         headers['X-Internal-Service-Token'] = internal_token
-    request = urllib.request.Request(base + path, method=method, headers=headers,
-        data=None if body is None else json.dumps(body).encode())
+    data = None if body is None else body.encode('utf-8') if content_type == 'text/csv' else json.dumps(body).encode()
+    request = urllib.request.Request(base + path, method=method, headers=headers, data=data)
     try:
         response = urllib.request.urlopen(request, timeout=30)
     except urllib.error.HTTPError as error:
@@ -195,7 +195,50 @@ def main():
     expect(call(INTEGRATION, path, 'POST', payload, admin, 'admin-key'), 403, 'non-merchant role rejected')
     expect(call(INTEGRATION, path, 'POST', payload, 'invalid-token', 'invalid-key'), 401, 'invalid bearer token rejected')
     expect(call(INTEGRATION, path, 'POST', payload, None, 'anonymous-key'), 401, 'anonymous request rejected')
+    verify_bulk(first_id, first_token, second_id, second_token, admin, run_id)
     print('ALL REAL-SERVICE MERCHANT ORDER CHECKS PASSED', flush=True)
+
+
+def verify_bulk(first_id, first_token, second_id, second_token, admin, run_id):
+    header = 'externalReference,recipientName,recipientPhone,pickupLine1,pickupLine2,pickupCity,pickupDistrict,pickupPostalCode,dropoffLine1,dropoffLine2,dropoffCity,dropoffDistrict,dropoffPostalCode,size,weightKg'
+    def row(reference, weight='1.5'):
+        return f'{reference},Test Recipient,+94770000000,10 Verification Road,,Colombo,Colombo,00100,20 Verification Road,,Gampaha,Gampaha,11000,SMALL,{weight}'
+    def submit(text, token, key):
+        return call(INTEGRATION, '/api/v1/merchant/orders/bulk', 'POST', text, token, key, content_type='text/csv')
+    before = expect(call(PARCEL, '/internal/v1/parcels?page=0&size=100'), 200, 'inspect parcels before bulk')
+    csv = header + '\n' + row('bulk-a-' + run_id) + '\n' + row('bulk-b-' + run_id) + '\n' + row('bulk-invalid-' + run_id, '0.01') + '\n'
+    original = expect(submit(csv, first_token, 'bulk-original'), 200, 'real bulk CSV submission')
+    check(original['totalRows'] == 3 and original['acceptedRows'] == 2 and original['rejectedRows'] == 1,
+        'bulk reports valid and invalid source rows separately')
+    check(original['results'][2]['rowNumber'] == 4 and not original['results'][2]['accepted'], 'bulk validation reports the invalid source row')
+    after = expect(call(PARCEL, '/internal/v1/parcels?page=0&size=100'), 200, 'inspect real bulk parcels')
+    check(after['totalElements'] == before['totalElements'] + 2, 'invalid bulk row created no parcel')
+    by_id = {p['id']: p for p in after['content']}
+    accepted = [r['order'] for r in original['results'] if r['accepted']]
+    check(all(o['parcelId'] in by_id and by_id[o['parcelId']]['merchantId'] == first_id
+        and by_id[o['parcelId']]['fee'] == 850 and o['fee'] == 850 for o in accepted), 'bulk parcels have real M1 mappings, correct tenant and configured quote')
+    replay = expect(submit(csv, first_token, 'bulk-original'), 200, 'bulk same-key replay')
+    check(replay == original, 'bulk replay preserves every original row result')
+    expect(submit(csv.replace('bulk-a-', 'changed-a-'), first_token, 'bulk-original'), 409, 'bulk conflicting file reuse')
+    duplicate = expect(submit(csv, first_token, 'bulk-different-key'), 200, 'bulk duplicate references in a new upload')
+    check(duplicate['acceptedRows'] == 0, 'bulk existing references never create another parcel')
+    other = expect(submit(csv, second_token, 'bulk-original'), 200, 'bulk same key and references in a different tenant')
+    check(other['acceptedRows'] == 2 and not ({r['order']['parcelId'] for r in other['results'] if r['accepted']}
+        & {o['parcelId'] for o in accepted}), 'bulk tenant replay cannot expose another merchant parcel')
+    expect(submit(header + '\n' + row('bulk-malformed-' + run_id) + '\n"unclosed', first_token, 'bulk-malformed'),
+        400, 'malformed bulk file rejected before any row creation')
+    parallel_csv = header + '\n' + row('bulk-concurrent-' + run_id) + '\n'
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(submit, parallel_csv, first_token, 'bulk-concurrent') for _ in range(2)]
+        parallel = [expect(f.result(), 200, 'concurrent real bulk request') for f in futures]
+    completed = expect(submit(parallel_csv, first_token, 'bulk-concurrent'), 200, 'completed concurrent bulk replay')
+    check(completed['acceptedRows'] == 1 and all(not response['acceptedRows'] or response == completed for response in parallel),
+        'concurrent bulk requests share the completed original parcel; an early replay may report processing')
+    final = expect(call(PARCEL, '/internal/v1/parcels?page=0&size=100'), 200, 'inspect final real bulk parcel count')
+    check(final['totalElements'] == before['totalElements'] + 5, 'bulk replay, duplicates and malformed files added no extra parcels')
+    expect(submit(csv, admin, 'bulk-admin'), 403, 'bulk non-merchant role denied')
+    expect(submit(csv, None, 'bulk-anonymous'), 401, 'bulk anonymous request denied')
+    expect(submit(csv, 'invalid-token', 'bulk-invalid-token'), 401, 'bulk invalid bearer token denied')
 
 
 if __name__ == '__main__':
