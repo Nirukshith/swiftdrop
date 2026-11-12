@@ -248,4 +248,45 @@ class CourierExecutionServiceTest {
         assertThat(response.currentStatus()).isEqualTo("DELIVERED");
         verify(parcelServiceClient).updateStatus(eq(PARCEL_ID), any());
     }
+
+    @Test
+    @DisplayName("Proof upload cleans up written file if database save fails")
+    void proofUploadCleansUpFileIfDatabaseSaveFails() {
+        byte[] validJpegBytes = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0x00, 0x10, 0x4A, 0x46};
+        MockMultipartFile validFile = new MockMultipartFile(
+            "file", "doorstep.jpg", "image/jpeg", validJpegBytes
+        );
+
+        ParcelResponse parcel = createMockParcel(COURIER_A, "OUT_FOR_DELIVERY");
+        when(parcelServiceClient.getParcel(PARCEL_ID)).thenReturn(parcel);
+        when(deliveryProofRepository.save(any(DeliveryProofEntity.class)))
+            .thenThrow(new RuntimeException("Simulated database failure"));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            courierExecutionService.uploadProof(COURIER_A, PARCEL_ID, validFile, "Sunil Silva", "Handed over")
+        );
+
+        assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        // Verify no leftover files in tempDir
+        try (var stream = java.nio.file.Files.list(tempDir)) {
+            assertThat(stream.count()).isEqualTo(0);
+        } catch (java.io.IOException e) {
+            org.junit.jupiter.api.Assertions.fail(e);
+        }
+    }
+
+    @Test
+    @DisplayName("Today's deliveries defaults to Asia/Colombo date when date parameter is omitted")
+    void getTodaysDeliveriesShouldDefaultToAsiaColomboDate() {
+        String expectedDate = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Colombo")).toString();
+        ParcelPageResponse pageResponse = new ParcelPageResponse(List.of(), 0, 0, 0, 20);
+        when(parcelServiceClient.getParcelsByCourierAndDate(eq(COURIER_A), eq(expectedDate)))
+            .thenReturn(pageResponse);
+
+        CourierDeliveriesResponse response = courierExecutionService.getTodaysDeliveries(COURIER_A, null, null);
+
+        assertThat(response).isNotNull();
+        assertThat(response.date()).isEqualTo(expectedDate);
+        verify(parcelServiceClient).getParcelsByCourierAndDate(COURIER_A, expectedDate);
+    }
 }

@@ -277,4 +277,37 @@ describe('CourierComponent', () => {
     expect(component.failureNotes).toBe('Address could not be located');
     expect(component.toastMessage()).toContain('Parcel is no longer assigned');
   }));
+
+  it('should open proof view modal and fetch proof photo when viewProofDetail is called', fakeAsync(() => {
+    const delivery = {
+      ...component.filteredDeliveries()[0],
+      status: 'DELIVERED' as const,
+      proof: {
+        id: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
+        parcelId: 'pcl-55001',
+        courierId: 'courier-1',
+        fileName: 'proof.jpg',
+        fileSize: 1024,
+        recipientName: 'Kamal Perera',
+        uploadedAt: '2026-10-28T14:30:00Z',
+        proofUrl: '/api/v1/courier/proofs/3fa85f64-5717-4562-b3fc-2c963f66afa6',
+      },
+    };
+
+    component.viewProofDetail(delivery);
+    expect(component.selectedDeliveryForProofView()).toEqual(delivery);
+    expect(component.isLoadingProofImage()).toBe(true);
+
+    const getReq = httpMock.expectOne('/api/v1/courier/proofs/3fa85f64-5717-4562-b3fc-2c963f66afa6');
+    expect(getReq.request.method).toBe('GET');
+    getReq.flush(new Blob(['test-photo'], { type: 'image/jpeg' }));
+    tick();
+
+    expect(component.isLoadingProofImage()).toBe(false);
+    expect(component.viewProofImageUrl()).toBeTruthy();
+
+    component.closeProofViewModal();
+    expect(component.selectedDeliveryForProofView()).toBeNull();
+    expect(component.viewProofImageUrl()).toBeNull();
+  }));
 });

@@ -634,6 +634,71 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
           </div>
         </div>
       </div>
+
+      <!-- View Proof Modal Dialog -->
+      <div
+        *ngIf="selectedDeliveryForProofView()"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in"
+      >
+        <div
+          class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden transform transition-all"
+        >
+          <!-- Modal Header -->
+          <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-emerald-50/50">
+            <div>
+              <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <span>📸</span> Delivery Proof Details
+              </h2>
+              <p class="text-xs text-slate-500 font-mono">
+                Tracking: {{ selectedDeliveryForProofView()?.trackingNumber }}
+              </p>
+            </div>
+            <button
+              type="button"
+              id="close-proof-view-modal"
+              (click)="closeProofViewModal()"
+              class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-bold transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+
+          <!-- Modal Body -->
+          <div class="p-5 space-y-4">
+            <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200 text-xs space-y-1.5">
+              <p><span class="font-bold text-slate-700">Recipient Name:</span> {{ selectedDeliveryForProofView()?.proof?.recipientName }}</p>
+              <p><span class="font-bold text-slate-700">Uploaded At:</span> {{ selectedDeliveryForProofView()?.proof?.uploadedAt | date:'medium' }}</p>
+            </div>
+
+            <div class="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 min-h-[160px] flex items-center justify-center">
+              <div *ngIf="isLoadingProofImage()" class="text-xs text-slate-500 font-semibold flex items-center gap-2">
+                <span class="animate-spin">🔄</span> Loading authorized proof photo...
+              </div>
+              <img
+                *ngIf="!isLoadingProofImage() && viewProofImageUrl()"
+                [src]="viewProofImageUrl()"
+                alt="Delivery proof"
+                id="view-proof-image"
+                class="w-full max-h-72 object-contain bg-slate-950"
+              />
+              <p *ngIf="!isLoadingProofImage() && !viewProofImageUrl()" class="text-xs text-slate-400">
+                Photo preview not available.
+              </p>
+            </div>
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end">
+            <button
+              type="button"
+              (click)="closeProofViewModal()"
+              class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   `,
 })
@@ -665,6 +730,10 @@ export class CourierComponent implements OnInit {
   failureReasonCategory: FailureReasonCode = 'RECIPIENT_UNAVAILABLE';
   failureNotes = '';
   isSubmittingFailure = false;
+
+  selectedDeliveryForProofView = signal<CourierDelivery | null>(null);
+  viewProofImageUrl = signal<string | null>(null);
+  isLoadingProofImage = signal<boolean>(false);
 
   ngOnInit(): void {
     this.refreshDeliveries();
@@ -930,13 +999,53 @@ export class CourierComponent implements OnInit {
   }
 
   viewProofDetail(delivery: CourierDelivery): void {
-    if (delivery.proof) {
-      alert(
-        `Delivery Proof for ${delivery.trackingNumber}\nRecipient: ${delivery.proof.recipientName}\nUploaded: ${new Date(
-          delivery.proof.uploadedAt
-        ).toLocaleString()}`
-      );
+    if (!delivery.proof) return;
+    this.selectedDeliveryForProofView.set(delivery);
+    this.viewProofImageUrl.set(null);
+
+    const proof = delivery.proof as any;
+    const proofId = proof.id || proof.proofId;
+    if (proofId) {
+      this.isLoadingProofImage.set(true);
+      this.courierService.getProofPhoto(proofId).subscribe({
+        next: (blob) => {
+          this.isLoadingProofImage.set(false);
+          if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+            try {
+              this.viewProofImageUrl.set(URL.createObjectURL(blob));
+              return;
+            } catch {
+              // fallback to reader or proofUrl
+            }
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            this.viewProofImageUrl.set(reader.result as string);
+          };
+          reader.readAsDataURL(blob);
+          if (proof.proofUrl) {
+            this.viewProofImageUrl.set(proof.proofUrl);
+          }
+        },
+        error: () => {
+          this.isLoadingProofImage.set(false);
+          if (proof.proofUrl) {
+            this.viewProofImageUrl.set(proof.proofUrl);
+          }
+        },
+      });
+    } else if (proof.proofUrl) {
+      this.viewProofImageUrl.set(proof.proofUrl);
     }
+  }
+
+  closeProofViewModal(): void {
+    const url = this.viewProofImageUrl();
+    if (url && url.startsWith('blob:') && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(url);
+    }
+    this.selectedDeliveryForProofView.set(null);
+    this.viewProofImageUrl.set(null);
   }
 
   private showToast(msg: string): void {

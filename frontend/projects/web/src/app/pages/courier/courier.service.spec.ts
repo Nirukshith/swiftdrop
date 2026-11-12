@@ -203,6 +203,18 @@ describe('CourierService', () => {
     req.flush(proofResponse);
   });
 
+  it('should retrieve proof photo blob via GET /api/v1/courier/proofs/{proofId}', () => {
+    const dummyBlob = new Blob(['image-bytes'], { type: 'image/jpeg' });
+    service.getProofPhoto('3fa85f64-5717-4562-b3fc-2c963f66afa6').subscribe((blob) => {
+      expect(blob).toBeTruthy();
+      expect(blob.type).toBe('image/jpeg');
+    });
+
+    const req = httpMock.expectOne('/api/v1/courier/proofs/3fa85f64-5717-4562-b3fc-2c963f66afa6');
+    expect(req.request.method).toBe('GET');
+    req.flush(dummyBlob);
+  });
+
   it('should reject proof upload client-side if file exceeds 5MB', (done) => {
     const largeFile = {
       size: 6 * 1024 * 1024,
