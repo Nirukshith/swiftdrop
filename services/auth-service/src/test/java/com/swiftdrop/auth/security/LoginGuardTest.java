@@ -41,7 +41,7 @@ class LoginGuardTest {
 
         assertThatThrownBy(() -> lockingGuard.checkLoginAllowed("victim@swiftdrop.com"))
                 .isInstanceOf(AccountLockedException.class)
-                .hasMessageContaining("victim@swiftdrop.com");
+                .hasMessageNotContaining("victim@swiftdrop.com");
 
         assertThatThrownBy(() -> lockingGuard.checkLoginAllowed("victim@swiftdrop.com", "10.0.0.1"))
                 .isInstanceOf(AccountLockedException.class);

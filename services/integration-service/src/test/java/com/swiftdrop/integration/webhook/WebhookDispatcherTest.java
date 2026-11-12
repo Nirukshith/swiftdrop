@@ -35,6 +35,30 @@ import static org.mockito.Mockito.when;
 class WebhookDispatcherTest {
 
     @Test
+    void endpointDiagnosticsExcludeCookiesAndBodySecrets() throws Exception {
+        SsrfGuard guard = mock(SsrfGuard.class);
+        HttpClient client = mock(HttpClient.class);
+        @SuppressWarnings("unchecked")
+        HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(500);
+        when(response.headers()).thenReturn(java.net.http.HttpHeaders.of(java.util.Map.of(
+                "content-type", List.of("application/json; secret=hidden"),
+                "set-cookie", List.of("session=hidden")), (a, b) -> true));
+        when(response.body()).thenReturn("{\"token\":\"hidden\"}");
+        when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+
+        WebhookDispatcher dispatcher = new WebhookDispatcher(guard, new ObjectMapper(), client,
+                Clock.systemUTC());
+        WebhookDispatcher.DispatchResult result = dispatcher.dispatch(
+                "https://example.com/hook", "merchant-secret", "delivery-1", "{}");
+
+        assertThat(result.responseHeaders()).containsOnlyKeys("Content-Type")
+                .containsEntry("Content-Type", "application/json");
+        assertThat(result.responseBodySummary()).isNull();
+        assertThat(result.errorMessage()).isEqualTo("Target returned HTTP 500");
+    }
+
+    @Test
     void configuredEndpointReceivesContractPayloadAndVerifiableSignature() throws Exception {
         HttpServer receiver = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         AtomicReference<String> receivedBody = new AtomicReference<>();

@@ -133,7 +133,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
           <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <span class="text-xs font-semibold uppercase tracking-wider text-amber-600">Active In-Transit</span>
             <div class="text-3xl font-bold text-amber-600 mt-2">{{ (counts().pickedUp || 0) + (counts().inTransit || 0) + (counts().outForDelivery || 0) }}</div>
-            <span class="text-xs text-slate-400 mt-1 block">Picked up & Out for delivery</span>
+            <span class="text-xs text-slate-400 mt-1 block">Picked up, in transit, or out for delivery</span>
           </div>
           <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <span class="text-xs font-semibold uppercase tracking-wider text-emerald-600">Delivered</span>
@@ -143,7 +143,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
           <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <span class="text-xs font-semibold uppercase tracking-wider text-rose-600">Failed / Cancelled</span>
             <div class="text-3xl font-bold text-rose-600 mt-2">{{ counts().failed + counts().cancelled }}</div>
-            <span class="text-xs text-slate-400 mt-1 block">Requiring review or retry</span>
+            <span class="text-xs text-slate-400 mt-1 block">Failed or cancelled orders</span>
           </div>
         </div>
 
@@ -235,7 +235,6 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
               <thead class="bg-slate-50 border-b border-slate-200 text-xs uppercase font-semibold text-slate-500">
                 <tr>
                   <th class="px-6 py-3">Tracking Number</th>
-                  <th class="px-6 py-3">Reference</th>
                   <th class="px-6 py-3">Recipient & Address</th>
                   <th class="px-6 py-3">Fee</th>
                   <th class="px-6 py-3">Status</th>
@@ -246,9 +245,6 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
                 <tr *ngFor="let o of orders()" class="hover:bg-slate-50 transition-colors">
                   <td class="px-6 py-4 font-mono font-medium text-indigo-600">
                     {{ o.trackingNumber }}
-                  </td>
-                  <td class="px-6 py-4 text-slate-500">
-                    {{ o.externalReference || '—' }}
                   </td>
                   <td class="px-6 py-4">
                     <div class="font-medium text-slate-900">{{ o.recipientName || '—' }}</div>
@@ -465,7 +461,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
             <button
               *ngFor="let f of deliveryFilterOptions"
               type="button"
-              (click)="selectedDeliveryFilter.set(f.value); loadDeliveries()"
+              (click)="selectedDeliveryFilter.set(f.value); loadDeliveries(0)"
               [class.bg-indigo-600]="selectedDeliveryFilter() === f.value"
               [class.text-white]="selectedDeliveryFilter() === f.value"
               [class.bg-slate-100]="selectedDeliveryFilter() !== f.value"
@@ -477,7 +473,7 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
           </div>
 
           <div class="text-xs text-slate-400">
-            Showing {{ deliveries().length }} delivery attempt(s)
+            Showing {{ deliveries().length }} of {{ deliveryTotalElements() }} deliveries
           </div>
         </div>
 
@@ -533,12 +529,13 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
                       Inspect
                     </button>
                     <button
-                      *ngIf="d.status === 'FAILED' || d.status === 'PENDING_RETRY'"
+                      *ngIf="d.status === 'FAILED'"
                       type="button"
                       (click)="retryDelivery(d.deliveryId)"
+                      [disabled]="retryingDeliveryId() === d.deliveryId"
                       class="px-2.5 py-1 text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded transition-colors"
                     >
-                      Retry
+                      {{ retryingDeliveryId() === d.deliveryId ? 'Retrying...' : 'Retry' }}
                     </button>
                   </td>
                 </tr>
@@ -549,6 +546,12 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div *ngIf="!isLoadingDeliveries() && !deliveryError() && deliveryTotalElements() > 0"
+               class="p-4 border-t border-slate-200 bg-slate-50">
+            <ui-pagination [page]="deliveryPage()" [size]="deliveryPageSize()"
+                           [totalElements]="deliveryTotalElements()"
+                           (pageChange)="loadDeliveries($event)" />
           </div>
         </div>
 
@@ -570,6 +573,8 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
                 <div><strong>Attempts:</strong> {{ selectedDelivery()?.attempts }} of 5</div>
                 <div><strong>Target URL:</strong> {{ selectedDelivery()?.targetUrl }}</div>
                 <div><strong>Event:</strong> {{ selectedDelivery()?.eventType }}</div>
+                <div *ngIf="selectedDelivery()?.errorSummary"><strong>Failure:</strong> {{ selectedDelivery()?.errorSummary }}</div>
+                <div *ngIf="selectedDelivery()?.nextRetryAt"><strong>Next retry:</strong> {{ selectedDelivery()?.nextRetryAt | date: 'medium' }}</div>
               </div>
 
               <!-- Request Headers -->
@@ -623,6 +628,8 @@ export class MerchantComponent implements OnInit, OnDestroy {
   private merchantService = inject(MerchantService);
   private orderSubscription?: Subscription;
   private countsSubscription?: Subscription;
+  private deliverySubscription?: Subscription;
+  private detailSubscription?: Subscription;
 
   activeTab = signal<ActiveTab>('orders');
   notification = signal<string | null>(null);
@@ -679,12 +686,17 @@ export class MerchantComponent implements OnInit, OnDestroy {
   selectedDelivery = signal<WebhookDeliveryItem | null>(null);
   deliveryError = signal<string | null>(null);
   isLoadingDeliveries = signal(false);
+  deliveryPage = signal(0);
+  deliveryPageSize = signal(20);
+  deliveryTotalElements = signal(0);
+  retryingDeliveryId = signal<string | null>(null);
 
   deliveryFilterOptions = [
     { label: 'All', value: 'ALL' },
     { label: 'Success (2xx)', value: 'SUCCESS' },
-    { label: 'Failed (4xx/5xx)', value: 'FAILED' },
+    { label: 'Failed', value: 'FAILED' },
     { label: 'Pending Retry', value: 'PENDING_RETRY' },
+    { label: 'Cancelled', value: 'CANCELLED' },
   ];
 
   ngOnInit(): void {
@@ -697,6 +709,8 @@ export class MerchantComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.orderSubscription?.unsubscribe();
     this.countsSubscription?.unsubscribe();
+    this.deliverySubscription?.unsubscribe();
+    this.detailSubscription?.unsubscribe();
   }
 
   selectTab(tab: ActiveTab): void {
@@ -879,22 +893,30 @@ export class MerchantComponent implements OnInit, OnDestroy {
     });
   }
 
-  loadDeliveries(): void {
+  loadDeliveries(page = this.deliveryPage()): void {
+    this.deliverySubscription?.unsubscribe();
+    this.deliveryPage.set(page);
     this.isLoadingDeliveries.set(true);
     this.deliveryError.set(null);
-    this.merchantService.getDeliveryLogs(this.selectedDeliveryFilter())
+    this.deliverySubscription = this.merchantService.getDeliveryLogs(
+      this.selectedDeliveryFilter(), page, this.deliveryPageSize())
       .pipe(finalize(() => this.isLoadingDeliveries.set(false))).subscribe({
-      next: (d) => this.deliveries.set(d),
+      next: (result) => {
+        this.deliveries.set(result.content);
+        this.deliveryTotalElements.set(result.totalElements);
+      },
       error: (error: HttpErrorResponse) => {
         this.deliveries.set([]);
+        this.deliveryTotalElements.set(0);
         this.deliveryError.set(this.apiErrorMessage(error, 'Unable to load webhook deliveries.'));
       },
     });
   }
 
   inspectDelivery(item: WebhookDeliveryItem): void {
+    this.detailSubscription?.unsubscribe();
     this.deliveryError.set(null);
-    this.merchantService.getDeliveryDetail(item.deliveryId).subscribe({
+    this.detailSubscription = this.merchantService.getDeliveryDetail(item.deliveryId).subscribe({
       next: (detail) => this.selectedDelivery.set({
         ...item,
         ...detail,
@@ -912,7 +934,13 @@ export class MerchantComponent implements OnInit, OnDestroy {
   }
 
   retryDelivery(deliveryId: string): void {
-    this.merchantService.retryDelivery(deliveryId).subscribe({
+    if (this.retryingDeliveryId() !== null ||
+        !this.deliveries().some((delivery) => delivery.deliveryId === deliveryId && delivery.status === 'FAILED')) {
+      return;
+    }
+    this.retryingDeliveryId.set(deliveryId);
+    this.merchantService.retryDelivery(deliveryId)
+      .pipe(finalize(() => this.retryingDeliveryId.set(null))).subscribe({
       next: (updated) => {
         this.notification.set(`Delivery retry accepted (${updated.status}).`);
         this.loadDeliveries();

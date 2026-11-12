@@ -45,7 +45,7 @@ public class WebhookController {
     public ResponseEntity<WebhookSettingsResponse> getSettings() {
         UUID merchantId = requireMerchantId();
         WebhookSettingsResponse response = webhookService.getSettings(merchantId);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(response);
     }
 
     @PutMapping("/settings")
@@ -63,9 +63,10 @@ public class WebhookController {
         TestWebhookResultResponse result = webhookService.triggerTestWebhook(merchantId, request);
 
         if (result.success()) {
-            return ResponseEntity.ok(result);
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(result);
         } else {
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(result);
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .cacheControl(CacheControl.noStore()).body(result);
         }
     }
 
@@ -79,7 +80,7 @@ public class WebhookController {
             @RequestParam(defaultValue = "20") int size) {
         UUID merchantId = requireMerchantId();
         WebhookDeliveryLogPage pageResult = webhookService.listDeliveries(merchantId, status, eventType, from, to, page, size);
-        return ResponseEntity.ok(pageResult);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(pageResult);
     }
 
     @GetMapping("/deliveries/{deliveryId}")
@@ -87,7 +88,7 @@ public class WebhookController {
             @PathVariable UUID deliveryId) {
         UUID merchantId = requireMerchantId();
         WebhookDeliveryDetailResponse detail = webhookService.getDeliveryDetail(merchantId, deliveryId);
-        return ResponseEntity.ok(detail);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(detail);
     }
 
     @PostMapping("/deliveries/{deliveryId}/retry")
@@ -95,6 +96,7 @@ public class WebhookController {
             @PathVariable UUID deliveryId) {
         UUID merchantId = requireMerchantId();
         WebhookDeliveryDetailResponse updated = webhookService.retryDelivery(merchantId, deliveryId);
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(updated);
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .cacheControl(CacheControl.noStore()).body(updated);
     }
 }

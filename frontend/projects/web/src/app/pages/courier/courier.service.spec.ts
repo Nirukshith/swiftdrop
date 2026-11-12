@@ -175,6 +175,8 @@ describe('CourierService', () => {
   it('should upload delivery proof via POST /api/v1/courier/deliveries/{parcelId}/proof', () => {
     service.getDeliveries().subscribe();
     httpMock.expectOne('/api/v1/courier/deliveries').flush(mockDeliveriesResponse);
+    service.getProfile().subscribe();
+    httpMock.expectOne('/api/v1/courier/me').flush({ userId: 'courier-1', name: 'Kamal', phone: null, zone: null, availability: true, vehicle: null });
 
     const file = new File(['dummy-bytes'], 'proof.jpg', { type: 'image/jpeg' });
     const proofResponse: ProofUploadResponse = {
@@ -201,6 +203,7 @@ describe('CourierService', () => {
     expect(req.request.method).toBe('POST');
     expect(req.request.body instanceof FormData).toBe(true);
     req.flush(proofResponse);
+    expect(service.getDeliveryById('pcl-55001')?.proof?.courierId).toBe('courier-1');
   });
 
   it('should reject proof upload client-side if file exceeds 5MB', (done) => {

@@ -89,15 +89,16 @@ public class WebhookDispatcher {
             int statusCode = response.statusCode();
             boolean success = statusCode >= 200 && statusCode < 300;
 
+            // Endpoint headers may contain cookies, authorization challenges, or other
+            // credentials. Only retain diagnostic metadata safe for merchant logs.
             Map<String, String> responseHeaders = new HashMap<>();
-            response.headers().map().forEach((k, v) -> {
-                if (!v.isEmpty()) {
-                    responseHeaders.put(k, String.join(", ", v));
-                }
-            });
+            response.headers().firstValue("content-type")
+                    .map(value -> value.split(";", 2)[0].trim())
+                    .filter(value -> value.matches("[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+"))
+                    .ifPresent(value -> responseHeaders.put("Content-Type", value));
 
             String body = response.body();
-            String bodySummary = (body != null && body.length() > 500) ? body.substring(0, 500) : body;
+            String bodySummary = null;
 
             return new DispatchResult(
                     success,

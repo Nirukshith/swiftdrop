@@ -106,13 +106,13 @@ class WebhookRetryKafkaIntegrationTest {
         kafkaTemplate.send(MAIN_TOPIC, event.parcelId(), originalEnvelope).get();
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
                 assertThat(deliveryRepository.findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(
-                        UUID.fromString(event.eventId()), merchantId).orElseThrow().getStatus())
-                        .isEqualTo("PENDING_RETRY"));
+                        UUID.fromString(event.eventId()), merchantId).map(WebhookDeliveryEntity::getStatus))
+                        .contains("PENDING_RETRY"));
         kafkaTemplate.send(MAIN_TOPIC, followingEvent.parcelId(), objectMapper.writeValueAsString(followingEvent)).get();
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
                 assertThat(deliveryRepository.findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(
-                        UUID.fromString(followingEvent.eventId()), merchantId).orElseThrow().getStatus())
-                        .isEqualTo("SUCCESS"));
+                        UUID.fromString(followingEvent.eventId()), merchantId).map(WebhookDeliveryEntity::getStatus))
+                        .contains("SUCCESS"));
 
         ConsumerRecord<String, String> dlt = awaitRecord(WEBHOOK_DLT, originalEnvelope, Duration.ofSeconds(45));
         assertThat(dlt.value()).isEqualTo(originalEnvelope);
