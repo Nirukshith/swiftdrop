@@ -125,6 +125,72 @@ class GoogleOAuthExtendedTest {
         verify(refreshTokenRepository, never()).save(any());
     }
 
+    @Test
+    @DisplayName("Reused state: state token submitted twice → second invocation is rejected with 400")
+    void callback_reusedState_returns400_andNoSession() throws Exception {
+        String state = "state-single-use-unique";
+        String code = "code-single-use";
+        GoogleUserInfo googleUser = new GoogleUserInfo(
+                "google-sub-reused", "reused@example.com", "Reused User", null, true);
+
+        User savedUser = new User(
+                "user-reused-id", "reused@example.com", null,
+                "Reused User", null, Roles.CUSTOMER, true, null);
+
+        when(googleOAuthClient.exchangeCodeAndGetUserInfo(code)).thenReturn(googleUser);
+        when(userRepository.findByEmailIgnoreCase("reused@example.com")).thenReturn(Optional.of(savedUser));
+
+        // First call should succeed
+        mockMvc.perform(get("/api/v1/auth/oauth2/callback/google")
+                        .param("code", code)
+                        .param("state", state)
+                        .cookie(new Cookie("oauth2_state", state)))
+                .andExpect(status().isFound());
+
+        // Second call with identical state must be rejected as already consumed
+        mockMvc.perform(get("/api/v1/auth/oauth2/callback/google")
+                        .param("code", code)
+                        .param("state", state)
+                        .cookie(new Cookie("oauth2_state", state)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Expired state: state token timestamp older than 10-minute TTL → 400 Bad Request")
+    void callback_expiredState_returns400_andNoSession() throws Exception {
+        // Timestamp from 15 minutes ago (TTL is 10 minutes)
+        long expiredTimestamp = System.currentTimeMillis() - (15 * 60 * 1000L);
+        String expiredState = "teststate." + expiredTimestamp;
+
+        mockMvc.perform(get("/api/v1/auth/oauth2/callback/google")
+                        .param("code", "some-code")
+                        .param("state", expiredState)
+                        .cookie(new Cookie("oauth2_state", expiredState)))
+                .andExpect(status().isBadRequest());
+
+        verify(googleOAuthClient, never()).exchangeCodeAndGetUserInfo(any());
+        verify(refreshTokenRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Provider failure: Google token exchange throws exception → 400 Bad Request, no session")
+    void callback_providerFailure_returns400_andNoSession() throws Exception {
+        String state = "state-provider-fail";
+        String code = "code-bad";
+
+        when(googleOAuthClient.exchangeCodeAndGetUserInfo(code))
+                .thenThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.BAD_REQUEST, "Google exchange failed"));
+
+        mockMvc.perform(get("/api/v1/auth/oauth2/callback/google")
+                        .param("code", code)
+                        .param("state", state)
+                        .cookie(new Cookie("oauth2_state", state)))
+                .andExpect(status().isBadRequest());
+
+        verify(refreshTokenRepository, never()).save(any());
+    }
+
     // ─── Email verification enforcement ─────────────────────────────────────────
 
     @Test
