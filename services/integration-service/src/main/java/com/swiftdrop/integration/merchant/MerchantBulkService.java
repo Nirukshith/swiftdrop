@@ -22,17 +22,17 @@ public class MerchantBulkService {
         if (bytes.length > MerchantCsv.MAX_BYTES) throw new ResponseStatusException(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE, "CSV exceeds 5 MiB");
         // Compare existing content hashes first; validate the whole new file before parcel operations.
         var upload = store.initialize(merchant, client, key, hash(bytes), () -> csv.parse(bytes));
-        if (!upload.fresh()) return store.report(merchant, upload.id());
         for (var row : upload.rows()) {
             if (!row.errors().isEmpty()) continue;
             String rowKey = store.rowKey(merchant, key, row.rowNumber());
             if (!store.claim(merchant, upload.id(), row, rowKey)) continue;
             try {
+                store.prepareQuote(merchant, upload.id(), row, () -> orders.quoteForBulk(row.request()));
                 var result = orders.createFromBulk(merchant, rowKey, row.request());
                 store.finish(upload.id(), row.rowNumber(), "SUCCEEDED",
                         new MerchantBulkResponse.Result(row.rowNumber(), true, result.body(), List.of()));
             } catch (MerchantOrderService.PricingUnavailableException exception) {
-                store.failBeforeParcel(merchant, upload.id(), row, "Pricing unavailable; no parcel was requested. Correct the cause before submitting this row with a new upload key.");
+                store.pricingFailed(merchant, upload.id(), row);
             } catch (ResponseStatusException exception) {
                 if (exception.getStatusCode().value() == 400 || exception.getStatusCode().value() == 422) {
                     store.failBeforeParcel(merchant, upload.id(), row, "Parcel validation failed; no parcel was created. Correct this row before a new upload.");
