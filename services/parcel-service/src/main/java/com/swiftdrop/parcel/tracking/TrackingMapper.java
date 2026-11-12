@@ -5,6 +5,7 @@ import com.swiftdrop.parcel.parcel.ParcelStatus;
 import com.swiftdrop.parcel.parcel.StatusHistoryView;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -21,7 +22,7 @@ final class TrackingMapper {
     }
 
     static PublicTrackingResponse toPublic(ParcelResponse parcel, List<StatusHistoryView> history) {
-        List<PublicTimelineEntry> timeline = history.stream()
+        List<PublicTimelineEntry> timeline = statusChanges(history).stream()
                 .map(h -> new PublicTimelineEntry(h.toStatus(), h.occurredAt()))
                 .toList();
         String district = parcel.dropoffAddress() != null ? parcel.dropoffAddress().district() : null;
@@ -35,10 +36,11 @@ final class TrackingMapper {
     }
 
     static ParcelHistoryResponse toHistory(ParcelResponse parcel, List<StatusHistoryView> history) {
-        List<ParcelHistoryEntry> entries = history.stream()
+        List<StatusHistoryView> changes = statusChanges(history);
+        List<ParcelHistoryEntry> entries = changes.stream()
                 .map(h -> new ParcelHistoryEntry(
-                        null, // the ADR 005 sequence is not stored per change until week 3
-                        isCreation(h) ? null : h.fromStatus(),
+                        null, // status_history (M1) does not store the ADR 005 sequence per change
+                        h == changes.get(0) && isSameStatus(h) ? null : h.fromStatus(),
                         h.toStatus(),
                         h.occurredAt(),
                         h.reason()))
@@ -56,9 +58,25 @@ final class TrackingMapper {
                 .collect(Collectors.joining(" "));
     }
 
-    /** The creation entry is stored as CREATED -> CREATED; the contract shows it as null -> CREATED. */
-    private static boolean isCreation(StatusHistoryView h) {
-        return h.fromStatus() == ParcelStatus.CREATED && h.toStatus() == ParcelStatus.CREATED;
+    /**
+     * The status changes of a parcel, oldest first. status_history (M1) also has rows that do not
+     * change the status: the creation row (CREATED -> CREATED, shown as null -> CREATED) and, since
+     * week 4, one row per courier assignment or reassignment (CREATED -> CREATED, with the courier
+     * ids in the reason). The first such row is the creation; later ones are not status changes, so
+     * they are left out. That keeps one timeline row per status and keeps courier ids off the page.
+     */
+    static List<StatusHistoryView> statusChanges(List<StatusHistoryView> history) {
+        List<StatusHistoryView> changes = new ArrayList<>();
+        for (StatusHistoryView h : history) {
+            if (!isSameStatus(h) || changes.isEmpty()) {
+                changes.add(h);
+            }
+        }
+        return changes;
+    }
+
+    private static boolean isSameStatus(StatusHistoryView h) {
+        return h.fromStatus() == h.toStatus();
     }
 
     private static Instant lastUpdatedAt(ParcelResponse parcel, List<PublicTimelineEntry> timeline) {
