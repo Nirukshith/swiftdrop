@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.math.BigDecimal;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -36,7 +37,7 @@ public class MerchantBulkStore {
                     (rs, n) -> new Upload(rs.getObject("id", UUID.class), false, rs.getString("file_hash"), List.of()), merchant, key);
             if (!existing.isEmpty()) {
                 if (!existing.get(0).hash().equals(hash)) throw new ResponseStatusException(HttpStatus.CONFLICT, "Idempotency-Key was used with a different CSV file");
-                return existing.get(0);
+                return new Upload(existing.get(0).id(), false, hash, parse.get());
             }
             Integer count = jdbc.queryForObject("select count(*) from merchant_bulk_uploads where merchant_id=? and client_id=? and created_at > current_timestamp - interval '1 minute'",
                     Integer.class, merchant, client);
@@ -47,7 +48,7 @@ public class MerchantBulkStore {
             for (MerchantCsv.Row row : rows) {
                 var result = new MerchantBulkResponse.Result(row.rowNumber(), false, null, row.errors().isEmpty()
                         ? List.of("Not completed; replay this upload to inspect its outcome. Do not resubmit with a new key.") : row.errors());
-                jdbc.update("insert into merchant_bulk_rows(upload_id,row_number,row_key,request_hash,state,result_json) values (?,?,?,?,?,?)",
+                jdbc.update("insert into merchant_bulk_rows(upload_id,row_number,row_key,request_hash,state,result_json,recovery_version) values (?,?,?,?,?,?,1)",
                         id, row.rowNumber(), rowKey(merchant, key, row.rowNumber()), row.request() == null ? null : hasher.hash("CREATE_ORDER", row.request()),
                         row.errors().isEmpty() ? "WAITING" : "INVALID", json(result));
             }
@@ -57,10 +58,19 @@ public class MerchantBulkStore {
 
     public String rowKey(UUID merchant, String uploadKey, int row) { return hasher.downstreamKey(merchant, "BULK_ROW", uploadKey + ":" + row); }
 
-    /** Commit the reservation before calling M1. Never reclaim an ambiguous attempt. */
+    /** Retain the same reservation/key and reconcile only attempts using the durable-quote protocol. */
     public boolean claim(UUID merchant, UUID upload, MerchantCsv.Row row, String rowKey) {
         return Boolean.TRUE.equals(transaction.execute(status -> {
             lockApproved(merchant);
+            var saved = jdbc.queryForMap("select state, request_hash, recovery_version from merchant_bulk_rows where upload_id=? and row_number=?", upload, row.rowNumber());
+            String state = (String) saved.get("state");
+            if (List.of("SUCCEEDED", "INVALID", "FAILED").contains(state)) return false;
+            if (!hasher.hash("CREATE_ORDER", row.request()).equals(saved.get("request_hash"))) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Stored row validation differs; controlled reconciliation is required");
+            }
+            if (((Number) saved.get("recovery_version")).intValue() == 0 && !state.equals("WAITING")) return false;
+            List<String> reservation = jdbc.queryForList("select row_key from merchant_bulk_references where merchant_id=? and external_reference=?", String.class, merchant, row.request().externalReference());
+            if (!reservation.isEmpty() && reservation.getFirst().equals(rowKey)) return true;
             boolean used = Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from merchant_orders where merchant_id=? and external_reference=?)",
                     Boolean.class, merchant, row.request().externalReference()));
             int inserted = used ? 0 : jdbc.update("insert into merchant_bulk_references(merchant_id,external_reference,upload_id,row_key) values (?,?,?,?) on conflict do nothing",
@@ -70,10 +80,43 @@ public class MerchantBulkStore {
                         List.of("externalReference is already used or reserved by this merchant")));
                 return false;
             }
-            jdbc.update("update merchant_bulk_rows set state='ATTEMPTING', result_json=? where upload_id=? and row_number=?",
+            jdbc.update("update merchant_bulk_rows set state='ATTEMPTING', recovery_version=1, result_json=? where upload_id=? and row_number=?",
                     json(new MerchantBulkResponse.Result(row.rowNumber(), false, null, List.of("Outcome unknown or processing; do not resubmit this reference."))), upload, row.rowNumber());
             return true;
         }));
+    }
+
+    /** Quote commits separately, before the order transaction or any remote parcel write. */
+    public void prepareQuote(UUID merchant, UUID upload, MerchantCsv.Row row, Supplier<BigDecimal> quote) {
+        transaction.executeWithoutResult(status -> {
+            lockApproved(merchant);
+            var saved = jdbc.queryForMap("select r.quoted_fee,r.row_key,r.state from merchant_bulk_rows r where r.upload_id=? and r.row_number=?", upload, row.rowNumber());
+            if (saved.get("quoted_fee") != null) return;
+            Boolean owned = jdbc.queryForObject("select exists(select 1 from merchant_bulk_references where merchant_id=? and external_reference=? and upload_id=? and row_key=?)",
+                    Boolean.class, merchant, row.request().externalReference(), upload, saved.get("row_key"));
+            if (!Boolean.TRUE.equals(owned)) throw new ResponseStatusException(HttpStatus.CONFLICT, "Row reservation must be claimed before pricing");
+            BigDecimal fee = quote.get();
+            if (fee == null || fee.signum() < 0) throw new MerchantOrderService.PricingUnavailableException();
+            jdbc.update("update merchant_bulk_rows set quoted_fee=? where upload_id=? and row_number=?", fee, upload, row.rowNumber());
+        });
+    }
+
+    public BigDecimal requireQuote(UUID merchant, String rowKey) {
+        List<BigDecimal> fees = jdbc.queryForList("select r.quoted_fee from merchant_bulk_rows r join merchant_bulk_uploads u on u.id=r.upload_id where u.merchant_id=? and r.row_key=?", BigDecimal.class, merchant, rowKey);
+        if (fees.size() != 1 || fees.getFirst() == null) throw new IllegalStateException("Original bulk quote is not available for safe replay");
+        return fees.getFirst();
+    }
+
+    public void pricingFailed(UUID merchant, UUID upload, MerchantCsv.Row row) {
+        transaction.executeWithoutResult(status -> {
+            lockApproved(merchant);
+            // A concurrent replay may already have pinned a quote; do not clear its reservation.
+            BigDecimal fee = jdbc.queryForObject("select quoted_fee from merchant_bulk_rows where upload_id=? and row_number=?", BigDecimal.class, upload, row.rowNumber());
+            if (fee != null) return;
+            jdbc.update("delete from merchant_bulk_references where merchant_id=? and external_reference=? and upload_id=?", merchant, row.request().externalReference(), upload);
+            finish(upload, row.rowNumber(), "RETRYABLE", new MerchantBulkResponse.Result(row.rowNumber(), false, null,
+                    List.of("Pricing unavailable; no parcel was requested. Retry this upload with the same file and reference after pricing recovers.")));
+        });
     }
 
     public void assertReferenceAvailable(UUID merchant, String reference, String key, boolean bulk) {

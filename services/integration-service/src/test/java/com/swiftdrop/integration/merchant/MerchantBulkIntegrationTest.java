@@ -73,19 +73,28 @@ class MerchantBulkIntegrationTest {
         mvc.perform(upload(merchant, "again", MerchantCsvTest.row("existing"))).andExpect(jsonPath("$.acceptedRows").value(0));
         verify(parcels, times(1)).createParcel(any(), any(), any(), any());
     }
-    @Test void timeoutKeepsDurableReservationAcrossReplayNewUploadAndSingleOrder() throws Exception {
-        UUID merchant = merchant("uncertain");
-        doThrow(new ResourceAccessException("Response lost")).when(parcels).createParcel(any(), any(), any(), any());
-        mvc.perform(upload(merchant, "timeout", MerchantCsvTest.row("uncertain"))).andExpect(status().isOk())
-                .andExpect(jsonPath("$.results[0].errors[0]").value(org.hamcrest.Matchers.containsString("Outcome unknown")));
-        mvc.perform(upload(merchant, "timeout", MerchantCsvTest.row("uncertain"))).andExpect(status().isOk());
-        mvc.perform(upload(merchant, "different-key", MerchantCsvTest.row("uncertain"))).andExpect(jsonPath("$.acceptedRows").value(0));
-        var parsed = parser.parse(MerchantCsvTest.file(MerchantCsvTest.row("uncertain"))).getFirst().request();
-        mvc.perform(post("/api/v1/merchant/orders").with(jwt().jwt(j -> j.subject("client").claim("role", "MERCHANT").claim("merchantId", merchant.toString())))
-                .contentType("application/json").header("Idempotency-Key", store.rowKey(merchant, "timeout", 2))
+    @Test void timeoutKeepsReservationAndReplaysWithOriginalQuoteAndDownstreamIdentity() throws Exception {
+        UUID merchant=merchant("uncertain"); UUID parcel=UUID.randomUUID();
+        var calls=new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(call -> {
+            if(calls.getAndIncrement()==0) throw new ResourceAccessException("Response lost after provider commit");
+            return new ParcelClient.InternalParcelResponse(parcel.toString(),"SD-recovered","PICKED_UP",merchant.toString(),call.getArgument(2),Instant.now(),Instant.now());
+        }).when(parcels).createParcel(any(),any(),any(),any());
+        mvc.perform(upload(merchant,"timeout",MerchantCsvTest.row("uncertain"))).andExpect(jsonPath("$.acceptedRows").value(0));
+        mvc.perform(upload(merchant,"different-key",MerchantCsvTest.row("uncertain"))).andExpect(jsonPath("$.acceptedRows").value(0));
+        var parsed=parser.parse(MerchantCsvTest.file(MerchantCsvTest.row("uncertain"))).getFirst().request();
+        mvc.perform(post("/api/v1/merchant/orders").with(jwt().jwt(j -> j.subject("client").claim("role","MERCHANT").claim("merchantId",merchant.toString())))
+                .contentType("application/json").header("Idempotency-Key",store.rowKey(merchant,"timeout",2))
                 .content(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(parsed))).andExpect(status().isConflict());
-        verify(parcels, times(1)).createParcel(any(), any(), any(), any());
-        assertThat(orders.count()).isZero();
+        doReturn(new BigDecimal("999.00")).when(pricing).quote(any());
+        mvc.perform(upload(merchant,"timeout",MerchantCsvTest.row("uncertain"))).andExpect(jsonPath("$.acceptedRows").value(1))
+                .andExpect(jsonPath("$.results[0].order.parcelId").value(parcel.toString()))
+                .andExpect(jsonPath("$.results[0].order.status").value("PICKED_UP"))
+                .andExpect(jsonPath("$.results[0].order.fee").value(850));
+        var keys=org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(parcels,times(2)).createParcel(eq(merchant),any(),eq(new BigDecimal("850.00")),keys.capture());
+        assertThat(keys.getAllValues().getFirst()).isEqualTo(keys.getAllValues().getLast());
+        verify(pricing,times(1)).quote(any()); assertThat(orders.count()).isEqualTo(1);
     }
     @Test void pricingFailureHasNoParcelSideEffectAndCanBeCorrectedInANewUpload() throws Exception {
         UUID merchant = merchant("pricing");
@@ -93,7 +102,7 @@ class MerchantBulkIntegrationTest {
         mvc.perform(upload(merchant, "failed", MerchantCsvTest.row("priced"))).andExpect(jsonPath("$.acceptedRows").value(0));
         verifyNoInteractions(parcels);
         doReturn(new BigDecimal("900.00")).when(pricing).quote(any());
-        mvc.perform(upload(merchant, "corrected", MerchantCsvTest.row("priced"))).andExpect(jsonPath("$.acceptedRows").value(1))
+        mvc.perform(upload(merchant, "failed", MerchantCsvTest.row("priced"))).andExpect(jsonPath("$.acceptedRows").value(1))
                 .andExpect(jsonPath("$.results[0].order.fee").value(900));
     }
     @Test void partialParcelFailureDoesNotUndoSuccessfulRowsOrRepeatThem() throws Exception {
@@ -107,7 +116,8 @@ class MerchantBulkIntegrationTest {
         mvc.perform(upload(merchant, "mixed", rows)).andExpect(jsonPath("$.acceptedRows").value(1)).andExpect(jsonPath("$.rejectedRows").value(1));
         mvc.perform(upload(merchant, "mixed", rows)).andExpect(jsonPath("$.acceptedRows").value(1));
         assertThat(orders.count()).isEqualTo(1);
-        verify(parcels, times(2)).createParcel(any(), any(), any(), any());
+        verify(parcels, times(3)).createParcel(any(), any(), any(), any());
+        verify(pricing, times(2)).quote(any());
     }
     @Test void limitsAndReplayExemptionAreEnforcedPerAuthenticatedClient() throws Exception {
         UUID merchant = merchant("rate");
@@ -177,6 +187,21 @@ class MerchantBulkIntegrationTest {
         }
         verify(parcels, times(1)).createParcel(any(), any(), any(), any());
     }
+    @Test void unattemptedRowsResumeWhileLegacyAmbiguousRowsNeverPostBlindly() throws Exception {
+        UUID merchant=merchant("resume");
+        var rows=parser.parse(MerchantCsvTest.file(MerchantCsvTest.row("waiting")));
+        String hash=java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(MerchantCsvTest.file(MerchantCsvTest.row("waiting"))));
+        store.initialize(merchant,"client","waiting-key",hash,rows);
+        mvc.perform(upload(merchant,"waiting-key",MerchantCsvTest.row("waiting"))).andExpect(jsonPath("$.acceptedRows").value(1));
+        rows=parser.parse(MerchantCsvTest.file(MerchantCsvTest.row("legacy")));
+        hash=java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(MerchantCsvTest.file(MerchantCsvTest.row("legacy"))));
+        var legacy=store.initialize(merchant,"client","legacy-key",hash,rows);
+        store.claim(merchant,legacy.id(),rows.getFirst(),store.rowKey(merchant,"legacy-key",2));
+        jdbc.update("update merchant_bulk_rows set recovery_version=0 where upload_id=?",legacy.id());
+        mvc.perform(upload(merchant,"legacy-key",MerchantCsvTest.row("legacy"))).andExpect(jsonPath("$.acceptedRows").value(0));
+        verify(parcels,times(1)).createParcel(any(),any(),any(),any());
+    }
+
     private UUID merchant(String suffix) {
         var merchant = new Merchant(UUID.randomUUID(), "Store", "Contact", suffix + "@test.example", "+94771234567", null, Instant.now());
         merchant.approve("client-" + suffix); return merchants.saveAndFlush(merchant).getId();
