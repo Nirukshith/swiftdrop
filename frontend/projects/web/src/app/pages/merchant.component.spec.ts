@@ -354,7 +354,7 @@ describe('MerchantComponent', () => {
     component.selectTab('deliveries');
     fixture.detectChanges();
 
-    expect(merchantService.getDeliveryLogs).toHaveBeenLastCalledWith('ALL', 1, 20);
+    expect(merchantService.getDeliveryLogs).toHaveBeenLastCalledWith('ALL', 1, 20, 'ALL', undefined, undefined);
     expect(component.deliveryTotalElements()).toBe(41);
     expect(component.deliveryPage()).toBe(1);
     expect(fixture.nativeElement.textContent).toContain('Showing 2 of 41 deliveries');
