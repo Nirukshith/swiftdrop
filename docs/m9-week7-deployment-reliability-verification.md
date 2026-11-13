@@ -1,9 +1,9 @@
 # M9 Week 7 Deployment and Reliability Verification
 
-**Issue:** #236  
-**Branch:** `test/m9-week7-deployment-reliability`  
-**Initial inspected base:** `f1b0f5ed477f552d54e137ed47539eaa5f76aea4`  
-**Verification date:** 2026-11-13  
+**Issue:** #236
+**Branch:** `test/m9-week7-deployment-reliability`
+**Initial inspected base:** `f1b0f5ed477f552d54e137ed47539eaa5f76aea4`
+**Verification date:** 2026-11-13
 
 ## Scope and environment
 
