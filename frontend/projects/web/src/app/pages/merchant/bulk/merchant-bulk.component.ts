@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnDestroy, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Subscription, finalize } from 'rxjs';
@@ -16,7 +16,7 @@ import { CSV_HEADER, MAX_CSV_BYTES, PreviewRow, encodeMerchantCsv, parseMerchant
       <a [href]="templateUrl" download="merchant-orders-template.csv" class="text-indigo-700 underline">Download CSV template</a>
       <div class="space-y-2">
         <label for="csv-file" class="block font-medium">CSV file</label>
-        <input id="csv-file" type="file" accept=".csv,text/csv" [disabled]="busy() || !!submittedCsv" (change)="loadFile($event)" />
+        <input #csvFile id="csv-file" type="file" accept=".csv,text/csv" [disabled]="busy() || !!submittedCsv" (change)="loadFile($event)" />
       </div>
       <p *ngIf="reading()" role="status">Reading CSV…</p>
       <p *ngIf="error()" role="alert" class="rounded border border-red-300 bg-red-50 p-3">{{ error() }}</p>
@@ -56,6 +56,7 @@ import { CSV_HEADER, MAX_CSV_BYTES, PreviewRow, encodeMerchantCsv, parseMerchant
 })
 export class MerchantBulkComponent implements OnDestroy {
   private readonly api = inject(MerchantBulkService);
+  private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('csvFile');
   private subscription?: Subscription;
   private reader?: FileReader;
   private generation = 0;
@@ -109,6 +110,8 @@ export class MerchantBulkComponent implements OnDestroy {
   }
   reset() {
     if (this.busy()) return;
+    const input = this.fileInput()?.nativeElement;
+    if (input) input.value = '';
     this.generation++; this.reader?.abort(); this.reading.set(false); this.rows.set([]); this.result.set(null);
     this.error.set(''); this.uploadKey.set(''); this.submittedCsv = null; this.submittedKey = null; this.sourceRows = {};
   }

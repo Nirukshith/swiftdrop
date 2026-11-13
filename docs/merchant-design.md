@@ -1,5 +1,9 @@
 # Merchant Onboarding and Orders (M6)
 
+Final release setup, current limitations and the reproducible workflow demo are in
+the [Week 8 runbook](m6-week8-release-demo.md). The Week 1 proposal below is retained
+as historical context; merged contracts and current implementation take precedence.
+
 Current implementation and recovery/setup evidence are documented in
 [Week 6 completion](m6-week6-merchant-completion-verification.md) and
 [bulk CSV recovery](merchant-bulk-csv.md). The Week 1 proposal below is historical;

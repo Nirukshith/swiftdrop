@@ -1,5 +1,7 @@
 package com.swiftdrop.operations.pricing;
 
+import com.swiftdrop.common.GlobalExceptionHandler;
+import com.swiftdrop.operations.OperationsSecurityExceptionHandler;
 import com.swiftdrop.operations.SecurityConfig;
 import com.swiftdrop.operations.zones.AuditLogRepository;
 import com.swiftdrop.operations.zones.ZoneAuditService;
@@ -19,11 +21,18 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.mockito.Mockito.when;
 
 @WebMvcTest(controllers = {ZoneController.class, PricingRuleController.class, QuoteController.class})
-@Import({SecurityConfig.class, com.swiftdrop.operations.zones.OperationsMethodSecurity.class})
+@Import({
+        GlobalExceptionHandler.class,
+        OperationsSecurityExceptionHandler.class,
+        PricingExceptionHandler.class,
+        SecurityConfig.class,
+        com.swiftdrop.operations.zones.OperationsMethodSecurity.class
+})
 class PricingAndZoneSecurityTest {
 
     @Autowired
@@ -150,5 +159,71 @@ class PricingAndZoneSecurityTest {
                         .param("weightKg", "2.5")
                         .param("size", "MEDIUM"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(roles = "DISPATCHER")
+    void unknownConfiguredDistrictReturnsNotFoundError() throws Exception {
+        when(zoneRepository.findByDistrictsContaining("Colombo")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/internal/v1/pricing/quote")
+                        .param("pickupDistrict", "Colombo")
+                        .param("dropoffDistrict", "Gampaha")
+                        .param("weightKg", "2.5")
+                        .param("size", "MEDIUM"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("UNKNOWN_DISTRICT"));
+    }
+
+    @Test
+    @WithMockUser(roles = "DISPATCHER")
+    void unservedPickupReturnsUnprocessableEntityError() throws Exception {
+        Zone pickup = new Zone("COLOMBO", Set.of("Colombo"), false, new BigDecimal("500.00"));
+        Zone dropoff = new Zone("GAMPAHA", Set.of("Gampaha"), true, new BigDecimal("500.00"));
+        when(zoneRepository.findByDistrictsContaining("Colombo")).thenReturn(Optional.of(pickup));
+        when(zoneRepository.findByDistrictsContaining("Gampaha")).thenReturn(Optional.of(dropoff));
+        when(pricingRuleRepository.findByActiveTrue()).thenReturn(List.of(
+                new PricingRule(PricingRule.Kind.WEIGHT_BAND, "UP_TO_5KG",
+                        BigDecimal.ZERO, new BigDecimal("5.00"), new BigDecimal("200.00"), true),
+                new PricingRule(PricingRule.Kind.SIZE, "MEDIUM", null, null,
+                        new BigDecimal("150.00"), true)));
+
+        mockMvc.perform(get("/internal/v1/pricing/quote")
+                        .param("pickupDistrict", "Colombo")
+                        .param("dropoffDistrict", "Gampaha")
+                        .param("weightKg", "2.5")
+                        .param("size", "MEDIUM"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("PICKUP_DISTRICT_UNSERVED"));
+    }
+
+    @Test
+    @WithMockUser(roles = "DISPATCHER")
+    void invalidWeightReturnsStructuredValidationError() throws Exception {
+        mockMvc.perform(get("/internal/v1/pricing/quote")
+                        .param("pickupDistrict", "Colombo")
+                        .param("dropoffDistrict", "Gampaha")
+                        .param("weightKg", "0")
+                        .param("size", "MEDIUM"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    @WithMockUser(roles = "DISPATCHER")
+    void missingActivePricingRuleReturnsNotFoundError() throws Exception {
+        Zone pickup = new Zone("COLOMBO", Set.of("Colombo"), true, new BigDecimal("500.00"));
+        Zone dropoff = new Zone("GAMPAHA", Set.of("Gampaha"), true, new BigDecimal("500.00"));
+        when(zoneRepository.findByDistrictsContaining("Colombo")).thenReturn(Optional.of(pickup));
+        when(zoneRepository.findByDistrictsContaining("Gampaha")).thenReturn(Optional.of(dropoff));
+        when(pricingRuleRepository.findByActiveTrue()).thenReturn(List.of());
+
+        mockMvc.perform(get("/internal/v1/pricing/quote")
+                        .param("pickupDistrict", "Colombo")
+                        .param("dropoffDistrict", "Gampaha")
+                        .param("weightKg", "2.5")
+                        .param("size", "MEDIUM"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PRICING_RULE_NOT_FOUND"));
     }
 }

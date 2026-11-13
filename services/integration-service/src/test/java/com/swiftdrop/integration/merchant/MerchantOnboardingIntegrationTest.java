@@ -315,6 +315,36 @@ class MerchantOnboardingIntegrationTest {
         org.mockito.Mockito.verifyNoInteractions(authProvisioningClient);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @ValueSource(strings = {"wrong-operation", "wrong-client", "missing-response", "empty-secret"})
+    @WithMockUser(roles="ADMIN")
+    void invalidRecoveryResponseRetainsTheOriginalAssociationAndCanRetry(String variant) throws Exception {
+        Merchant merchant = register("invalid-recovery@example.test");
+        stubProvision(merchant, null);
+        mockMvc.perform(post("/api/v1/admin/merchants/{id}/approve", merchant.getId()))
+                .andExpect(status().isConflict());
+        var operation = merchantRepository.findById(merchant.getId()).orElseThrow().getProvisioningOperationId();
+        when(authProvisioningClient.replaceCredential(any(), any())).thenAnswer(call ->
+                "missing-response".equals(variant) ? null : new ProvisioningResponse(
+                        "wrong-operation".equals(variant) ? java.util.UUID.randomUUID() : call.getArgument(0),
+                        merchant.getId(), authUser(merchant, true),
+                        "wrong-client".equals(variant) ? "foreign-client" : "client-validation",
+                        "empty-secret".equals(variant) ? " " : "must-not-escape", false));
+        String key = java.util.UUID.randomUUID().toString();
+        mockMvc.perform(post("/api/v1/admin/merchants/{id}/recover-credentials", merchant.getId())
+                .header("Idempotency-Key", key).contentType("application/json").content("{\"confirmReplacement\":true}"))
+                .andExpect(status().isBadGateway()).andExpect(jsonPath("$.clientSecret").doesNotExist());
+        var pending = merchantRepository.findById(merchant.getId()).orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(pending.getStatus()).isEqualTo(MerchantStatus.PENDING);
+        org.assertj.core.api.Assertions.assertThat(pending.getClientId()).isEqualTo("client-validation");
+        org.assertj.core.api.Assertions.assertThat(pending.getProvisioningOperationId()).isEqualTo(operation);
+        when(authProvisioningClient.replaceCredential(any(), any())).thenAnswer(call ->
+                response(call.getArgument(0), merchant, authUser(merchant, true), "recovered-secret", false));
+        mockMvc.perform(post("/api/v1/admin/merchants/{id}/recover-credentials", merchant.getId())
+                .header("Idempotency-Key", key).contentType("application/json").content("{\"confirmReplacement\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.clientId").value("client-validation"));
+    }
+
     private void stubCreatedUser(Merchant merchant) {
         merchant.setAuthUserId("usr-validation");
         merchantRepository.saveAndFlush(merchant);

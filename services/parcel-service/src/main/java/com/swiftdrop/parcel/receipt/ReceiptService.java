@@ -6,8 +6,10 @@ import com.swiftdrop.parcel.parcel.ParcelResponse;
 import com.swiftdrop.parcel.parcel.ParcelStatus;
 import com.swiftdrop.parcel.parcel.StatusHistoryView;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -48,6 +50,12 @@ class ReceiptService {
             parcel = parcelQueryService.getAccessibleParcel(parcelId, caller);
         } catch (AccessDeniedException e) {
             throw new ReceiptAccessDeniedException();
+        } catch (ResponseStatusException e) {
+            // Mapped here, not by a shared handler, so the 404 is always sent as JSON (see ReceiptParcelNotFoundException).
+            if (e.getStatusCode().value() == HttpStatus.NOT_FOUND.value()) {
+                throw new ReceiptParcelNotFoundException();
+            }
+            throw e;
         }
         if (!mayDownload(parcel, caller)) {
             throw new ReceiptAccessDeniedException();

@@ -237,6 +237,54 @@ class ParcelEventPublishingIntegrationTest {
     }
 
     @Test
+    @DisplayName("Repeated status retry does not publish a duplicate event")
+    void shouldNotPublishDuplicateEventForIdempotentStatusRetry() throws Exception {
+        String customerId = UUID.randomUUID().toString();
+        ParcelResponse created = parcelService.createCustomerParcel(customerId, createSampleRequest());
+        String courierId = UUID.randomUUID().toString();
+        parcelService.assignCourier(created.id(), courierId, "dispatcher-01");
+        pollForRecords(TOPIC_CREATED, 1);
+        pollForRecords(TOPIC_ASSIGNED, 1);
+
+        ParcelStatusUpdateRequest update = new ParcelStatusUpdateRequest(
+                ParcelStatus.PICKED_UP, ParcelStatus.CREATED, courierId, null, null, null
+        );
+        parcelService.updateStatus(created.id(), update, courierId);
+        List<ConsumerRecord<String, String>> firstTransition = pollForRecords(TOPIC_STATUS_CHANGED, 1);
+        assertThat(firstTransition).anyMatch(record -> record.key().equals(created.id()));
+
+        parcelService.updateStatus(
+                created.id(),
+                new ParcelStatusUpdateRequest(
+                        ParcelStatus.PICKED_UP, ParcelStatus.PICKED_UP, courierId, null, null, null
+                ),
+                courierId
+        );
+
+        List<ConsumerRecord<String, String>> retryRecords = pollForRecords(TOPIC_STATUS_CHANGED, 1);
+        assertThat(retryRecords).noneMatch(record -> record.key().equals(created.id()));
+    }
+
+    @Test
+    @DisplayName("Rejected status transition does not publish a success event")
+    void shouldNotPublishEventForRejectedStatusTransition() throws Exception {
+        String customerId = UUID.randomUUID().toString();
+        ParcelResponse created = parcelService.createCustomerParcel(customerId, createSampleRequest());
+        pollForRecords(TOPIC_CREATED, 1);
+
+        assertThatThrownBy(() -> parcelService.updateStatus(
+                created.id(),
+                new ParcelStatusUpdateRequest(
+                        ParcelStatus.DELIVERED, ParcelStatus.CREATED, null, null, null, null
+                ),
+                null
+        )).isInstanceOf(RuntimeException.class);
+
+        List<ConsumerRecord<String, String>> records = pollForRecords(TOPIC_STATUS_CHANGED, 1);
+        assertThat(records).noneMatch(record -> record.key().equals(created.id()));
+    }
+
+    @Test
     @DisplayName("Should publish parcel.status-changed.v1 on cancellation before pickup")
     void shouldPublishStatusChangedEventOnCancellation() throws Exception {
         String customerId = UUID.randomUUID().toString();

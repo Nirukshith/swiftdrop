@@ -145,7 +145,7 @@ class ReceiptServiceTest {
         when(parcelQueryService.getAccessibleParcel(eq("missing"), any()))
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Parcel not found with id: missing"));
 
-        assertThatThrownBy(() -> service.receipt("missing", owner)).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.receipt("missing", owner)).isInstanceOf(ReceiptParcelNotFoundException.class);
     }
 
     @Test
