@@ -40,6 +40,11 @@ class ReceiptExceptionHandler {
         return json(HttpStatus.FORBIDDEN, ACCESS_DENIED, ReceiptAccessDeniedException.MESSAGE, request);
     }
 
+    @ExceptionHandler(ReceiptParcelNotFoundException.class)
+    ResponseEntity<ErrorResponse> notFound(ReceiptParcelNotFoundException ex, HttpServletRequest request) {
+        return json(HttpStatus.NOT_FOUND, NOT_FOUND, ReceiptParcelNotFoundException.MESSAGE, request);
+    }
+
     @ExceptionHandler(ParcelNotDeliveredException.class)
     ResponseEntity<ErrorResponse> notDelivered(ParcelNotDeliveredException ex, HttpServletRequest request) {
         return json(HttpStatus.CONFLICT, NOT_DELIVERED, ex.getMessage(), request);
