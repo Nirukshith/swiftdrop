@@ -90,14 +90,16 @@ export class CustomerService {
   // Parcel Operations (Real Backend via parcel-service)
   // =========================================================================
 
-  listParcels(statusFilter?: ParcelStatus): Observable<CustomerParcel[]> {
-    let params = new HttpParams().set('page', '0').set('size', '20');
+  listParcels(
+    statusFilter?: ParcelStatus,
+    page = 0,
+    size = 20
+  ): Observable<CustomerParcelPage> {
+    let params = new HttpParams().set('page', page.toString()).set('size', size.toString());
     if (statusFilter) {
       params = params.set('status', statusFilter);
     }
-    return this.http.get<CustomerParcelPage>('/api/v1/parcels', { params }).pipe(
-      map((page) => page.content)
-    );
+    return this.http.get<CustomerParcelPage>('/api/v1/parcels', { params });
   }
 
   getParcel(id: string): Observable<CustomerParcel | undefined> {

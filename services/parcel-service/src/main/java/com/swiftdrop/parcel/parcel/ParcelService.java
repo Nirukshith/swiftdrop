@@ -219,10 +219,9 @@ public class ParcelService {
         Parcel parcel = parcelRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Parcel not found with id: " + id));
 
-        if (!isInternalOrAdmin && requestingUserId != null) {
-            if (parcel.getCustomerId() != null && !parcel.getCustomerId().equals(requestingUserId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: you do not own this parcel");
-            }
+        if (!isInternalOrAdmin
+                && (requestingUserId == null || !requestingUserId.equals(parcel.getCustomerId()))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: you do not own this parcel");
         }
         return ParcelResponse.from(parcel);
     }
@@ -240,7 +239,7 @@ public class ParcelService {
         Parcel parcel = parcelRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Parcel not found with id: " + id));
 
-        if (requestingUserId != null && parcel.getCustomerId() != null && !parcel.getCustomerId().equals(requestingUserId)) {
+        if (requestingUserId == null || !requestingUserId.equals(parcel.getCustomerId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: you do not own this parcel");
         }
 
