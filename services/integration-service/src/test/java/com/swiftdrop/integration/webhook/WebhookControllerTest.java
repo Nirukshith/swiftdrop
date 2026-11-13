@@ -287,6 +287,20 @@ class WebhookControllerTest {
     }
 
     @Test
+    @DisplayName("GET /deliveries accepts the persisted PENDING status")
+    void listDeliveries_acceptsPendingStatus() throws Exception {
+        when(webhookService.listDeliveries(eq(merchantId), eq("PENDING"), any(), any(), any(), eq(0), eq(20)))
+                .thenReturn(new WebhookDeliveryLogPage(List.of(), 0, 0, 0, 20));
+
+        mockMvc.perform(get("/api/v1/merchant/webhooks/deliveries")
+                        .with(merchantJwt())
+                        .param("status", "PENDING"))
+                .andExpect(status().isOk());
+
+        verify(webhookService).listDeliveries(eq(merchantId), eq("PENDING"), any(), any(), any(), eq(0), eq(20));
+    }
+
+    @Test
     @DisplayName("GET /deliveries/{deliveryId} returns delivery detail")
     void getDeliveryDetail_success() throws Exception {
         UUID deliveryId = UUID.randomUUID();
