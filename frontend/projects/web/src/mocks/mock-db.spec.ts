@@ -33,6 +33,35 @@ describe('MockParcelDb', () => {
       expect(db.listParcels(new URLSearchParams('status=LOST')).status).toBe(400);
     });
 
+    it('filters by Asia/Colombo creation dates, inclusive, like the real endpoint', () => {
+      const all = (db.listParcels(new URLSearchParams('size=50')).body as ParcelPageResponse).content;
+      const day = (iso: string) => new Date(Date.parse(iso) + 5.5 * 3600_000).toISOString().slice(0, 10);
+      const someDay = day(all[0].createdAt);
+
+      const sameDay = (db.listParcels(new URLSearchParams(`from=${someDay}&to=${someDay}&size=50`)).body as ParcelPageResponse).content;
+      expect(sameDay.length).toBeGreaterThan(0);
+      expect(sameDay.every((p) => day(p.createdAt) === someDay)).toBe(true);
+      expect(sameDay.length).toBe(all.filter((p) => day(p.createdAt) === someDay).length);
+    });
+
+    it('searches tracking numbers case-insensitively and ignores a blank search', () => {
+      const all = (db.listParcels(new URLSearchParams('size=50')).body as ParcelPageResponse).content;
+      const part = all[0].trackingNumber.slice(-6).toLowerCase();
+
+      const found = (db.listParcels(new URLSearchParams(`q=${part}&size=50`)).body as ParcelPageResponse).content;
+      expect(found.map((p) => p.trackingNumber)).toContain(all[0].trackingNumber);
+      expect(found.every((p) => p.trackingNumber.toLowerCase().includes(part))).toBe(true);
+      expect((db.listParcels(new URLSearchParams('q=%20%20&size=50')).body as ParcelPageResponse).totalElements).toBe(all.length);
+    });
+
+    it('rejects a reversed range, a bad date and a long search with VALIDATION_FAILED', () => {
+      for (const query of ['from=2026-11-30&to=2026-11-01', 'from=2026-13-40', 'to=yesterday', `q=${'x'.repeat(33)}`]) {
+        const result = db.listParcels(new URLSearchParams(query));
+        expect(result.status).toBe(400);
+        expect((result.body as { code: string }).code).toBe('VALIDATION_FAILED');
+      }
+    });
+
     it('caps the page size at 50 like the contract', () => {
       expect((db.listParcels(new URLSearchParams('size=500')).body as ParcelPageResponse).size).toBe(50);
     });

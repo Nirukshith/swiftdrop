@@ -27,7 +27,7 @@ No separately tracked additional-fix issue is assigned to M2.
 | Requirement | Where | Status |
 | :--- | :--- | :--- |
 | CU-04 live tracking via SSE | `tracking` package, parcel detail and public pages | Done; verified live below, including reconnect |
-| CU-05 history, PDF receipt download | History page, `receipt` package | Done, except history **filters** beyond status (needs M1, see below) |
+| CU-05 history, PDF receipt download | History page, `receipt` package | Done; history filters (dates, search) added in the follow-up below |
 | CU-06 public tracking page, no login | `/track`, `/track/:trackingNo` | Done; masked fields only |
 | CU-07 rate delivery (+) | Rating card, `POST/GET /rating` | Done; verified live below |
 | NF-01 live update within 2 s | Kafka → tracking → SSE | Done: automated check, and 120–160 ms measured through the gateway |
@@ -214,12 +214,87 @@ What the run shows:
 The browser UI was not driven. The frontend container serves the app shell for each route. Page
 behaviour is covered by the frontend tests.
 
+## Follow-up: history filters (CU-05), completed 2026-11-13
+
+The remaining CU-05 item was done in three steps:
+
+1. **Contract agreed with M1** (#275): optional `from` / `to` dates (inclusive, Asia/Colombo), a
+   case-insensitive tracking-number search `q` (blank means none, at most 32 characters), and the
+   order `createdAt` descending, then `id` descending. `400 VALIDATION_FAILED` for bad input.
+2. **M1 implemented the endpoint** (#280).
+3. **M2 added the history page filters:**
+   - From / To and a tracking-number search next to the status filter, applied together from
+     page 1 and kept in the URL
+   - Clear filters
+   - the same checks as the endpoint before sending, and a server `400` shown as a message
+   - "No parcels match these filters"
+   - the list labelled newest first again
+   - the mock filtering like the endpoint
+   - consumer tests against M1's endpoint in `CustomerHistoryIntegrationTest`
+
+Commands and results:
+
+```text
+mvn -B verify -pl services/parcel-service -am
+common:          Tests run: 13,  Failures: 0, Errors: 0, Skipped: 0
+parcel-service:  Tests run: 247, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+
+cd frontend && npm ci && npm test -- --ci && npm run build
+Test Suites: 65 passed, 65 total
+Tests:       509 passed, 509 total
+Application bundle generation complete.
+```
+
+New tests:
+
+- **Backend** (`CustomerHistoryIntegrationTest`, +5, signed tokens against M1's endpoint):
+  - Colombo day boundaries (23:59:59 included, 00:00 the next day not)
+  - case-insensitive search; blank or empty `q` is no search; another customer's parcels never
+    match
+  - status, dates and search combined
+  - newest first across pages, with `id` descending on ties
+  - the three `400` cases (32 characters allowed); no token `401`
+- **Frontend** (+17):
+  - the filters render
+  - dates and trimmed search applied together and written to the URL
+  - From after To and a 33-character search are not sent
+  - blank search means none
+  - Clear filters resets everything, including the status
+  - empty states with and without filters
+  - the server `400` message is shown
+  - filters read from the URL, and invalid URL values dropped
+  - the service sends and omits the parameters correctly
+  - the mock filters by Colombo date and search, and rejects bad input
+
+Live check through the gateway (Docker, parcel-service built from the latest `development`). A real
+customer created three parcels with real pricing, and one was backdated in `parcel_db` to
+2026-11-01 10:00 Colombo time so the date filter has something to separate:
+
+```text
+customer A parcels: SD-20261113-MA9IM3 SD-20261113-JU1MB7 SD-20261113-TJV56J   customer B parcel: SD-20261113-T5Z5OS
+ok    newest first (T3 T2 T1) (SD-20261113-TJV56J SD-20261113-JU1MB7 SD-20261113-MA9IM3)
+ok    from=to=2026-11-01 (SD-20261113-MA9IM3)
+ok    from=2026-11-13 (SD-20261113-TJV56J SD-20261113-JU1MB7)
+ok    to=2026-11-01 (SD-20261113-MA9IM3)
+ok    q=ju1mb7 (lower case) (SD-20261113-JU1MB7)
+ok    q=%20%20 (blank) is no search (SD-20261113-TJV56J SD-20261113-JU1MB7 SD-20261113-MA9IM3)
+ok    q=<B's number> finds nothing ()
+ok    status=CREATED&from=2026-11-13&q=ju1mb7 (SD-20261113-JU1MB7)
+ok    from after to (400 VALIDATION_FAILED)
+ok    bad date (400 VALIDATION_FAILED)
+ok    q of 33 characters (400 VALIDATION_FAILED)
+ok    no token (401)
+### Result: 0 failed check(s)
+```
+
+The browser UI was not driven; the frontend tests cover the page.
+
 ## Remaining work
 
 | Item | Why | Owner |
 | :--- | :--- | :--- |
-| History filters beyond status (date range, tracking-number search) and a defined newest-first order (CU-05) | `GET /api/v1/parcels` is M1's endpoint and contract. Proposal in `docs/tracking-design.md` section 12, waiting for M1's agreement | M1, then M2 for the UI |
-| Ingress & Helm chart | Bonus work for M2 (ADR 006) | M2 (bonus) |
+| Ingress & Helm chart | Bonus work for M2 (ADR 006), not required for #219 | M2 (bonus) |
 
 ## Environment note
 
@@ -231,8 +306,8 @@ the default builder and again with `COMPOSE_BAKE=false`. Building each image wit
 
 ## Acceptance checklist (Issue #219)
 
-- [ ] All SRS requirements in M2's scope are implemented. **Not complete:** CU-05 history filters
-  beyond status need M1's contract change (proposal in section 12). Helm chart is bonus.
+- [x] All SRS requirements in M2's scope are implemented, including CU-05 history filters (see
+  "Follow-up" above). The Helm chart is bonus work under ADR 006.
 - [x] Authorization, validation, error handling and failure/retry behaviour are covered.
 - [x] Relevant backend and frontend tests pass, with results recorded.
 - [x] Integration with dependent services (auth, M1 parcel workflow, pricing, Kafka, gateway) is verified.
