@@ -204,12 +204,31 @@ export class DispatchZonesComponent {
   readonly mutationError = signal<string | null>(null);
   editingZoneId: string | null = null;
   readonly districts = [
+    'Ampara',
+    'Anuradhapura',
+    'Badulla',
+    'Batticaloa',
     'Colombo',
-    'Gampaha',
-    'Kandy',
     'Galle',
+    'Gampaha',
+    'Hambantota',
+    'Jaffna',
     'Kalutara',
+    'Kandy',
+    'Kegalle',
+    'Kilinochchi',
     'Kurunegala',
+    'Mannar',
+    'Matale',
+    'Matara',
+    'Monaragala',
+    'Mullaitivu',
+    'Nuwara Eliya',
+    'Polonnaruwa',
+    'Puttalam',
+    'Ratnapura',
+    'Trincomalee',
+    'Vavuniya',
   ];
 
   readonly zones = signal<Zone[]>([]);
