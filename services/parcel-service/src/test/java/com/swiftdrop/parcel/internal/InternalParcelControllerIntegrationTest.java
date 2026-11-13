@@ -13,6 +13,8 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.dao.DataAccessException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -24,7 +26,9 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.*;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -44,7 +48,7 @@ class InternalParcelControllerIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Autowired
+    @SpyBean
     private ParcelRepository parcelRepository;
 
     @Autowired
@@ -52,6 +56,9 @@ class InternalParcelControllerIntegrationTest {
 
     @Autowired
     private StatusHistoryRepository statusHistoryRepository;
+
+    @Autowired
+    private ParcelService parcelService;
 
     @MockBean
     private KafkaTemplate<String, Object> kafkaTemplate;
@@ -377,6 +384,21 @@ class InternalParcelControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("Merchant idempotency reservation rolls back when parcel persistence fails")
+    void testMerchantIdempotencyRollsBackWithParcelFailure() {
+        doThrow(new IllegalStateException("simulated parcel persistence failure"))
+                .when(parcelRepository).save(org.mockito.ArgumentMatchers.any(Parcel.class));
+
+        assertThatThrownBy(() -> parcelService.createMerchantParcel(
+                merchantRequest("mch-merchant-rollback", "EXT-ROLLBACK"),
+                "rollback-key"
+        )).isInstanceOf(DataAccessException.class);
+
+        assertThat(parcelRepository.count()).isZero();
+        assertThat(merchantParcelIdempotencyRepository.count()).isZero();
+    }
+
+    @Test
     @DisplayName("Merchant parcel idempotency rejects the same key with a different payload")
     void testMerchantParcelIdempotencyConflict() throws Exception {
         InternalCreateParcelRequest first = merchantRequest("mch-merchant-1", "EXT-FIRST");
@@ -547,6 +569,42 @@ class InternalParcelControllerIntegrationTest {
 
         Parcel updated = parcelRepository.findById(parcel.getId()).orElseThrow();
         assertThat(updated.getSequence()).isEqualTo(initialSequence);
+    }
+
+    @Test
+    @DisplayName("Concurrent assignment allows one writer and rejects the stale writer")
+    void testConcurrentAssignmentDoesNotOverwriteCourier() throws Exception {
+        Parcel parcel = createSampleParcel("SD-20261027-CONCUR1", ParcelStatus.CREATED, null);
+        Callable<Boolean> assignA = () -> assignSucceeded(parcel.getId(), "usr-courier-A");
+        Callable<Boolean> assignB = () -> assignSucceeded(parcel.getId(), "usr-courier-B");
+
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            List<Boolean> outcomes = executor.invokeAll(List.of(assignA, assignB)).stream()
+                    .map(future -> {
+                        try {
+                            return future.get();
+                        } catch (Exception exception) {
+                            throw new RuntimeException(exception);
+                        }
+                    })
+                    .toList();
+
+            assertThat(outcomes).containsExactlyInAnyOrder(true, false);
+            assertThat(parcelRepository.findById(parcel.getId()).orElseThrow().getCourierId())
+                    .isIn("usr-courier-A", "usr-courier-B");
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private boolean assignSucceeded(String parcelId, String courierId) {
+        try {
+            parcelService.assignCourier(parcelId, courierId, "dispatcher-1");
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        }
     }
 
     @Test
