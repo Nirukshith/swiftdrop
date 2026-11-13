@@ -55,4 +55,7 @@ export interface ParcelListQuery {
   page?: number;
   size?: number;
   status?: ParcelStatus | null;
+  from?: string | null;
+  to?: string | null;
+  q?: string | null;
 }
