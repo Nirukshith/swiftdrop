@@ -53,7 +53,14 @@ class PricingAccessTokenTest {
 
     @Test void missingCredentialsFailWithoutAnHttpRequest() {
         tokens = new PricingAccessToken(RestClient.create("http://127.0.0.1:9"), "", "", Clock.systemUTC());
+        assertThat(tokens.hasConfiguration()).isFalse();
         assertThatThrownBy(tokens::get).isInstanceOf(IllegalStateException.class).hasMessageContaining("not configured");
+    }
+
+    @Test void partialOAuthConfigurationRemainsSelectedAndFailsClosed() {
+        tokens = new PricingAccessToken(RestClient.create("http://127.0.0.1:9"), "configured-client", "", Clock.systemUTC());
+        assertThat(tokens.hasConfiguration()).isTrue();
+        assertThatThrownBy(tokens::get).hasMessageContaining("not configured");
     }
 
     @Test void acceptsTheContractsOptionalScopeField() {

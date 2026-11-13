@@ -1,13 +1,15 @@
 # M6 Week 6 completion — #223
 
-Implementation is split by the existing tracked issues. All PRs target development
-and remain unmerged for owner/maintainer review:
+Current merge status: contract PR #261 and onboarding recovery PR #266 are
+already merged into development. PR #260 is the remaining merchant bulk/pricing
+PR; the agent has not merged any PR. The pricing-client conflict with current
+development `bb43476` is resolved by preserving both existing authentication modes.
+
+Historical implementation split:
 
 1. [#261 recovery contract](https://github.com/Nirukshith/swiftdrop/pull/261).
-2. [#266 onboarding recovery](https://github.com/Nirukshith/swiftdrop/pull/266),
-   implementing #207 against that contract.
-3. [#260 merchant bulk/pricing integration](https://github.com/Nirukshith/swiftdrop/pull/260),
-   consuming recovery and completing #223. Merge in this order after review.
+2. [#266 onboarding recovery](https://github.com/Nirukshith/swiftdrop/pull/266).
+3. [#260 merchant bulk/pricing integration](https://github.com/Nirukshith/swiftdrop/pull/260).
 
 The user explicitly confirmed M10/M5 owner agreement and approved the cross-member
 implementation and same-client ADMIN-confirmed credential replacement policy.
@@ -46,8 +48,9 @@ with only pricing:read scope:
 
 | Variable | Purpose |
 | --- | --- |
-| MERCHANT_PRICING_CLIENT_ID | Dedicated machine client ID; ordinary merchant clients are not granted pricing access. |
-| MERCHANT_PRICING_CLIENT_SECRET | Dedicated client secret; never commit its value. |
+| MERCHANT_PRICING_CLIENT_ID | Optional explicit OAuth mode: dedicated pricing machine client ID. |
+| MERCHANT_PRICING_CLIENT_SECRET | Required with the OAuth client ID; never commit its value. |
+| INTERNAL_PRICING_SERVICE_TOKEN | Existing merged internal-service mode when OAuth is unset; must match operations. |
 | SERVICES_AUTH_BASE_URL | Existing auth base URL; default http://localhost:8081. |
 | SERVICES_OPERATIONS_BASE_URL | Existing operations base URL; default http://localhost:8083. |
 | SERVICES_PARCEL_BASE_URL | Existing parcel base URL; default http://localhost:8082. |
@@ -70,7 +73,14 @@ lost credential handoff, the ADMIN selects the Pending or Approved list and
 explicitly confirms **Recover credentials**. Browser steps are provided for
 reproduction; an interactive browser session is not claimed as executed evidence.
 
-## Exact verification commands
+When either OAuth credential variable is explicitly set, OAuth remains selected;
+partial configuration, token exchange failure or denied access cannot silently
+switch to another identity. When both OAuth variables are unset, M6 retains the
+internal service-token mechanism merged by M10 in #267, using the existing
+pricing-service configuration. Exactly one credential type is sent. If neither
+identity is available, pricing fails before a parcel request.
+
+## Prior completion verification commands
 
 Java 21.0.13, Node 22.23.4 and Docker. A local verification checkout combined the
 separate PR branches; no GitHub PR was merged.
@@ -168,5 +178,36 @@ trigger separately verifies a local M6 persistence failure after provider comple
   to close every separately tracked #208 consumer task or modify M1 customer code.
 
 Implementation and verification are complete for #223's merchant scope, with the
-above migration/operational safeguards documented. Release requires maintainer
-review and the stated PR merge order; no PR was merged by the agent.
+above migration/operational safeguards documented. Contract/recovery dependencies are now merged. Release requires maintainer
+review and merge of #260; no PR was merged by the agent.
+
+
+## Merge-resolution verification on development bb43476
+
+PR #261 and PR #266 are now merged by the maintainer. Updating #260 against current
+development exposed one conflict in HttpPricingQuoteClient after M10 #267 added
+internal service-token pricing. Resolution retains both existing modes: explicit
+OAuth takes precedence, incomplete/failed OAuth stays denied, and unset OAuth
+uses the already configured internal service token. Requests send one credential
+kind only. No upstream owner code or validation was discarded.
+
+Added regression checks cover internal-token request headers, OAuth preference
+without a leaked second credential, incomplete OAuth without silent fallback, and
+absence of both identities. This resolution introduces no new production secret
+or API payload. The deployed internal-token configuration remains compatible.
+
+```sh
+mvn -B verify -pl services/auth-service,services/parcel-service,services/operations-service,services/integration-service -am
+M6_VERIFY_PRICING_MODE=oauth python3 services/integration-service/src/test/resources/merchant/run_isolated_verification.py
+M6_VERIFY_PRICING_MODE=internal python3 services/integration-service/src/test/resources/merchant/run_isolated_verification.py
+```
+
+Results: full reactor BUILD SUCCESS; **883 tests**, zero failures/errors/skips
+(common 13, auth 231, parcel 222, operations 163, integration 254).
+The **149-check OAuth run** and **149-check internal-token run** both passed with
+real providers, original-quote recovery and credential handoff faults. Each also
+verifies valid internal-token pricing, invalid-token denial and ordinary merchant
+JWT denial. All temporary fixtures were cleaned up. The first consecutive-mode
+startup encountered TCP TIME_WAIT in the fixture's preflight; matching the HTTP
+servers' SO_REUSEADDR setting resolved it after confirming all ports were free.
+No application test or authorization condition was skipped or weakened.

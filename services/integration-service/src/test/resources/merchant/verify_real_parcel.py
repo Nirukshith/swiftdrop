@@ -117,6 +117,11 @@ def main():
     if provider:
         quote_path = '/internal/v1/pricing/quote?pickupDistrict=Colombo&dropoffDistrict=Gampaha&weightKg=1.5&size=SMALL'
         expect(call(provider, quote_path), 401, 'current pricing provider rejects unauthenticated M6 call')
+        internal_quote=expect(call(provider, quote_path, internal_token=os.environ['M6_VERIFY_INTERNAL_PRICING_TOKEN']),
+            200, 'real internal-service-token pricing quote')
+        check(internal_quote['totalFee']==850, 'internal service mode uses the same real pricing rules')
+        expect(call(provider, quote_path, internal_token='intentionally-invalid-pricing-token'),
+            401, 'invalid internal pricing credential remains denied')
         expect(call(provider, quote_path, token=first_token), 403, 'ordinary merchant token cannot read internal pricing')
         pricing = expect(call(AUTH, '/api/v1/auth/token', 'POST', {
             'grant_type': 'client_credentials', 'client_id': os.environ['M6_VERIFY_PRICING_CLIENT_ID'],

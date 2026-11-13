@@ -36,6 +36,9 @@ public class PricingAccessToken {
         this.clock = clock;
     }
 
+    /** Partial configuration is intentional OAuth selection and must fail closed in get(). */
+    public boolean hasConfiguration() { return !clientId.isBlank() || !clientSecret.isBlank(); }
+
     public synchronized String get() {
         if (token != null && clock.instant().isBefore(expiresAt)) return token;
         if (clientId.isBlank() || clientSecret.isBlank()) {

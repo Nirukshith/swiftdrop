@@ -35,6 +35,7 @@ logs = []
 proxies = []
 password = secrets.token_urlsafe(24)
 internal_token = secrets.token_urlsafe(32)
+pricing_internal_token = secrets.token_urlsafe(32)
 admin_password = secrets.token_urlsafe(24) + 'A1!'
 
 
@@ -72,6 +73,9 @@ try:
     print('Private runtime logs: ' + str(LOG_DIR), flush=True)
     for port in [19181, 19182, 19184, 19185, 19186, 19187, 19192, 19194, 19125]:
         with socket.socket() as sock:
+            # A just-cleaned verification run can leave TCP TIME_WAIT sockets.
+            # Match the HTTP servers' reuse setting without replacing an active listener.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(('127.0.0.1', port))
     for module in ['auth', 'parcel', 'operations', 'integration']:
         jar = ROOT / f'services/{module}-service/target/{module}-service-0.1.0-SNAPSHOT.jar'
@@ -124,6 +128,7 @@ try:
         SPRING_KAFKA_BOOTSTRAP_SERVERS='127.0.0.1:19192', KAFKA_BOOTSTRAP_SERVERS='127.0.0.1:19192',
         SPRING_MAIL_HOST='127.0.0.1', SPRING_MAIL_PORT='19125',
         INTERNAL_MERCHANT_SERVICE_TOKEN=internal_token, INTERNAL_NOTIFICATIONS_SERVICE_TOKEN=secrets.token_urlsafe(32),
+        INTERNAL_PRICING_SERVICE_TOKEN=pricing_internal_token,
         JWKS_URL='http://127.0.0.1:19181/.well-known/jwks.json',
         SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI='http://127.0.0.1:19181/.well-known/jwks.json',
         SWIFTDROP_SECURITY_JWKS_URL='http://127.0.0.1:19181/.well-known/jwks.json',
@@ -157,8 +162,12 @@ try:
             pricing_client = provision('/internal/v1/clients', {'merchantId': pricing_identity,
                 'clientName': 'Isolated M6 pricing service', 'scopes': ['pricing:read']})
             # Private fixture credentials configure only M6; no human role is elevated.
-            base_env.update(MERCHANT_PRICING_CLIENT_ID=pricing_client['clientId'],
-                MERCHANT_PRICING_CLIENT_SECRET=pricing_client['clientSecret'])
+            if os.environ.get('M6_VERIFY_PRICING_MODE', 'oauth') == 'internal':
+                base_env['MERCHANT_PRICING_CLIENT_ID'] = ''
+                base_env['MERCHANT_PRICING_CLIENT_SECRET'] = ''
+            else:
+                base_env.update(MERCHANT_PRICING_CLIENT_ID=pricing_client['clientId'],
+                    MERCHANT_PRICING_CLIENT_SECRET=pricing_client['clientSecret'])
 
     request = urllib.request.Request('http://127.0.0.1:19181/internal/v1/users', method='POST',
         headers={'Content-Type': 'application/json', 'X-Internal-Service-Token': internal_token},
@@ -192,6 +201,7 @@ try:
         M6_VERIFY_FAULT_AUTH_URL='http://127.0.0.1:19187',
         M6_VERIFY_PRICING_CLIENT_ID=pricing_client['clientId'],
         M6_VERIFY_PRICING_CLIENT_SECRET=pricing_client['clientSecret'],
+        M6_VERIFY_INTERNAL_PRICING_TOKEN=pricing_internal_token,
         M6_VERIFY_INTERNAL_TOKEN=internal_token)
     path = ROOT / 'services/integration-service/src/test/resources/merchant/verify_real_parcel.py'
     spec = importlib.util.spec_from_file_location('m6_verifier', path)

@@ -16,15 +16,20 @@ import java.math.RoundingMode;
 public class PricingQuoteClient {
 
     private static final Logger log = LoggerFactory.getLogger(PricingQuoteClient.class);
+    private static final String INTERNAL_TOKEN_HEADER = "X-Internal-Service-Token";
+
     private final RestClient restClient;
     private final String quoteUrl;
+    private final String internalPricingToken;
 
     public PricingQuoteClient(
             RestClient.Builder restClientBuilder,
-            @Value("${swiftdrop.pricing.quote-url:http://localhost:8083/internal/v1/pricing/quote}") String quoteUrl
+            @Value("${swiftdrop.pricing.quote-url:http://localhost:8083/internal/v1/pricing/quote}") String quoteUrl,
+            @Value("${swiftdrop.security.internal.tokens.pricing-service:swiftdrop-internal-pricing-secret-2026}") String internalPricingToken
     ) {
         this.restClient = restClientBuilder.build();
         this.quoteUrl = quoteUrl;
+        this.internalPricingToken = internalPricingToken;
     }
 
     public PricingQuoteResponse fetchQuoteDetails(String pickupDistrict, String dropoffDistrict, BigDecimal weightKg, ParcelSize size) {
@@ -36,6 +41,7 @@ public class PricingQuoteClient {
                             .queryParam("weightKg", weightKg.toPlainString())
                             .queryParam("size", size.name())
                             .build())
+                    .header(INTERNAL_TOKEN_HEADER, internalPricingToken)
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (req, res) -> {
                         log.warn("Pricing quote endpoint returned status {}", res.getStatusCode());

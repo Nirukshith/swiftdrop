@@ -4,43 +4,58 @@ import java.math.BigDecimal;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClient;
 
 @Component
 public class HttpPricingQuoteClient implements PricingQuoteClient {
-
+    private static final String INTERNAL_TOKEN_HEADER = "X-Internal-Service-Token";
     private final RestClient restClient;
     private final PricingAccessToken tokens;
+    private final String internalPricingToken;
 
     @Autowired
-    public HttpPricingQuoteClient(@Value("${services.operations.base-url:http://localhost:8083}") String baseUrl,
-                                  PricingAccessToken tokens) {
-        this(RestClient.builder().baseUrl(baseUrl).build(), tokens);
+    public HttpPricingQuoteClient(
+            @Value("${services.operations.base-url:http://localhost:8083}") String baseUrl,
+            PricingAccessToken tokens,
+            @Value("${swiftdrop.security.internal.tokens.pricing-service:}") String internalPricingToken) {
+        this(RestClient.builder().baseUrl(baseUrl).build(), tokens, internalPricingToken);
     }
 
     HttpPricingQuoteClient(RestClient restClient, PricingAccessToken tokens) {
+        this(restClient, tokens, "");
+    }
+
+    HttpPricingQuoteClient(RestClient restClient, PricingAccessToken tokens, String internalPricingToken) {
         this.restClient = restClient;
         this.tokens = tokens;
+        this.internalPricingToken = internalPricingToken;
     }
 
     @Override
     public BigDecimal quote(CreateMerchantOrderRequest request) {
-        String token = tokens.get();
+        // Explicit OAuth configuration wins. Invalid/incomplete OAuth never silently falls back.
+        String token = tokens.hasConfiguration() ? tokens.get() : null;
+        if (token == null && internalPricingToken.isBlank()) {
+            throw new IllegalStateException("Merchant pricing service credentials are not configured");
+        }
         QuoteResponse response;
         try {
             response = restClient.get()
-                .uri(uri -> uri.path("/internal/v1/pricing/quote")
-                        .queryParam("pickupDistrict", request.pickupAddress().district())
-                        .queryParam("dropoffDistrict", request.dropoffAddress().district())
-                        .queryParam("weightKg", request.weightKg())
-                        .queryParam("size", request.size().name())
-                        .build())
-                .headers(headers -> headers.setBearerAuth(token))
-                .retrieve()
-                .body(QuoteResponse.class);
+                    .uri(uri -> uri.path("/internal/v1/pricing/quote")
+                            .queryParam("pickupDistrict", request.pickupAddress().district())
+                            .queryParam("dropoffDistrict", request.dropoffAddress().district())
+                            .queryParam("weightKg", request.weightKg())
+                            .queryParam("size", request.size().name())
+                            .build())
+                    .headers(headers -> {
+                        if (token != null) headers.setBearerAuth(token);
+                        else headers.set(INTERNAL_TOKEN_HEADER, internalPricingToken);
+                    })
+                    .retrieve()
+                    .body(QuoteResponse.class);
         } catch (HttpClientErrorException.Unauthorized exception) {
-            tokens.invalidate(token);
+            if (token != null) tokens.invalidate(token);
             throw exception;
         }
         if (response == null || !"LKR".equals(response.currency())

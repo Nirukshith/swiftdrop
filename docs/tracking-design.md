@@ -269,10 +269,10 @@ Should-have, deferred until the Must-haves are done (ADR 006).
 
 | Page | Route (proposal) | Data |
 | :--- | :--- | :--- |
-| Public tracking | `/track/:trackingNo` (no guard; matches the email link) | Public lookup, then public stream |
-| Customer dashboard | `/customer` | M1 `GET /api/v1/parcels` (recent) |
-| Parcel detail with live timeline | `/customer/parcels/:id` | M1 detail, M2 history, public stream |
-| History table | `/customer/parcels` | M1 `GET /api/v1/parcels` |
+| Public tracking | `/track` (search box) and `/track/:trackingNo` (no guard; matches the email link) | Public lookup, then public stream |
+| Customer dashboard | `/customer/dashboard` | M1 `GET /api/v1/parcels` (first page) |
+| Parcel detail with live timeline | `/customer/parcels/:id` | M1 detail, M2 history, public stream, rating |
+| History table | `/customer/parcels?page=&status=` (cards below `sm`) | M1 `GET /api/v1/parcels` |
 | Receipt download | button on detail and history | `GET /api/v1/parcels/{id}/receipt` as a blob through `shared-auth` |
 
 The public page must work at 360 px width (NF-04).
@@ -284,7 +284,7 @@ The public page must work at 360 px width (NF-04).
 | # | Question | Who |
 | :--- | :--- | :--- |
 | Q1 | The SRS gives the shared UI kit to M1 (8.1). Confirm that M1 builds it. | Team |
-| Q2 | CU-05 asks for "history with filters", but M1's `GET /api/v1/parcels` only filters by `status`. Add `from` / `to` date filters and a tracking-number search there? | M1 |
+| Q2 | CU-05 asks for "history with filters", but M1's `GET /api/v1/parcels` only filters by `status` and has no defined order. **Proposal for M1 in section 12** (date range, tracking-number search, default newest-first order); waiting for M1's agreement. | M1 |
 | Q3 | Recipient name mask format (`S*** S***` proposed). | Team |
 | Q4 | Show anything for `FAILED` on the public page, e.g. a fixed reason code like `RECIPIENT_UNAVAILABLE`, never free text? | Team |
 | Q5 | ~~Which statuses allow a receipt download? Can DISPATCHER download it too?~~ **Resolved:** `DELIVERED` only (`409 PARCEL_NOT_DELIVERED` otherwise); owner customer and ADMIN only, DISPATCHER and courier get `403` (section 8). | Team |
@@ -294,3 +294,46 @@ The public page must work at 360 px width (NF-04).
 | Q9 | Rate-limit numbers in section 6. | M9 |
 | Q10 | `topics.md` lists only `parcel-tracking` for parcel-service. Add the per-instance `parcel-tracking-sse-<instance>` group (4.2) there; I did not edit it because it is outside this PR. | Contracts owner |
 | Q11 | IDs: `parcel.yaml` uses `format: uuid` but its examples use strings like `usr-cust-901`. This PR follows `format: uuid`. | M1 |
+
+---
+
+## 12. Proposed Change to M1's Parcel List (Q2)
+
+CU-05 asks for "delivery history with filters". M2's history page (`/customer/parcels`) reads M1's
+`GET /api/v1/parcels`, which today only filters by `status` and has no defined order. So the page
+can't offer a date range or search, and it can't promise "newest first". M2 does not add a second
+list endpoint (section 1), so this needs a small change to M1's contract (`parcel.yaml`) and
+endpoint. **This is a proposal for M1's agreement. Nothing here is implemented.**
+
+Three optional query parameters, plus a documented default order. All are backward compatible:
+
+```yaml
+# GET /api/v1/parcels (parcel.yaml), added to the existing status / page / size parameters
+- name: from
+  in: query
+  required: false
+  description: Only parcels created on or after this date (inclusive, Asia/Colombo).
+  schema: { type: string, format: date, example: "2026-11-01" }
+- name: to
+  in: query
+  required: false
+  description: Only parcels created on or before this date (inclusive, Asia/Colombo).
+  schema: { type: string, format: date, example: "2026-11-30" }
+- name: q
+  in: query
+  required: false
+  description: Case-insensitive match on the tracking number (contains).
+  schema: { type: string, minLength: 1, maxLength: 32, example: "SD-20261112" }
+# description addition: "Results are ordered by createdAt, newest first."
+```
+
+Rules for M1's endpoint:
+- Filters combine with AND, and ownership stays as today (the caller's `customerId` from the token).
+- `from` after `to`, an unreadable date, or `q` outside 1-32 characters gives `400 VALIDATION_FAILED`.
+- The default order is `createdAt` descending, then `id`, so pages are stable.
+
+What M2 adds once M1 merges it:
+- Date-range inputs and a tracking-number search box on the history page, kept in the URL like
+  `page` and `status`.
+- Frontend specs for the new filters.
+- A consumer test in `CustomerHistoryIntegrationTest` for the filters, the order and the 400 cases.

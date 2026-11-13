@@ -85,14 +85,16 @@ not an automatic reconciliation job.
 
 M1 durable merchant creation/replay is already merged (#205 / PR #216). M10's
 API audience support is already merged (#262/#264); no duplicate #208 provider
-implementation is introduced. M6 uses dedicated pricing:read credentials through
-the merged auth token endpoint, without granting a human staff role or ordinary
-merchant pricing privileges. Configure `MERCHANT_PRICING_CLIENT_ID` and
-`MERCHANT_PRICING_CLIENT_SECRET` privately on integration-service; auth/operations
-base URLs use the existing `SERVICES_AUTH_BASE_URL`/`SERVICES_OPERATIONS_BASE_URL`.
+implementation is introduced. M6 preserves both merged pricing authentication modes. Explicit
+`MERCHANT_PRICING_CLIENT_ID`/`MERCHANT_PRICING_CLIENT_SECRET` selects pricing:read
+OAuth; incomplete/failed OAuth does not silently fall back. With OAuth unset,
+the existing `INTERNAL_PRICING_SERVICE_TOKEN` mode from M10 #267 is retained and
+must match operations. Only one credential type is sent; neither mode grants a
+human staff role or ordinary merchant pricing privileges. Configure credentials
+privately; base URLs use existing `SERVICES_AUTH_BASE_URL`/`SERVICES_OPERATIONS_BASE_URL`.
 
-The separately tracked #207 provisioning/recovery implementation consumes
-[contract PR #261](https://github.com/Nirukshith/swiftdrop/pull/261). The ADMIN must
+Contract PR #261 and the separately tracked #207 implementation in PR #266 are
+now merged into development. The ADMIN must
 explicitly confirm replacing a lost secret on the same client; ordinary retries
 never silently rotate or read an old secret from storage.
 

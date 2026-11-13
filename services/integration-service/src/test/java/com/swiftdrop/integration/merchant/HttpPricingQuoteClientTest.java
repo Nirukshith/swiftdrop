@@ -29,6 +29,7 @@ class HttpPricingQuoteClientTest {
         var builder = RestClient.builder().baseUrl("http://pricing");
         server = MockRestServiceServer.bindTo(builder).build();
         client = new HttpPricingQuoteClient(builder.build(), tokens);
+        when(tokens.hasConfiguration()).thenReturn(true);
         when(tokens.get()).thenReturn("dedicated-service-token");
     }
 
@@ -36,6 +37,40 @@ class HttpPricingQuoteClientTest {
         server.expect(requestTo(URL)).andExpect(header("Authorization", "Bearer dedicated-service-token"))
                 .andRespond(withSuccess("{\"currency\":\"LKR\",\"totalFee\":850}", MediaType.APPLICATION_JSON));
         assertThat(client.quote(order)).isEqualByComparingTo("850");
+        server.verify();
+    }
+
+    @Test void existingInternalTokenWorksWithoutOAuthAndIsNotSentWithConfiguredOAuth() {
+        var builder=RestClient.builder().baseUrl("http://pricing");
+        server=MockRestServiceServer.bindTo(builder).build();
+        client=new HttpPricingQuoteClient(builder.build(),tokens,"fixture-internal-token");
+        when(tokens.hasConfiguration()).thenReturn(false);
+        server.expect(requestTo(URL)).andExpect(header("X-Internal-Service-Token","fixture-internal-token"))
+                .andExpect(headerDoesNotExist("Authorization"))
+                .andRespond(withSuccess("{\"currency\":\"LKR\",\"totalFee\":850}",MediaType.APPLICATION_JSON));
+        server.expect(requestTo(URL)).andExpect(header("Authorization","Bearer dedicated-service-token"))
+                .andExpect(headerDoesNotExist("X-Internal-Service-Token"))
+                .andRespond(withSuccess("{\"currency\":\"LKR\",\"totalFee\":850}",MediaType.APPLICATION_JSON));
+        assertThat(client.quote(order)).isEqualByComparingTo("850");
+        verify(tokens,never()).get();
+        when(tokens.hasConfiguration()).thenReturn(true);
+        assertThat(client.quote(order)).isEqualByComparingTo("850");
+        server.verify();
+    }
+
+    @Test void incompleteOAuthDoesNotSilentlyUseTheInternalToken() {
+        var builder=RestClient.builder().baseUrl("http://pricing");
+        server=MockRestServiceServer.bindTo(builder).build();
+        client=new HttpPricingQuoteClient(builder.build(),tokens,"fixture-internal-token");
+        when(tokens.get()).thenThrow(new IllegalStateException("Not configured"));
+        assertThatThrownBy(()->client.quote(order)).isInstanceOf(IllegalStateException.class);
+        server.verify();
+    }
+
+    @Test void noConfiguredIdentityFailsBeforeAnyRequest() {
+        when(tokens.hasConfiguration()).thenReturn(false);
+        assertThatThrownBy(()->client.quote(order)).hasMessageContaining("not configured");
+        verify(tokens,never()).get();
         server.verify();
     }
 
