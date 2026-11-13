@@ -212,6 +212,44 @@ Also requested:
 
 Limiting at the gateway rejects floods before they reach the JVM, and it costs no extra process. 30 per minute is far above what a person refreshing the page needs and far below what enumeration needs. The authenticated endpoints are not rate limited beyond the JWT check.
 
+### 6.1 Client address behind the gateway (Week 7 finding, needs M9)
+
+parcel-service's own per-IP limit (`TrackingRateLimitFilter`, 30 per minute, burst 10) identifies a
+client by `X-Forwarded-For`, but only when the request comes from a trusted proxy
+(`swiftdrop.tracking.rate-limit.trusted-proxies`, default `127.0.0.1/32, ::1/128`). Otherwise it uses
+the socket address, so a caller cannot fake the header.
+
+**Defect:** in Docker, the gateway's `location ^~ /api/v1/tracking` sends no `X-Forwarded-For`, and the
+gateway's address (`172.18.x.x`) is not trusted. parcel-service sees every visitor as the gateway, so
+**all visitors share one limit**. One busy visitor (or a bot) gets everyone else `429`.
+
+Reproduce with `bash docs/m2-e2e/run.sh` (step 10): visitor 1 makes 12 lookups (10 × `404`, then
+`429`). Visitor 2, from another IP inside the frontend container, then gets `429` on their first
+lookup. `TrackingRateLimitGatewayIntegrationTest` shows the same in code.
+
+**Fix (M9 owns both files).** Tested locally: with it, visitor 2 gets `404` and all 31 checks pass.
+
+1. `deploy/nginx/nginx.conf`, in `location ^~ /api/v1/tracking`:
+
+   ```nginx
+   proxy_set_header Host $host;                                   # must be repeated, see below
+   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   ```
+
+   Adding any `proxy_set_header` inside a `location` drops the `proxy_set_header Host $host` inherited
+   from `server`. Without the Host line, nginx sends `Host: parcel_service`, and Tomcat answers `400`
+   to every tracking request ("The character [_] is never valid in a domain name"). The
+   `/api/v1/auth` location already repeats it for the same reason.
+2. `deploy/docker-compose.yml`, `parcel-service.environment`:
+
+   ```yaml
+   SWIFTDROP_TRACKING_RATE_LIMIT_TRUSTED_PROXIES: 172.16.0.0/12   # the Compose network; or the gateway's fixed address
+   ```
+
+   parcel-service's port 8082 is also published on the host. Anything that reaches it from inside
+   that range is trusted, so a fixed gateway address (or not publishing 8082) is the stricter
+   choice. That's M9's call.
+
 ---
 
 ## 7. `ParcelQueryService` Methods Needed from M1

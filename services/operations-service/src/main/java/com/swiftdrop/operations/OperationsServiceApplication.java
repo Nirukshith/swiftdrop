@@ -3,7 +3,7 @@ package com.swiftdrop.operations;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"com.swiftdrop.operations", "com.swiftdrop.common"})
 public class OperationsServiceApplication {
 
 	public static void main(String[] args) {
