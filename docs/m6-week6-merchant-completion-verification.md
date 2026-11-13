@@ -1,6 +1,10 @@
 # M6 Week 6 completion — #223
 
-Current merge status: contract PR #261 and onboarding recovery PR #266 are
+Historical verification report. PRs #260/#261/#266 and Week 7 #286 are now merged.
+Use the [Week 8 release runbook](m6-week8-release-demo.md) for current setup and demo
+steps, and [final evidence](m6-week8-verification.md) for the latest verification.
+
+Merge status recorded during Week 6 verification: contract PR #261 and onboarding recovery PR #266 are
 already merged into development. PR #260 is the remaining merchant bulk/pricing
 PR; the agent has not merged any PR. The pricing-client conflict with current
 development `bb43476` is resolved by preserving both existing authentication modes.

@@ -1,5 +1,9 @@
 # Merchant bulk CSV upload and recovery — #178 / #223
 
+For the final setup, live demonstration, environment requirements and current
+limitations, use the [M6 Week 8 release runbook](m6-week8-release-demo.md) and
+[final evidence](m6-week8-verification.md).
+
 Sign in as a MERCHANT and open **Bulk CSV orders** from `/merchant` or
 `/merchant/bulk`. Download the template, select a UTF-8 CSV, review row errors,
 then confirm valid rows. Preview and removing invalid rows create no parcels.
