@@ -41,6 +41,9 @@
         <a routerLink="/dispatch/zones" class="hover:underline">Zones</a>
         <a routerLink="/dispatch/pricing" class="hover:underline">Pricing</a>
       }
+      @if (authService.hasRole('CUSTOMER')) {
+        <a routerLink="/customer/assistant" class="hover:underline">AI Assistant</a>
+      }
       <a routerLink="/track" class="hover:underline">Track a parcel</a>
     </nav>
   </header>
