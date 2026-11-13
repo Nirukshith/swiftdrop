@@ -1,5 +1,5 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -9,6 +9,7 @@ import {
   CardComponent,
   EmptyStateComponent,
   ErrorStateComponent,
+  InputComponent,
   LoadingStateComponent,
   PaginationComponent,
   SelectComponent,
@@ -21,12 +22,12 @@ import {
   humanizeStatus,
 } from 'ui';
 import { ReceiptButtonComponent } from '../tracking/receipt-button.component';
-import { CustomerParcel, PARCEL_STATUSES, ParcelStatus } from './customer-history.model';
+import { CustomerParcel, PARCEL_SEARCH_MAX, PARCEL_STATUSES, ParcelStatus } from './customer-history.model';
 import { CustomerParcelsService } from './customer-parcels.service';
 import { CUSTOMER_NAV, errorMessage } from './customer-nav';
 import { PARCEL_COLUMNS, parcelKey } from './parcel-columns';
 
-/** History table of all the customer's parcels (CU-05), with status filter and paging. */
+/** History table of all the customer's parcels (CU-05), newest first, with status, date and tracking-number filters and paging. */
 @Component({
   selector: 'app-customer-parcels',
   standalone: true,
@@ -39,6 +40,7 @@ import { PARCEL_COLUMNS, parcelKey } from './parcel-columns';
     CardComponent,
     ButtonComponent,
     SelectComponent,
+    InputComponent,
     TableComponent,
     TableCellDirective,
     StatusBadgeComponent,
@@ -51,26 +53,48 @@ import { PARCEL_COLUMNS, parcelKey } from './parcel-columns';
   template: `
     <ui-shell [navItems]="nav" homeLink="/customer/dashboard" pageTitle="My parcels">
       <ui-card [padded]="false">
-        <div class="flex flex-wrap items-end justify-between gap-3 border-b border-surface-border p-4">
+        <form class="grid grid-cols-1 gap-3 border-b border-surface-border p-4 sm:grid-cols-2 lg:grid-cols-4"
+              role="search" aria-label="Filter your parcels" novalidate data-testid="history-filters"
+              (submit)="$event.preventDefault(); applyFilters()">
           <ui-select
-            class="w-full sm:w-64"
             inputId="status-filter"
             label="Status"
             placeholder="All statuses"
             [options]="statusOptions"
             [ngModel]="status()"
+            [ngModelOptions]="{ standalone: true }"
             (ngModelChange)="filterByStatus($event)"
           />
-          <p class="text-sm text-ink-muted" aria-live="polite">
-            @if (state() === 'ready') {
-              {{ totalElements() }} {{ totalElements() === 1 ? 'parcel' : 'parcels' }}
+          <ui-input inputId="from-filter" label="From" type="date" [(ngModel)]="fromInput" [ngModelOptions]="{ standalone: true }" />
+          <ui-input inputId="to-filter" label="To" type="date" [(ngModel)]="toInput" [ngModelOptions]="{ standalone: true }" />
+          <ui-input
+            inputId="search-filter"
+            label="Tracking number"
+            type="search"
+            placeholder="e.g. SD-20261112"
+            autocomplete="off"
+            [(ngModel)]="searchInput"
+            [ngModelOptions]="{ standalone: true }"
+          />
+          <div class="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-4">
+            <ui-button type="submit" size="sm" data-testid="apply-filters">Apply filters</ui-button>
+            @if (hasFilters()) {
+              <ui-button type="button" size="sm" variant="ghost" data-testid="clear-filters" (click)="clearFilters()">Clear filters</ui-button>
             }
-          </p>
-        </div>
+            @if (filterError()) {
+              <p class="text-sm text-danger-700" role="alert" data-testid="filter-error">{{ filterError() }}</p>
+            }
+            <p class="ml-auto text-sm text-ink-muted" aria-live="polite">
+              @if (state() === 'ready') {
+                {{ totalElements() }} {{ totalElements() === 1 ? 'parcel' : 'parcels' }}
+              }
+            </p>
+          </div>
+        </form>
 
         @if (state() === 'error') {
           <ui-error-state title="Could not load your parcels" [message]="error()" (retry)="load()" />
-        } @else if (state() === 'ready' && rows().length === 0 && !status()) {
+        } @else if (state() === 'ready' && rows().length === 0 && !hasFilters()) {
           <ui-empty-state title="No parcels yet" message="Send your first parcel and it will show up here.">
             <ui-button routerLink="/customer">New delivery</ui-button>
           </ui-empty-state>
@@ -80,9 +104,9 @@ import { PARCEL_COLUMNS, parcelKey } from './parcel-columns';
             @if (state() === 'loading') {
               <ui-loading-state message="Loading your parcels…" />
             } @else if (rows().length === 0) {
-              <ui-empty-state title="No parcels with this status" message="Choose another status or show all." />
+              <ui-empty-state title="No parcels match these filters" message="Change the filters or clear them to see all parcels." />
             } @else {
-              <ul class="divide-y divide-surface-border" aria-label="Your parcels">
+              <ul class="divide-y divide-surface-border" aria-label="Your parcels, newest first">
                 @for (row of rows(); track row.id) {
                   <li class="p-4" data-testid="parcel-card">
                     <a class="flex items-start justify-between gap-3" [routerLink]="['/customer/parcels', row.id]">
@@ -109,9 +133,9 @@ import { PARCEL_COLUMNS, parcelKey } from './parcel-columns';
             [rowKey]="rowKey"
             [loading]="state() === 'loading'"
             loadingMessage="Loading your parcels…"
-            emptyTitle="No parcels with this status"
-            emptyMessage="Choose another status or show all."
-            caption="Your parcels"
+            emptyTitle="No parcels match these filters"
+            emptyMessage="Change the filters or clear them to see all parcels."
+            caption="Your parcels, newest first"
             [clickable]="true"
             (rowClick)="track($event)"
           >
@@ -168,20 +192,84 @@ export class CustomerParcelsComponent implements OnInit {
   readonly page = signal(0);
   readonly totalElements = signal(0);
   readonly status = signal<ParcelStatus | null>(null);
+  /** Applied filters (what the list shows); the inputs below are only applied on "Apply filters". */
+  readonly from = signal<string | null>(null);
+  readonly to = signal<string | null>(null);
+  readonly search = signal<string | null>(null);
+  readonly filterError = signal('');
+  readonly hasFilters = computed(() => !!(this.status() || this.from() || this.to() || this.search()));
 
-  /** Page and filter come from the URL (?page=2&status=DELIVERED), so Back from a parcel keeps them. */
+  fromInput = '';
+  toInput = '';
+  searchInput = '';
+
+  /**
+   * Page and filters come from the URL (?page=2&status=DELIVERED&from=2026-11-01&to=2026-11-30&q=SD-2026),
+   * so Back from a parcel keeps them. Anything unusable in the URL falls back to the default.
+   */
   ngOnInit(): void {
     const params = this.route.snapshot.queryParamMap;
     const page = Number(params.get('page'));
     const status = params.get('status') as ParcelStatus | null;
-    // The URL shows pages from 1; the API counts from 0. Anything unusable falls back to the defaults.
+    // The URL shows pages from 1; the API counts from 0.
     this.page.set(Number.isInteger(page) && page >= 1 ? page - 1 : 0);
     this.status.set(status && PARCEL_STATUSES.includes(status) ? status : null);
+    let from = validDate(params.get('from'));
+    let to = validDate(params.get('to'));
+    if (from && to && from > to) {
+      from = to = null;
+    }
+    const q = params.get('q')?.trim() ?? '';
+    this.from.set(from);
+    this.to.set(to);
+    this.search.set(q && q.length <= PARCEL_SEARCH_MAX ? q : null);
+    this.fromInput = this.from() ?? '';
+    this.toInput = this.to() ?? '';
+    this.searchInput = this.search() ?? '';
     this.load();
   }
 
   filterByStatus(status: ParcelStatus | null): void {
     this.status.set(status);
+    this.page.set(0);
+    this.syncUrl();
+    this.load();
+  }
+
+  /** Checks the date range and search like M1's endpoint does, then shows page 1 of the result. */
+  applyFilters(): void {
+    const from = validDate(this.fromInput);
+    const to = validDate(this.toInput);
+    const q = this.searchInput.trim();
+    if ((this.fromInput && !from) || (this.toInput && !to)) {
+      this.filterError.set('Enter dates as YYYY-MM-DD.');
+      return;
+    }
+    if (from && to && from > to) {
+      this.filterError.set('"From" must be on or before "To".');
+      return;
+    }
+    if (q.length > PARCEL_SEARCH_MAX) {
+      this.filterError.set(`Search for at most ${PARCEL_SEARCH_MAX} characters of a tracking number.`);
+      return;
+    }
+    this.filterError.set('');
+    this.from.set(from);
+    this.to.set(to);
+    this.search.set(q || null);
+    this.searchInput = q;
+    this.page.set(0);
+    this.syncUrl();
+    this.load();
+  }
+
+  clearFilters(): void {
+    this.fromInput = this.toInput = this.searchInput = '';
+    this.filterError.set('');
+    this.status.set(null);
+    this.from.set(null);
+    this.to.set(null);
+    this.search.set(null);
     this.page.set(0);
     this.syncUrl();
     this.load();
@@ -196,7 +284,13 @@ export class CustomerParcelsComponent implements OnInit {
   private syncUrl(): void {
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { page: this.page() > 0 ? this.page() + 1 : null, status: this.status() },
+      queryParams: {
+        page: this.page() > 0 ? this.page() + 1 : null,
+        status: this.status(),
+        from: this.from(),
+        to: this.to(),
+        q: this.search(),
+      },
       replaceUrl: true,
     });
   }
@@ -205,7 +299,7 @@ export class CustomerParcelsComponent implements OnInit {
     this.state.set('loading');
     this.request?.unsubscribe(); // a newer filter or page wins over a slower older request
     this.request = this.parcels
-      .list({ page: this.page(), size: this.size, status: this.status() })
+      .list({ page: this.page(), size: this.size, status: this.status(), from: this.from(), to: this.to(), q: this.search() })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {
@@ -224,4 +318,14 @@ export class CustomerParcelsComponent implements OnInit {
   track(parcel: CustomerParcel): void {
     void this.router.navigate(['/customer/parcels', parcel.id]);
   }
+}
+
+/** A real calendar date in YYYY-MM-DD form (as `<input type="date">` gives it), or null. */
+function validDate(value: string | null | undefined): string | null {
+  const text = value?.trim() ?? '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return null;
+  }
+  const date = new Date(`${text}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(text) ? text : null;
 }
