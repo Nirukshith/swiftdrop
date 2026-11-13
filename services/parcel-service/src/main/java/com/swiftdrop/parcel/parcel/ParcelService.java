@@ -6,7 +6,9 @@ import com.swiftdrop.parcel.internal.ParcelStatusUpdateRequest;
 import com.swiftdrop.common.security.CurrentUser;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -16,8 +18,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -227,11 +232,79 @@ public class ParcelService {
     }
 
     @Transactional(readOnly = true)
-    public ParcelPageResponse listCustomerParcels(String customerId, ParcelStatus status, Pageable pageable) {
-        Page<Parcel> page = (status != null)
-                ? parcelRepository.findByCustomerIdAndStatus(customerId, status, pageable)
-                : parcelRepository.findByCustomerId(customerId, pageable);
+    public ParcelPageResponse listCustomerParcels(
+            String customerId,
+            ParcelStatus status,
+            String from,
+            String to,
+            String query,
+            Pageable pageable
+    ) {
+        LocalDate fromDate = parseDateValue(from, "from");
+        LocalDate toDate = parseDateValue(to, "to");
+        Instant fromInstant = atColomboStart(fromDate);
+        Instant toExclusive = atColomboStart(toDate == null ? null : toDate.plusDays(1));
+        if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
+            throw validationError("from must not be after to");
+        }
+
+        String trackingQuery = query == null ? null : query.trim();
+        if (trackingQuery != null && trackingQuery.length() > 32) {
+            throw validationError("q must be at most 32 characters after trimming");
+        }
+        if (trackingQuery != null && trackingQuery.isEmpty()) {
+            trackingQuery = null;
+        }
+
+        String normalizedQuery = trackingQuery == null ? null : trackingQuery.toLowerCase(java.util.Locale.ROOT);
+        Specification<Parcel> specification = (root, criteriaQuery, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(criteriaBuilder.equal(root.get("customerId"), customerId));
+            if (status != null) {
+                predicates.add(criteriaBuilder.equal(root.get("status"), status));
+            }
+            if (fromInstant != null) {
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.<Instant>get("createdAt"), fromInstant));
+            }
+            if (toExclusive != null) {
+                predicates.add(criteriaBuilder.lessThan(root.<Instant>get("createdAt"), toExclusive));
+            }
+            if (normalizedQuery != null) {
+                predicates.add(criteriaBuilder.like(
+                        criteriaBuilder.lower(root.get("trackingNumber")),
+                        "%" + normalizedQuery + "%"
+                ));
+            }
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
+
+        Pageable orderedPageable = PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                Sort.by(Sort.Direction.DESC, "createdAt")
+                        .and(Sort.by(Sort.Direction.DESC, "id"))
+        );
+        Page<Parcel> page = parcelRepository.findAll(specification, orderedPageable);
         return ParcelPageResponse.from(page);
+    }
+
+    private LocalDate parseDateValue(String value, String parameter) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE);
+        } catch (DateTimeParseException ex) {
+            throw validationError(parameter + " must be a valid YYYY-MM-DD date");
+        }
+    }
+
+    private Instant atColomboStart(LocalDate date) {
+        return date == null ? null : date.atStartOfDay(ZoneId.of("Asia/Colombo")).toInstant();
+    }
+
+    private ResponseStatusException validationError(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 
     @Transactional
