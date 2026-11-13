@@ -29,6 +29,7 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/merchants/register").permitAll()
                 .requestMatchers("/api/v1/assistant/**", "/mcp").hasRole("CUSTOMER")
+                .requestMatchers("/api/v1/notifications/**").hasRole("CUSTOMER")
                 .anyRequest().authenticated()
             );
 

@@ -31,3 +31,4 @@ swiftdrop:
       tokens:
         notifications-service: ${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:swiftdrop-internal-notif-secret-2026}
         merchant-service: ${INTERNAL_MERCHANT_SERVICE_TOKEN:swiftdrop-internal-merchant-secret-2026}
+        pricing-service: ${INTERNAL_PRICING_SERVICE_TOKEN:swiftdrop-internal-pricing-secret-2026}

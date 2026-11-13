@@ -81,6 +81,9 @@ class WebhookRetryKafkaIntegrationTest {
     @Autowired
     private WebhookDeliveryRepository deliveryRepository;
 
+    @Autowired
+    private ProcessedEventRepository processedEventRepository;
+
     @MockBean
     private WebhookDispatcher dispatcher;
 
@@ -117,6 +120,11 @@ class WebhookRetryKafkaIntegrationTest {
         ConsumerRecord<String, String> dlt = awaitRecord(WEBHOOK_DLT, originalEnvelope, Duration.ofSeconds(45));
         assertThat(dlt.value()).isEqualTo(originalEnvelope);
         assertThat(dlt.key()).isEqualTo(event.parcelId());
+        awaitDeliveryStatus(event, merchantId, "FAILED");
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                assertThat(processedEventRepository.existsByEventIdAndConsumerGroup(
+                        UUID.fromString(event.eventId()), WebhookService.CONSUMER_GROUP))
+                        .isTrue());
         WebhookDeliveryEntity delivery = deliveryRepository.findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(
                 UUID.fromString(event.eventId()), merchantId).orElseThrow();
         assertThat(delivery.getStatus()).isEqualTo("FAILED");
@@ -150,11 +158,19 @@ class WebhookRetryKafkaIntegrationTest {
 
         ConsumerRecord<String, String> dlt = awaitRecord(WEBHOOK_DLT, originalEnvelope, Duration.ofSeconds(15));
         assertThat(header(dlt, "x-original-topic")).isEqualTo(MAIN_TOPIC);
+        awaitDeliveryStatus(event, merchantId, "FAILED");
         WebhookDeliveryEntity delivery = deliveryRepository.findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(
                 UUID.fromString(event.eventId()), merchantId).orElseThrow();
         assertThat(delivery.getStatus()).isEqualTo("FAILED");
         assertThat(delivery.getAttempts()).isEqualTo(1);
         verify(dispatcher, after(2000).times(1)).dispatch(eq(url), anyString(), anyString(), any());
+    }
+
+    private void awaitDeliveryStatus(EventEnvelope event, UUID merchantId, String expectedStatus) {
+        await().atMost(Duration.ofSeconds(15)).untilAsserted(() ->
+                assertThat(deliveryRepository.findFirstByEventIdAndMerchantIdOrderByCreatedAtAsc(
+                        UUID.fromString(event.eventId()), merchantId).map(WebhookDeliveryEntity::getStatus))
+                        .contains(expectedStatus));
     }
 
     private static EventEnvelope statusEvent(UUID merchantId) {

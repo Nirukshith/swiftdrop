@@ -42,6 +42,7 @@ describe('Merchant bulk upload', () => {
     const body = original.request.body, key = original.request.headers.get('Idempotency-Key');
     original.error(new ProgressEvent('error'));
     expect(c.error()).toContain('same reference');
+    c.uploadKey.set('changed-after-confirmation');
     c.retry();
     const replay = http.expectOne('/api/v1/merchant/orders/bulk');
     expect(replay.request.body).toBe(body); expect(replay.request.headers.get('Idempotency-Key')).toBe(key);

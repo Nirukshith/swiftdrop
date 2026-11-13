@@ -87,24 +87,26 @@ public class McpServerController {
     private static List<Map<String, Object>> toolDefinitions() {
         return List.of(
                 tool("get_parcel_by_tracking_number", "Get an owned parcel's current status", Map.of(
-                        "trackingNumber", Map.of("type", "string", "pattern", "^SD-\\d{8}-[A-Z0-9]{6}$"))),
+                        "trackingNumber", Map.of("type", "string", "pattern", "^SD-\\d{8}-[A-Z0-9]{6}$")), List.of("trackingNumber")),
                 tool("get_customer_parcels", "List the authenticated customer's parcels", Map.of(
                         "status", Map.of("type", "string"), "page", Map.of("type", "integer", "minimum", 0),
-                        "size", Map.of("type", "integer", "minimum", 1, "maximum", 50))),
+                        "size", Map.of("type", "integer", "minimum", 1, "maximum", 50)), List.of()),
                 tool("get_tracking_history", "Get an owned parcel's status timeline", Map.of(
-                        "trackingNumber", Map.of("type", "string"))),
+                        "trackingNumber", Map.of("type", "string")), List.of("trackingNumber")),
                 tool("get_delivery_information", "Get an owned parcel's delivery assignment information", Map.of(
-                        "trackingNumber", Map.of("type", "string"))),
-                tool("get_parcel_summary", "Summarize the authenticated customer's parcel statuses", Map.of()),
+                        "trackingNumber", Map.of("type", "string")), List.of("trackingNumber")),
+                tool("get_parcel_summary", "Summarize the authenticated customer's parcel statuses", Map.of(), List.of()),
                 tool("estimate_delivery_fee", "Get a calculated delivery fee quote", Map.of(
                         "pickupDistrict", Map.of("type", "string"), "destinationDistrict", Map.of("type", "string"),
                         "weightKg", Map.of("type", "number", "minimum", 0.1, "maximum", 50),
-                        "sizeCategory", Map.of("type", "string"))));
+                        "sizeCategory", Map.of("type", "string")),
+                        List.of("pickupDistrict", "destinationDistrict", "weightKg", "sizeCategory")));
     }
 
-    private static Map<String, Object> tool(String name, String description, Map<String, Object> properties) {
+    private static Map<String, Object> tool(
+            String name, String description, Map<String, Object> properties, List<String> required) {
         return Map.of("name", name, "description", description,
-                "inputSchema", Map.of("type", "object", "properties", properties));
+                "inputSchema", Map.of("type", "object", "properties", properties, "required", required));
     }
 
     private static Map<String, Object> result(Object id, Object result) {
@@ -132,7 +134,16 @@ public class McpServerController {
     }
 
     private static int integer(Map<?, ?> values, String name, int fallback) {
-        return values.get(name) instanceof Number number ? number.intValue() : fallback;
+        Object raw = values.get(name);
+        if (raw == null) {
+            return fallback;
+        }
+        if (!(raw instanceof Number number)
+                || !Double.isFinite(number.doubleValue())
+                || number.doubleValue() != Math.rint(number.doubleValue())) {
+            throw new IllegalArgumentException(name + " must be an integer");
+        }
+        return number.intValue();
     }
 
     private static double number(Map<?, ?> values, String name) {

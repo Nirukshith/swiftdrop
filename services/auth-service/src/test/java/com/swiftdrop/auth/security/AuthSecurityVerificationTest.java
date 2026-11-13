@@ -113,7 +113,8 @@ class AuthSecurityVerificationTest {
 
         authMockMvc = MockMvcBuilders.standaloneSetup(authController).build();
 
-        InternalUserController internalUserController = new InternalUserController(userRepository, passwordEncoder);
+        InternalUserController internalUserController = new InternalUserController(userRepository, passwordEncoder,
+                org.mockito.Mockito.mock(com.swiftdrop.auth.internal.MerchantProvisioningGuard.class));
         InternalServiceSecurityFilter internalFilter = new InternalServiceSecurityFilter(NOTIF_TOKEN, MERCHANT_TOKEN);
         internalMockMvc = MockMvcBuilders.standaloneSetup(internalUserController)
                 .addFilters(internalFilter)

@@ -1,0 +1,184 @@
+openapi: 3.0.3
+info:
+  title: SwiftDrop Merchant Provisioning Recovery
+  version: 1.0.0
+  description: |
+    Additive #207 recovery contract. Cross-owner scope and explicit same-client
+    credential replacement were approved by the user confirming M10/M5 agreement.
+    Existing successful registration/approval payloads remain compatible.
+paths:
+  /internal/v1/merchant-provisioning/{operationId}:
+    parameters:
+      - $ref: '#/components/parameters/OperationId'
+    put:
+      summary: Atomically provision or reconcile a merchant user and client
+      security:
+        - MerchantServiceToken: []
+      description: |
+        integration-service commits a stable operationId before its first call.
+        Auth atomically persists the merchant association, user activation and client.
+        Same operation/merchant/profile replays identifiers without issuing another client
+        or revealing an existing secret. Changed operation/profile conflicts. A legacy
+        association may be reconciled only when merchant ID, MERCHANT role and normalized
+        email agree; a stored expectedUserId must match. Multiple existing clients conflict.
+        A newly generated secret is returned once, stored only as a hash and never logged.
+        Existing clients or replays return credentialRecoveryRequired=true and no secret.
+        actorId is asserted by the authenticated M6 service after validating the ADMIN JWT;
+        it is audit metadata, never a substitute for service authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionMerchantRequest'
+      responses:
+        '200':
+          description: Completed provisioning or non-secret replay.
+          headers:
+            Cache-Control:
+              schema: {type: string, enum: [no-store]}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisionMerchantResponse'
+        '400': {description: Invalid input.}
+        '401': {description: Missing or invalid service credential.}
+        '403': {description: Service caller is not merchant-service.}
+        '409': {description: Operation/profile conflict or unsafe legacy association.}
+    get:
+      summary: Read completed provisioning identifiers without a secret
+      security:
+        - MerchantServiceToken: []
+      responses:
+        '200':
+          description: Non-secret status; credentialRecoveryRequired is true.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisionMerchantResponse'
+        '401': {description: Missing or invalid service credential.}
+        '403': {description: Service caller is not merchant-service.}
+        '404': {description: No committed operation.}
+  /internal/v1/merchant-provisioning/{operationId}/credentials:
+    parameters:
+      - $ref: '#/components/parameters/OperationId'
+    post:
+      summary: Explicitly replace a lost credential on the same client
+      security:
+        - MerchantServiceToken: []
+      description: |
+        Requires ADMIN confirmation asserted by M6 and a fresh replacementId.
+        Auth replaces only the operation's existing client secret hash. The unknown old
+        secret immediately stops authenticating new token exchanges. Already issued access
+        tokens retain their existing expiry. No second client is created. Repeating the same
+        replacementId never rotates again or returns the secret; it returns a non-secret
+        result. If the one-time replacement response is lost, another explicit confirmation
+        with a NEW replacementId is required. No automatic or silent rotation is permitted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [replacementId, actorId, confirmReplacement]
+              properties:
+                replacementId: {type: string, format: uuid}
+                actorId: {type: string, minLength: 1, maxLength: 64}
+                confirmReplacement: {type: boolean, enum: [true]}
+      responses:
+        '200':
+          description: One-time new secret or non-secret replay, with Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvisionMerchantResponse'
+        '400': {description: Confirmation absent or input invalid.}
+        '401': {description: Missing or invalid service credential.}
+        '403': {description: Service caller is not merchant-service.}
+        '404': {description: Provisioning operation not found.}
+        '409': {description: Replacement key belongs to another operation or client is inactive.}
+  /api/v1/admin/merchants/{merchantId}/recover-credentials:
+    post:
+      summary: ADMIN-confirmed recovery of a pending or approved merchant's credential handoff
+      security:
+        - AdminBearer: []
+      parameters:
+        - name: merchantId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: UUID retained across explicit retries of this confirmation.
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmReplacement]
+              properties:
+                confirmReplacement: {type: boolean, enum: [true]}
+      responses:
+        '200':
+          description: Merchant approved, same client ID, replacement secret returned once; no-store.
+          content:
+            application/json:
+              schema:
+                $ref: './integration-merchant.yaml#/components/schemas/MerchantApprovalResponse'
+        '400': {description: Confirmation/key invalid.}
+        '401': {description: Authentication required.}
+        '403': {description: ADMIN role required.}
+        '404': {description: Merchant not found.}
+        '409':
+          description: |
+            Rejected/suspended merchant, provisioning not started, or one-time replacement
+            already completed and cannot be replayed. In the last case, another confirmation
+            with a new key is required; no secret is recovered from storage.
+        '502': {description: Auth outcome unavailable; retry the same operation safely.}
+components:
+  securitySchemes:
+    MerchantServiceToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Service-Token
+      description: Existing auth internal service credential, authorized only for merchant-service.
+    AdminBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    OperationId:
+      name: operationId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  schemas:
+    ProvisionMerchantRequest:
+      type: object
+      required: [merchantId, email, fullName, phoneNumber, actorId]
+      properties:
+        merchantId: {type: string, format: uuid}
+        email: {type: string, format: email, maxLength: 255}
+        fullName: {type: string, minLength: 1, maxLength: 200}
+        phoneNumber: {type: string, minLength: 1, maxLength: 32}
+        expectedUserId: {type: string, maxLength: 64, nullable: true}
+        actorId: {type: string, minLength: 1, maxLength: 64}
+    ProvisionMerchantResponse:
+      type: object
+      required: [operationId, merchantId, user, clientId, credentialRecoveryRequired]
+      properties:
+        operationId: {type: string, format: uuid}
+        merchantId: {type: string, format: uuid}
+        user:
+          $ref: './auth.yaml#/components/schemas/InternalUserResponse'
+        clientId: {type: string, minLength: 1}
+        clientSecret:
+          type: string
+          nullable: true
+          description: Returned only when a secret is newly generated; hash-only at rest.
+        credentialRecoveryRequired:
+          type: boolean
+          description: True for a replay/status or a reconciled existing client with no raw secret.

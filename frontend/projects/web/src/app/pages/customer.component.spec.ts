@@ -78,7 +78,13 @@ describe('CustomerComponent', () => {
     const parcels = [mockCreatedParcel, deliveredParcel];
     jest.spyOn(customerService, 'listAddresses').mockImplementation(() => of([...addresses]));
     jest.spyOn(customerService, 'listParcels').mockImplementation((status) =>
-      of(status === 'DELIVERED' ? [deliveredParcel] : [...parcels])
+      of({
+        content: status === 'DELIVERED' ? [deliveredParcel] : [...parcels],
+        totalElements: status === 'DELIVERED' ? 1 : parcels.length,
+        totalPages: 1,
+        page: 0,
+        size: 20,
+      })
     );
     jest.spyOn(customerService, 'createAddress').mockImplementation((request) => {
       const saved = { ...request, id: 'address-new', customerId: 'customer-1' };
@@ -131,6 +137,28 @@ describe('CustomerComponent', () => {
     tick(100);
 
     expect(component.parcels().every((p) => p.status === 'DELIVERED')).toBe(true);
+  }));
+
+  it('should retain parcel pagination and request the selected page', fakeAsync(() => {
+    const listParcels = customerService.listParcels as jest.Mock;
+    listParcels.mockImplementation((status: string | undefined, page = 0) => of({
+      content: page === 0 ? [mockCreatedParcel] : [],
+      totalElements: 21,
+      totalPages: 2,
+      page,
+      size: 20,
+    }));
+
+    component.loadParcels();
+    tick(100);
+    expect(component.parcelPage().totalElements).toBe(21);
+    expect(component.parcelPage().totalPages).toBe(2);
+
+    component.changeParcelPage(1);
+    tick(100);
+    expect(listParcels).toHaveBeenLastCalledWith(undefined, 1);
+    expect(component.parcelPage().page).toBe(1);
+    expect(component.parcels()).toEqual([]);
   }));
 
   it('should navigate through wizard steps with validation and real fee quote integration', fakeAsync(() => {

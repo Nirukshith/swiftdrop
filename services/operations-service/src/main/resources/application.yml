@@ -26,3 +26,7 @@ swiftdrop:
   services:
     parcel-service:
       url: ${SWIFTDROP_SERVICES_PARCEL_SERVICE_URL:http://localhost:8082}
+  security:
+    internal:
+      tokens:
+        pricing-service: ${INTERNAL_PRICING_SERVICE_TOKEN:swiftdrop-internal-pricing-secret-2026}

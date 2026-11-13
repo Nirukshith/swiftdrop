@@ -24,6 +24,10 @@ public class EmailChannel implements NotificationChannel {
         return "EMAIL";
     }
 
+    public boolean isConfigured() {
+        return mailSenderProvider.getIfAvailable() != null;
+    }
+
     @Override
     public void send(NotificationMessage message) {
         if (message.recipientTarget() == null || message.recipientTarget().isBlank()) {
@@ -47,4 +51,3 @@ public class EmailChannel implements NotificationChannel {
         mailSender.send(mailMessage);
     }
 }
-

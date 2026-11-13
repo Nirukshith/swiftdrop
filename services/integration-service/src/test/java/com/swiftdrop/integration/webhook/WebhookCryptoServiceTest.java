@@ -22,6 +22,7 @@ class WebhookCryptoServiceTest {
         String secret = cryptoService.generateSecret();
         assertThat(secret).startsWith("whsec_");
         assertThat(secret.length()).isGreaterThanOrEqualTo(32);
+        assertThat(cryptoService.generateSecret()).isNotEqualTo(secret);
     }
 
     @Test
@@ -31,6 +32,15 @@ class WebhookCryptoServiceTest {
         String preview = cryptoService.generatePreview(secret);
 
         assertThat(preview).isEqualTo("whsec_••••••••••••••••3f8a");
+        assertThat(preview).doesNotContain("0123456789abcdef");
+    }
+
+    @Test
+    @DisplayName("Null values are handled without exposing secret material")
+    void nullSecretValues_areSafe() {
+        assertThat(cryptoService.encrypt(null)).isNull();
+        assertThat(cryptoService.decrypt(null)).isNull();
+        assertThat(cryptoService.generatePreview(null)).isEqualTo("whsec_••••••••");
     }
 
     @Test

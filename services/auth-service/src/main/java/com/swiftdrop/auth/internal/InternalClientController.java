@@ -37,25 +37,29 @@ public class InternalClientController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final ClientTokenService clientTokenService;
+    private final MerchantProvisioningGuard provisioningGuard;
 
     public InternalClientController(ClientCredentialRepository clientCredentialRepository,
                                     UserRepository userRepository,
                                     PasswordEncoder passwordEncoder,
-                                    ClientTokenService clientTokenService) {
+                                    ClientTokenService clientTokenService, MerchantProvisioningGuard provisioningGuard) {
         this.clientCredentialRepository = clientCredentialRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.clientTokenService = clientTokenService;
+        this.provisioningGuard = provisioningGuard;
     }
 
     /**
      * Creates an OAuth 2.0 client credential pair (clientId, clientSecret) for an approved merchant.
      */
     @PostMapping
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<InternalClientCredentialsResponse> createClientCredentials(
             @Valid @RequestBody InternalCreateClientRequest request) {
 
         String merchantId = request.merchantId().trim();
+        provisioningGuard.checkLegacyWrite(merchantId);
 
         // Check if the associated merchant exists
         boolean merchantExists = userRepository.existsByMerchantId(merchantId);

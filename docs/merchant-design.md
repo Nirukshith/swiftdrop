@@ -1,5 +1,11 @@
 # Merchant Onboarding and Orders (M6)
 
+Current implementation and recovery/setup evidence are documented in
+[Week 6 completion](m6-week6-merchant-completion-verification.md) and
+[bulk CSV recovery](merchant-bulk-csv.md). The Week 1 proposal below is historical;
+the additive provisioning recovery contract is supplied by PR #261 and implemented
+separately by PR #266. Successful real pricing now uses M10's merged audience support.
+
 **Status:** Week 1 contract proposal. API details marked **proposed** require team review where the SRS/ADRs do not decide the shape.
 
 ## Scope and ownership

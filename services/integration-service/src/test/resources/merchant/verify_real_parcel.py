@@ -4,6 +4,8 @@ Requires isolated running services and a prepared ADMIN account. See the M6-02
 verification document for environment variables and fixture setup.
 """
 import concurrent.futures
+import base64
+import hashlib
 import json
 import os
 import urllib.error
@@ -115,7 +117,23 @@ def main():
     if provider:
         quote_path = '/internal/v1/pricing/quote?pickupDistrict=Colombo&dropoffDistrict=Gampaha&weightKg=1.5&size=SMALL'
         expect(call(provider, quote_path), 401, 'current pricing provider rejects unauthenticated M6 call')
-        expect(call(provider, quote_path, token=first_token), 403, 'merchant token cannot satisfy dispatcher-only pricing policy')
+        internal_quote=expect(call(provider, quote_path, internal_token=os.environ['M6_VERIFY_INTERNAL_PRICING_TOKEN']),
+            200, 'real internal-service-token pricing quote')
+        check(internal_quote['totalFee']==850, 'internal service mode uses the same real pricing rules')
+        expect(call(provider, quote_path, internal_token='intentionally-invalid-pricing-token'),
+            401, 'invalid internal pricing credential remains denied')
+        expect(call(provider, quote_path, token=first_token), 403, 'ordinary merchant token cannot read internal pricing')
+        pricing = expect(call(AUTH, '/api/v1/auth/token', 'POST', {
+            'grant_type': 'client_credentials', 'client_id': os.environ['M6_VERIFY_PRICING_CLIENT_ID'],
+            'client_secret': os.environ['M6_VERIFY_PRICING_CLIENT_SECRET'], 'scope': 'pricing:read',
+        }), 200, 'real dedicated pricing service token')
+        encoded = pricing['access_token'].split('.')[1]
+        claims = json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
+        check(claims.get('scope') == 'pricing:read' and claims.get('role') != 'DISPATCHER',
+            'dedicated pricing scope without dispatcher elevation')
+        check('swiftdrop-api' in claims.get('aud', []), 'real auth-issued pricing token targets the required API audience')
+        quote=expect(call(provider, quote_path, token=pricing['access_token']), 200, 'real scoped pricing quote')
+        check(quote['totalFee']==850, 'real zone, weight and size rules produce 850 LKR')
     address = {'line1': '10 Verification Road', 'city': 'Colombo', 'district': 'Colombo', 'postalCode': '00100'}
     payload = {'externalReference': 'm6-' + run_id, 'recipientName': 'Test Recipient',
         'recipientPhone': '+94770000000', 'pickupAddress': address,
@@ -126,6 +144,14 @@ def main():
     check(first['status'] == 'CREATED' and first['fee'] == 850, 'configured contract quote and real parcel result')
     replay = expect(call(INTEGRATION, path, 'POST', payload, first_token, 'same-key'), 201, 'same-key create replay')
     check(replay == first, 'create replay returns entire original response')
+    # Exercise the merged M1 replay contract with M6's exact downstream identity.
+    downstream_key = 'm6-' + hashlib.sha256((first_id + ':CREATE_ORDER:same-key').encode()).hexdigest()
+    internal_payload = dict(payload, merchantId=first_id, fee=850)
+    provider_replay = expect(call(PARCEL, '/internal/v1/parcels', 'POST', internal_payload,
+        first_token, downstream_key), 201, 'real M1 downstream creation replay')
+    check(provider_replay['id'] == first['parcelId'], 'M1 downstream replay preserves the original parcel')
+    expect(call(PARCEL, '/internal/v1/parcels', 'POST', dict(internal_payload, recipientName='Changed'),
+        first_token, downstream_key), 409, 'M1 downstream key rejects changed payload')
     conflicting = dict(payload, externalReference='different-' + run_id)
     expect(call(INTEGRATION, path, 'POST', conflicting, first_token, 'same-key'), 409, 'conflicting create-key reuse')
     other = expect(call(INTEGRATION, path, 'POST', payload, second_token, 'same-key'), 201, 'same key in another merchant tenant')
@@ -196,6 +222,7 @@ def main():
     expect(call(INTEGRATION, path, 'POST', payload, 'invalid-token', 'invalid-key'), 401, 'invalid bearer token rejected')
     expect(call(INTEGRATION, path, 'POST', payload, None, 'anonymous-key'), 401, 'anonymous request rejected')
     verify_bulk(first_id, first_token, second_id, second_token, admin, run_id)
+    verify_recovery(first_id, first_token, admin, run_id)
     print('ALL REAL-SERVICE MERCHANT ORDER CHECKS PASSED', flush=True)
 
 
@@ -239,6 +266,64 @@ def verify_bulk(first_id, first_token, second_id, second_token, admin, run_id):
     expect(submit(csv, admin, 'bulk-admin'), 403, 'bulk non-merchant role denied')
     expect(submit(csv, None, 'bulk-anonymous'), 401, 'bulk anonymous request denied')
     expect(submit(csv, 'invalid-token', 'bulk-invalid-token'), 401, 'bulk invalid bearer token denied')
+
+
+def verify_recovery(merchant_id, token, admin, run_id):
+    fault_auth=os.environ['M6_VERIFY_FAULT_AUTH_URL']
+    fault_parcel=os.environ['M6_VERIFY_FAULT_PARCEL_URL']
+    provider=os.environ['M6_VERIFY_PRICING_PROVIDER_URL']
+    registered=expect(call(INTEGRATION,'/api/v1/merchants/register','POST',{
+        'businessName':'Lost Response Verification','contactName':'Recovery Contact',
+        'email':f'm6-loss-{run_id}@example.test','phoneNumber':'+94770000000'}),201,'recovery merchant registration')
+    approve=f'/api/v1/admin/merchants/{registered["id"]}/approve'
+    expect(call(INTEGRATION,approve,'POST',{},admin),502,'injected lost auth provisioning response after commit')
+    expect(call(INTEGRATION,approve,'POST',{},admin),409,'normal retry reconciles without silently rotating credentials')
+    faults=expect(call(fault_auth,'/__verification/faults'),200,'inspect isolated auth fault injection')
+    check(faults['injected']==1 and len(faults['operationIds'])==1,'one real provisioning response was discarded')
+    operation=faults['operationIds'][0]
+    status=expect(call(AUTH,f'/internal/v1/merchant-provisioning/{operation}',internal_token=os.environ['M6_VERIFY_INTERNAL_TOKEN']),200,'real auth non-secret recovery status')
+    check(status.get('clientSecret') is None and status['credentialRecoveryRequired'],'status never reads a stored secret')
+    client_id=status['clientId']
+    recovery=f'/api/v1/admin/merchants/{registered["id"]}/recover-credentials'
+    key=str(uuid.uuid4())
+    expect(call(INTEGRATION,recovery,'POST',{'confirmReplacement':False},admin,key),400,'recovery requires explicit confirmation')
+    expect(call(INTEGRATION,recovery,'POST',{'confirmReplacement':True},admin,key),502,'injected lost replacement response after commit')
+    expect(call(INTEGRATION,recovery,'POST',{'confirmReplacement':True},admin,key),409,'same replacement key does not rotate or reveal a secret again')
+    repaired=expect(call(INTEGRATION,recovery,'POST',{'confirmReplacement':True},admin,str(uuid.uuid4())),200,'explicit new confirmation recovers credential handoff')
+    check(repaired['clientId']==client_id and repaired['merchant']['status']=='APPROVED','recovery retains the original client and approves the merchant')
+    grant={'grant_type':'client_credentials','client_id':client_id,'client_secret':repaired['clientSecret']}
+    recovered_token=expect(call(AUTH,'/api/v1/auth/token','POST',grant),200,'recovered credential authenticates')['access_token']
+    expect(call(INTEGRATION,'/api/v1/merchant/orders',token=recovered_token),200,'recovered merchant can access its own order API')
+    again=expect(call(INTEGRATION,recovery,'POST',{'confirmReplacement':True},admin,str(uuid.uuid4())),200,'approved merchant lost-handoff replacement')
+    check(again['clientId']==client_id,'approved recovery does not mint another client')
+    expect(call(AUTH,'/api/v1/auth/token','POST',grant),401,'replaced old secret cannot obtain another token')
+    expect(call(INTEGRATION,recovery,'POST',{'confirmReplacement':True},token,str(uuid.uuid4())),403,'merchant cannot invoke ADMIN recovery')
+    expect(call(INTEGRATION,approve,'POST',{},admin),409,'completed approval cannot create duplicate credentials')
+
+    header='externalReference,recipientName,recipientPhone,pickupLine1,pickupLine2,pickupCity,pickupDistrict,pickupPostalCode,dropoffLine1,dropoffLine2,dropoffCity,dropoffDistrict,dropoffPostalCode,size,weightKg'
+    reference='m6-loss-bulk-'+run_id
+    csv=header+'\n'+f'{reference},Recovery Recipient,+94770000000,10 Road,,Colombo,Colombo,00100,20 Road,,Gampaha,Gampaha,11000,SMALL,1.5\n'
+    upload_key='lost-parcel-'+run_id
+    before=expect(call(PARCEL,'/internal/v1/parcels?page=0&size=100'),200,'inspect parcels before committed-response fault')
+    failed=expect(call(INTEGRATION,'/api/v1/merchant/orders/bulk','POST',csv,token,upload_key,content_type='text/csv'),200,'bulk records lost real parcel response')
+    check(failed['acceptedRows']==0,'unknown parcel is not falsely reported successful')
+    committed=expect(call(PARCEL,'/internal/v1/parcels?page=0&size=100'),200,'real parcel committed despite discarded response')
+    check(committed['totalElements']==before['totalElements']+1,'exactly one real parcel committed before retry')
+    original_id=next(p['id'] for p in committed['content'] if p['id'] not in {old['id'] for old in before['content']})
+    expect(call(PARCEL,f'/internal/v1/parcels/{original_id}/status','PATCH',
+        {'status':'PICKED_UP','expectedCurrentStatus':'CREATED'}),200,'advance real parcel before missing mapping is recovered')
+    zones=expect(call(provider,'/api/v1/admin/zones',token=os.environ['M6_VERIFY_DISPATCHER_TOKEN']),200,'load real pricing for change between retries')
+    dropoff=next(z for z in zones if 'Gampaha' in z['districts'])
+    expect(call(provider,'/api/v1/admin/zones/'+dropoff['id'],'PUT',{'name':dropoff['name'],'districts':dropoff['districts'],'served':dropoff['served'],'baseFeeLkr':1000},os.environ['M6_VERIFY_DISPATCHER_TOKEN']),200,'change real pricing after ambiguous parcel commit')
+    replay=expect(call(INTEGRATION,'/api/v1/merchant/orders/bulk','POST',csv,token,upload_key,content_type='text/csv'),200,'bulk reconciles real committed parcel using original quote')
+    check(replay['acceptedRows']==1 and replay['results'][0]['order']['fee']==850,'recovery pins 850 LKR instead of requoting at the new price')
+    check(replay['results'][0]['order']['status']=='PICKED_UP','recovery respects the provider current lifecycle state')
+    final=expect(call(PARCEL,'/internal/v1/parcels?page=0&size=100'),200,'inspect parcel count after reconciliation')
+    check(final['totalElements']==committed['totalElements'],'lost-response recovery created no duplicate parcel')
+    check(replay['results'][0]['order']['parcelId'] in {p['id'] for p in committed['content']},'reconciled mapping points at the original real parcel')
+    expect(call(INTEGRATION,'/api/v1/merchant/orders/bulk','POST',csv.replace(reference,reference+'changed'),token,upload_key,content_type='text/csv'),409,'recovery rejects changed file with the original key')
+    faults=expect(call(fault_parcel,'/__verification/faults'),200,'inspect committed parcel fault injection')
+    check(faults['injected']==1,'one real successful parcel response was deliberately discarded')
 
 
 if __name__ == '__main__':

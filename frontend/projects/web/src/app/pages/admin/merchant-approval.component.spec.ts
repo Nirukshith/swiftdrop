@@ -64,6 +64,31 @@ describe('MerchantApprovalComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('PENDING');
   });
 
+  it('requires explicit recovery confirmation and preserves its key after a lost response', () => {
+    const pending={...merchant,credentialRecoveryAvailable:true};
+    service.recover=jest.fn().mockReturnValueOnce(throwError(()=>({status:502})))
+      .mockReturnValueOnce(of({merchant:{...pending,status:'APPROVED'},clientId:'same-client',clientSecret:'replacement-only-once'}));
+    component.openRecover(pending); component.confirmAction();
+    expect(service.recover).not.toHaveBeenCalled();
+    expect(component.reasonError()).toContain('Confirm replacement');
+    component.confirmReplacement.set(true); component.confirmAction();
+    const key=service.recover.mock.calls[0][1];
+    component.confirmAction();
+    expect(service.recover).toHaveBeenLastCalledWith(merchant.id,key);
+    fixture.detectChanges(); expect(fixture.nativeElement.textContent).toContain('replacement-only-once');
+    component.openRecover(pending); expect(component.action()).toBeNull();
+    fixture.destroy(); expect(component.handoff()).toBeNull();
+  });
+
+  it('offers recovery for approved merchants and keeps explicit status filtering', () => {
+    service.recover=jest.fn();
+    component.changeStatus('APPROVED');
+    expect(service.loadMerchants).toHaveBeenCalledWith(0,20,'APPROVED');
+    component.openRecover({...merchant,status:'APPROVED',credentialRecoveryAvailable:true});
+    expect(component.action()).toBe('recover');
+    expect(component.confirmReplacement()).toBe(false);
+  });
+
   it('displays approval credentials once, retains them across list refresh, and clears them on acknowledgement', () => {
     service.approve.mockReturnValueOnce(of({ merchant: { ...merchant, status: 'APPROVED' },
       clientId: 'client-1', clientSecret: 'one-time-test-secret' }));
