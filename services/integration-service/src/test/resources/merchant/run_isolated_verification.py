@@ -2,7 +2,8 @@
 
 Build all service JARs with Java 21 Maven verify first. Requires Docker, Python 3,
 Java 21. Uses loopback ports 19181-19185, 19192, 19194, and 19125. Creates only its own containers and cleans them up.
-Pricing uses a contract fixture because the current provider rejects M6 callers.
+Pricing uses the real operations service. Loopback fault proxies discard selected
+successful auth/parcel responses after their commits to verify recovery.
 """
 import importlib.util
 import json
@@ -19,7 +20,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from fault_proxy import start_proxy
 
 sys.dont_write_bytecode = True
 
@@ -31,9 +32,10 @@ LOG_DIR = Path(tempfile.mkdtemp(prefix='swiftdrop-m6-week4-'))
 processes = []
 containers = []
 logs = []
-fixture = None
+proxies = []
 password = secrets.token_urlsafe(24)
 internal_token = secrets.token_urlsafe(32)
+pricing_internal_token = secrets.token_urlsafe(32)
 admin_password = secrets.token_urlsafe(24) + 'A1!'
 
 
@@ -63,32 +65,17 @@ def wait_http(url, process=None):
     raise RuntimeError('Service readiness timed out: ' + url)
 
 
-class PricingFixture(BaseHTTPRequestHandler):
-    def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        query = urllib.parse.parse_qs(parsed.query)
-        if parsed.path != '/internal/v1/pricing/quote' or set(query) != {'pickupDistrict', 'dropoffDistrict', 'weightKg', 'size'}:
-            self.send_error(400)
-            return
-        body = json.dumps({'currency': 'LKR', 'totalFee': 850,
-            'breakdown': {'dropoffZoneBaseFee': 500, 'weightBandCharge': 250, 'sizeCharge': 100},
-            'pickupZone': 'Colombo fixture', 'dropoffZone': 'Gampaha fixture'}).encode()
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, *args):
-        pass
 
 
 try:
     if not JAVA or not DOCKER:
         raise RuntimeError('Java 21 and Docker are required on PATH (or JAVA_HOME)')
     print('Private runtime logs: ' + str(LOG_DIR), flush=True)
-    for port in [19181, 19182, 19183, 19184, 19185, 19192, 19194, 19125]:
+    for port in [19181, 19182, 19184, 19185, 19186, 19187, 19192, 19194, 19125]:
         with socket.socket() as sock:
+            # A just-cleaned verification run can leave TCP TIME_WAIT sockets.
+            # Match the HTTP servers' reuse setting without replacing an active listener.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(('127.0.0.1', port))
     for module in ['auth', 'parcel', 'operations', 'integration']:
         jar = ROOT / f'services/{module}-service/target/{module}-service-0.1.0-SNAPSHOT.jar'
@@ -133,20 +120,21 @@ try:
     docker('run', '-d', '--name', name, '--memory=128m', '-p', '127.0.0.1:19125:1025', 'axllent/mailpit:v1.32.0')
     containers.append(name)
 
-    fixture = ThreadingHTTPServer(('127.0.0.1', 19183), PricingFixture)
-    threading.Thread(target=fixture.serve_forever, daemon=True).start()
-    print('Pricing uses the merged-contract fixture; the real provider is checked separately', flush=True)
+    proxies.append(start_proxy(19186, 'http://127.0.0.1:19182', 'parcel'))
+    proxies.append(start_proxy(19187, 'http://127.0.0.1:19181', 'auth'))
+    print('Pricing uses real operations; isolated proxies inject committed-response loss only', flush=True)
     base_env = dict(os.environ,
         SPRING_PROFILES_ACTIVE='local', SPRING_DATASOURCE_USERNAME='m6verify', SPRING_DATASOURCE_PASSWORD=password,
         SPRING_KAFKA_BOOTSTRAP_SERVERS='127.0.0.1:19192', KAFKA_BOOTSTRAP_SERVERS='127.0.0.1:19192',
         SPRING_MAIL_HOST='127.0.0.1', SPRING_MAIL_PORT='19125',
         INTERNAL_MERCHANT_SERVICE_TOKEN=internal_token, INTERNAL_NOTIFICATIONS_SERVICE_TOKEN=secrets.token_urlsafe(32),
+        INTERNAL_PRICING_SERVICE_TOKEN=pricing_internal_token,
         JWKS_URL='http://127.0.0.1:19181/.well-known/jwks.json',
         SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI='http://127.0.0.1:19181/.well-known/jwks.json',
         SWIFTDROP_SECURITY_JWKS_URL='http://127.0.0.1:19181/.well-known/jwks.json',
-        SERVICES_AUTH_BASE_URL='http://127.0.0.1:19181', SERVICES_PARCEL_BASE_URL='http://127.0.0.1:19182',
-        SERVICES_OPERATIONS_BASE_URL='http://127.0.0.1:19183',
-        SWIFTDROP_PRICING_QUOTE_URL='http://127.0.0.1:19183/internal/v1/pricing/quote',
+        SERVICES_AUTH_BASE_URL='http://127.0.0.1:19187', SERVICES_PARCEL_BASE_URL='http://127.0.0.1:19186',
+        SERVICES_OPERATIONS_BASE_URL='http://127.0.0.1:19185',
+        SWIFTDROP_PRICING_QUOTE_URL='http://127.0.0.1:19185/internal/v1/pricing/quote',
         LOGGING_LEVEL_ROOT='WARN', LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB='WARN', LOGGING_LEVEL_ORG_APACHE_KAFKA='ERROR')
     for module, port, db in [('auth',19181,'auth_db'), ('parcel',19182,'parcel_db'),
                              ('operations',19185,'ops_db'), ('integration',19184,'integration_db')]:
@@ -160,6 +148,26 @@ try:
         processes.append(proc)
         wait_http(f'http://127.0.0.1:{port}/actuator/health', proc)
         print('Ready: real ' + module + '-service', flush=True)
+        if module == 'auth':
+            def provision(path, body):
+                request = urllib.request.Request('http://127.0.0.1:19181' + path, method='POST',
+                    headers={'Content-Type': 'application/json', 'X-Internal-Service-Token': internal_token},
+                    data=json.dumps(body).encode())
+                with urllib.request.urlopen(request, timeout=20) as response:
+                    return json.load(response)
+            pricing_identity = secrets.token_hex(16)
+            provision('/internal/v1/users', {'email': 'm6-pricing@example.test',
+                'fullName': 'Isolated Pricing Client', 'phoneNumber': '+94770000000',
+                'role': 'MERCHANT', 'merchantId': pricing_identity, 'enabled': True})
+            pricing_client = provision('/internal/v1/clients', {'merchantId': pricing_identity,
+                'clientName': 'Isolated M6 pricing service', 'scopes': ['pricing:read']})
+            # Private fixture credentials configure only M6; no human role is elevated.
+            if os.environ.get('M6_VERIFY_PRICING_MODE', 'oauth') == 'internal':
+                base_env['MERCHANT_PRICING_CLIENT_ID'] = ''
+                base_env['MERCHANT_PRICING_CLIENT_SECRET'] = ''
+            else:
+                base_env.update(MERCHANT_PRICING_CLIENT_ID=pricing_client['clientId'],
+                    MERCHANT_PRICING_CLIENT_SECRET=pricing_client['clientSecret'])
 
     request = urllib.request.Request('http://127.0.0.1:19181/internal/v1/users', method='POST',
         headers={'Content-Type': 'application/json', 'X-Internal-Service-Token': internal_token},
@@ -168,9 +176,32 @@ try:
     with urllib.request.urlopen(request, timeout=20) as response:
         if response.status != 201:
             raise RuntimeError('Admin fixture provisioning failed')
+    # Configure disposable real pricing via the existing authorized APIs.
+    dispatcher_password = secrets.token_urlsafe(24) + 'A1!'
+    provision('/internal/v1/users', {'email':'m6-dispatch@example.test','password':dispatcher_password,
+        'fullName':'Isolated Pricing Dispatcher','phoneNumber':'+94770000000','role':'DISPATCHER','enabled':True})
+    def public_call(base, path, body, token=None):
+        headers={'Content-Type':'application/json'}
+        if token: headers['Authorization']='Bearer '+token
+        request=urllib.request.Request(base+path, method='POST',headers=headers,data=json.dumps(body).encode())
+        with urllib.request.urlopen(request,timeout=20) as response: return json.load(response)
+    dispatcher=public_call('http://127.0.0.1:19181','/api/v1/auth/login',
+        {'email':'m6-dispatch@example.test','password':dispatcher_password})['accessToken']
+    for district,fee in [('Colombo',0),('Gampaha',500)]:
+        public_call('http://127.0.0.1:19185','/api/v1/admin/zones',
+            {'name':'M6 verification '+district,'districts':[district],'served':True,'baseFeeLkr':fee},dispatcher)
+    for kind,key,low,high,charge in [('WEIGHT_BAND','verification-0-50',0,50,250),('SIZE','SMALL',None,None,100),('SIZE','MEDIUM',None,None,100),('SIZE','LARGE',None,None,100)]:
+        public_call('http://127.0.0.1:19185','/api/v1/admin/pricing-rules',
+            {'kind':kind,'key':key,'minimumWeightKg':low,'maximumWeightKg':high,'chargeLkr':charge,'active':True},dispatcher)
+    print('Real pricing configured through DISPATCHER APIs',flush=True)
     os.environ.update(M6_VERIFY_AUTH_URL='http://127.0.0.1:19181', M6_VERIFY_INTEGRATION_URL='http://127.0.0.1:19184',
         M6_VERIFY_PARCEL_URL='http://127.0.0.1:19182', M6_VERIFY_PRICING_PROVIDER_URL='http://127.0.0.1:19185',
         M6_VERIFY_ADMIN_EMAIL='m6-admin@example.test', M6_VERIFY_ADMIN_PASSWORD=admin_password,
+        M6_VERIFY_DISPATCHER_TOKEN=dispatcher, M6_VERIFY_FAULT_PARCEL_URL='http://127.0.0.1:19186',
+        M6_VERIFY_FAULT_AUTH_URL='http://127.0.0.1:19187',
+        M6_VERIFY_PRICING_CLIENT_ID=pricing_client['clientId'],
+        M6_VERIFY_PRICING_CLIENT_SECRET=pricing_client['clientSecret'],
+        M6_VERIFY_INTERNAL_PRICING_TOKEN=pricing_internal_token,
         M6_VERIFY_INTERNAL_TOKEN=internal_token)
     path = ROOT / 'services/integration-service/src/test/resources/merchant/verify_real_parcel.py'
     spec = importlib.util.spec_from_file_location('m6_verifier', path)
@@ -186,9 +217,9 @@ finally:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait(timeout=10)
-    if fixture:
-        fixture.shutdown()
-        fixture.server_close()
+    for proxy in proxies:
+        proxy.shutdown()
+        proxy.server_close()
     for log in logs:
         log.close()
     incomplete = []

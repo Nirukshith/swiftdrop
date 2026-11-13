@@ -76,12 +76,7 @@ public class MerchantOrderService {
                     "External reference has already been used by this merchant");
         }
 
-        BigDecimal quote;
-        try {
-            quote = pricingQuoteClient.quote(request);
-        } catch (RestClientException | IllegalArgumentException | IllegalStateException exception) {
-            throw new PricingUnavailableException();
-        }
+        BigDecimal quote = bulk ? bulkStore.requireQuote(merchantId, idempotencyKey) : quoteForBulk(request);
         try {
             ParcelClient.InternalParcelResponse parcel = requestParcel(merchantId, request, quote, idempotencyKey);
             if (parcel == null || parcel.id() == null || parcel.id().isBlank()
@@ -112,6 +107,16 @@ public class MerchantOrderService {
 
     public static class PricingUnavailableException extends ResponseStatusException {
         public PricingUnavailableException() { super(HttpStatus.BAD_GATEWAY, "Pricing service could not quote the merchant order"); }
+    }
+
+    public BigDecimal quoteForBulk(CreateMerchantOrderRequest request) {
+        try {
+            BigDecimal fee = pricingQuoteClient.quote(request);
+            if (fee == null || fee.signum() < 0) throw new IllegalStateException("Invalid pricing quote");
+            return fee;
+        } catch (RestClientException | IllegalArgumentException | IllegalStateException exception) {
+            throw new PricingUnavailableException();
+        }
     }
 
     private ParcelClient.InternalParcelResponse requestParcel(UUID merchantId, CreateMerchantOrderRequest request,
