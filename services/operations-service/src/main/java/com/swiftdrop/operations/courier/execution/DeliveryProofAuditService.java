@@ -3,6 +3,7 @@ package com.swiftdrop.operations.courier.execution;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -20,7 +21,7 @@ public class DeliveryProofAuditService {
         this.repository = repository;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(String actorId, String actorRole, String action, String targetType, String targetId, Map<String, Object> details) {
         try {
             DeliveryProofAuditLogEntity entity = DeliveryProofAuditLogEntity.builder()
