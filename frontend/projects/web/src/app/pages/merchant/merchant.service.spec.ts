@@ -172,4 +172,18 @@ describe('MerchantService', () => {
     req.flush({ content: [], totalElements: 21, totalPages: 3, page: 2, size: 10 });
     expect((await result).totalElements).toBe(21);
   });
+
+  it('passes delivery event and date filters to the delivery log endpoint', async () => {
+    const result = firstValueFrom(service.getDeliveryLogs(
+      'PENDING', 1, 20, 'PARCEL_STATUS_CHANGED',
+      '2026-11-01T00:00:00Z', '2026-11-30T23:59:59Z'
+    ));
+    const req = httpMock.expectOne((request) => request.url === '/api/v1/merchant/webhooks/deliveries');
+    expect(req.request.params.get('status')).toBe('PENDING');
+    expect(req.request.params.get('eventType')).toBe('PARCEL_STATUS_CHANGED');
+    expect(req.request.params.get('from')).toBe('2026-11-01T00:00:00Z');
+    expect(req.request.params.get('to')).toBe('2026-11-30T23:59:59Z');
+    req.flush({ content: [], totalElements: 0, totalPages: 0, page: 1, size: 20 });
+    await result;
+  });
 });
