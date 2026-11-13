@@ -10,6 +10,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -53,7 +54,20 @@ class IntegrationSecurityTest {
                                 .subject("customer-uuid-2")
                                 .claim("email", "cust2@example.com")
                                 .claim("role", "CUSTOMER")
-                                .claim("roles", List.of("ROLE_CUSTOMER")))))
+                                .claim("roles", List.of("ROLE_CUSTOMER")))
+                        .authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"))))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/notifications rejects non-customer roles")
+    void notifications_rejectsNonCustomerRole() throws Exception {
+        mockMvc.perform(get("/api/v1/notifications")
+                        .with(jwt().jwt(builder -> builder
+                                .subject("dispatcher-uuid-1")
+                                .claim("roles", List.of("ROLE_DISPATCHER")))
+                        .authorities(new SimpleGrantedAuthority("ROLE_DISPATCHER")))
+                )
+                .andExpect(status().isForbidden());
     }
 }

@@ -128,39 +128,43 @@ public class NotificationService {
 
         // 6. Send and store EMAIL notification
         if (contact.email() != null && !contact.email().isBlank()) {
-            String emailId = "email-" + UUID.randomUUID();
-            NotificationMessage emailMessage = new NotificationMessage(
-                    emailId,
-                    event.eventId(),
-                    customerId,
-                    event.parcelId(),
-                    event.trackingNumber(),
-                    contact.email(),
-                    rendered.subject(),
-                    rendered.body(),
-                    event.sequence(),
-                    Instant.now()
-            );
+            if (!emailChannel.isConfigured()) {
+                log.warn("JavaMailSender is not configured; skipping email notification for customer {}", customerId);
+            } else {
+                String emailId = "email-" + UUID.randomUUID();
+                NotificationMessage emailMessage = new NotificationMessage(
+                        emailId,
+                        event.eventId(),
+                        customerId,
+                        event.parcelId(),
+                        event.trackingNumber(),
+                        contact.email(),
+                        rendered.subject(),
+                        rendered.body(),
+                        event.sequence(),
+                        Instant.now()
+                );
 
-            emailChannel.send(emailMessage);
+                emailChannel.send(emailMessage);
 
-            NotificationLogEntity emailLog = new NotificationLogEntity(
-                    emailId,
-                    event.eventId(),
-                    customerId,
-                    event.parcelId(),
-                    event.trackingNumber(),
-                    "EMAIL",
-                    contact.email(),
-                    rendered.subject(),
-                    rendered.body(),
-                    false,
-                    null,
-                    event.sequence(),
-                    Instant.now(),
-                    Instant.now()
-            );
-            notificationLogRepository.save(emailLog);
+                NotificationLogEntity emailLog = new NotificationLogEntity(
+                        emailId,
+                        event.eventId(),
+                        customerId,
+                        event.parcelId(),
+                        event.trackingNumber(),
+                        "EMAIL",
+                        contact.email(),
+                        rendered.subject(),
+                        rendered.body(),
+                        false,
+                        null,
+                        event.sequence(),
+                        Instant.now(),
+                        Instant.now()
+                );
+                notificationLogRepository.save(emailLog);
+            }
         }
 
         // 7. Dispatch SMS if phone number available
@@ -235,7 +239,7 @@ public class NotificationService {
                 now
         ));
 
-        if (event.email() != null && !event.email().isBlank()) {
+        if (event.email() != null && !event.email().isBlank() && emailChannel.isConfigured()) {
             String emailId = "email-" + UUID.randomUUID();
             emailChannel.send(new NotificationMessage(
                     emailId,
@@ -265,8 +269,10 @@ public class NotificationService {
                     now,
                     now
             ));
-        } else {
+        } else if (event.email() == null || event.email().isBlank()) {
             log.warn("User {} has no email; skipping welcome email", event.userId());
+        } else {
+            log.warn("JavaMailSender is not configured; skipping welcome email for user {}", event.userId());
         }
 
         if (event.phoneNumber() != null && !event.phoneNumber().isBlank()) {

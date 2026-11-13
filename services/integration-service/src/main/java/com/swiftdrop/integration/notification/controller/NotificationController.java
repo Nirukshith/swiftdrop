@@ -12,7 +12,6 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,10 +32,9 @@ public class NotificationController {
             @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(name = "unreadOnly", defaultValue = "false") boolean unreadOnly,
             @AuthenticationPrincipal Jwt jwt,
-            Authentication authentication,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
+            Authentication authentication) {
 
-        String userId = resolveUserId(jwt, authentication, userIdHeader);
+        String userId = resolveUserId(jwt, authentication);
         if (userId == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -49,10 +47,9 @@ public class NotificationController {
     public ResponseEntity<NotificationDto> markAsRead(
             @PathVariable("id") String id,
             @AuthenticationPrincipal Jwt jwt,
-            Authentication authentication,
-            @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
+            Authentication authentication) {
 
-        String userId = resolveUserId(jwt, authentication, userIdHeader);
+        String userId = resolveUserId(jwt, authentication);
         if (userId == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -61,7 +58,7 @@ public class NotificationController {
         return ResponseEntity.ok(dto);
     }
 
-    private String resolveUserId(Jwt jwt, Authentication authentication, String userIdHeader) {
+    private String resolveUserId(Jwt jwt, Authentication authentication) {
         if (jwt != null && jwt.getSubject() != null && !jwt.getSubject().isBlank()) {
             return jwt.getSubject();
         }
@@ -72,10 +69,6 @@ public class NotificationController {
         if (currentUser.isPresent() && currentUser.get().userId() != null && !currentUser.get().userId().isBlank()) {
             return currentUser.get().userId();
         }
-        if (userIdHeader != null && !userIdHeader.isBlank()) {
-            return userIdHeader;
-        }
         return null;
     }
 }
-
