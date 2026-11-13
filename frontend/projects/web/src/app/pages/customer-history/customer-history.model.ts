@@ -55,7 +55,13 @@ export interface ParcelListQuery {
   page?: number;
   size?: number;
   status?: ParcelStatus | null;
+  /** Created on or after this date, YYYY-MM-DD, Asia/Colombo (parcel.yaml listCustomerParcels). */
   from?: string | null;
+  /** Created on or before this date, inclusive, YYYY-MM-DD, Asia/Colombo. */
   to?: string | null;
+  /** Case-insensitive tracking-number search, at most 32 characters; blank means no search. */
   q?: string | null;
 }
+
+/** Longest tracking-number search M1 accepts (parcel.yaml). */
+export const PARCEL_SEARCH_MAX = 32;

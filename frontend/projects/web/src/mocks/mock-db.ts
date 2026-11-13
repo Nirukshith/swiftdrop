@@ -83,11 +83,32 @@ export class MockParcelDb {
     if (status && !PARCEL_STATUSES.includes(status as ParcelStatus)) {
       return error(400, 'VALIDATION_FAILED', `Unknown status ${status}`);
     }
+    // Same rules as M1's endpoint (parcel.yaml listCustomerParcels): dates are inclusive calendar
+    // days in Asia/Colombo (UTC+05:30), q is a case-insensitive "contains" on the tracking number.
+    const from = params.get('from')?.trim() || null;
+    const to = params.get('to')?.trim() || null;
+    const q = params.get('q')?.trim().toLowerCase() || null;
+    for (const [name, value] of [['from', from], ['to', to]] as const) {
+      if (value && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00+05:30`)))) {
+        return error(400, 'VALIDATION_FAILED', `${name} must be a valid YYYY-MM-DD date`);
+      }
+    }
+    if (from && to && from > to) {
+      return error(400, 'VALIDATION_FAILED', 'from must not be after to');
+    }
+    if (q && q.length > 32) {
+      return error(400, 'VALIDATION_FAILED', 'q must be at most 32 characters after trimming');
+    }
+    const start = from ? Date.parse(`${from}T00:00:00+05:30`) : null;
+    const end = to ? Date.parse(`${to}T00:00:00+05:30`) + 24 * 60 * 60 * 1000 : null;
     const page = Math.max(0, int(params.get('page'), 0));
     const size = Math.min(50, Math.max(1, int(params.get('size'), 20)));
     const matching = this.parcels
       .filter((parcel) => !status || parcel.status === status)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      .filter((parcel) => start === null || Date.parse(parcel.createdAt) >= start)
+      .filter((parcel) => end === null || Date.parse(parcel.createdAt) < end)
+      .filter((parcel) => !q || parcel.trackingNumber.toLowerCase().includes(q))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
     return {
       status: 200,
       body: {

@@ -214,6 +214,113 @@ class CustomerHistoryIntegrationTest {
         assertThat(call("/api/v1/parcels", "not-a-real-token").getResponse().getStatus()).isEqualTo(401);
     }
 
+    // ------------------------------------------------------------------ history filters (CU-05, #219)
+
+    /** Sets a parcel's creation time directly (it is set by the entity on insert). */
+    private void createdAt(String trackingNumber, String instant) {
+        jdbc.update("UPDATE parcels SET created_at = ?::timestamptz WHERE tracking_number = ?", instant, trackingNumber);
+    }
+
+    private List<String> trackingNumbers(JsonNode page) {
+        List<String> numbers = new ArrayList<>();
+        page.get("content").forEach(parcel -> numbers.add(parcel.get("trackingNumber").asText()));
+        return numbers;
+    }
+
+    private int status(String query, String token) throws Exception {
+        return call("/api/v1/parcels" + query, token).getResponse().getStatus();
+    }
+
+    @Test
+    @DisplayName("Dates are whole days in Asia/Colombo: 23:59 Colombo is still 'to', 00:00 the next day is not")
+    void dateFiltersUseColomboDays() throws Exception {
+        String owner = tokens.mintCustomerToken(OWNER);
+        // Everything else was created "now"; move it out of the way first.
+        jdbc.update("UPDATE parcels SET created_at = '2026-10-01T06:00:00Z'::timestamptz");
+        createdAt("SD-20261119-OWN001", "2026-11-12T18:29:59Z"); // 2026-11-12 23:59:59 in Colombo
+        createdAt("SD-20261119-OWN002", "2026-11-12T18:30:00Z"); // 2026-11-13 00:00:00 in Colombo
+        createdAt("SD-20261119-OWN003", "2026-11-11T18:30:00Z"); // 2026-11-12 00:00:00 in Colombo
+
+        assertThat(trackingNumbers(list("?from=2026-11-12&to=2026-11-12&size=50", owner)))
+                .containsExactlyInAnyOrder("SD-20261119-OWN001", "SD-20261119-OWN003");
+        assertThat(trackingNumbers(list("?from=2026-11-13&to=2026-11-13&size=50", owner)))
+                .containsExactly("SD-20261119-OWN002");
+        assertThat(trackingNumbers(list("?to=2026-11-12&size=50", owner)))
+                .contains("SD-20261119-OWN001", "SD-20261119-OWN003").doesNotContain("SD-20261119-OWN002");
+    }
+
+    @Test
+    @DisplayName("Search is a case-insensitive 'contains' on the tracking number; a blank search is no search")
+    void trackingNumberSearch() throws Exception {
+        String owner = tokens.mintCustomerToken(OWNER);
+
+        assertThat(trackingNumbers(list("?q=own005&size=50", owner))).containsExactly("SD-20261119-OWN005");
+        assertThat(list("?q=OWN01&size=50", owner).get("totalElements").asLong()).as("OWN010..OWN019").isEqualTo(10);
+        for (String blank : List.of("", "   ")) {
+            MvcResult result = mockMvc.perform(get("/api/v1/parcels").param("q", blank).param("size", "50")
+                    .header("Authorization", "Bearer " + owner)).andReturn();
+            assertThat(result.getResponse().getStatus()).isEqualTo(200);
+            assertThat(objectMapper.readTree(result.getResponse().getContentAsString()).get("totalElements").asLong())
+                    .as("q='%s' is no search", blank).isEqualTo(23);
+        }
+        // Another customer's parcels never match, even with their tracking number
+        assertThat(list("?q=OTH001&size=50", owner).get("totalElements").asLong()).isZero();
+    }
+
+    @Test
+    @DisplayName("Filters combine with AND: status, dates and search together")
+    void filtersCombine() throws Exception {
+        String owner = tokens.mintCustomerToken(OWNER);
+        createdAt("SD-20261119-OWN001", "2026-11-05T06:00:00Z"); // DELIVERED, 5 Nov
+        createdAt("SD-20261119-OWN004", "2026-11-05T07:00:00Z"); // DELIVERED, 5 Nov
+        createdAt("SD-20261119-OWN002", "2026-11-05T08:00:00Z"); // IN_TRANSIT, 5 Nov
+
+        JsonNode page = list("?status=DELIVERED&from=2026-11-05&to=2026-11-05&q=own00&size=50", owner);
+
+        assertThat(trackingNumbers(page)).containsExactly("SD-20261119-OWN004", "SD-20261119-OWN001");
+    }
+
+    @Test
+    @DisplayName("Newest first across pages, with id as the tie-breaker when creation times are equal")
+    void newestFirstAcrossPages() throws Exception {
+        String owner = tokens.mintCustomerToken(OWNER);
+        Instant base = Instant.parse("2026-11-01T00:00:00Z");
+        for (int i = 1; i <= 23; i++) {
+            // Pairs share a creation time, so the id decides their order
+            createdAt(String.format("SD-20261119-OWN%03d", i), base.plusSeconds(60L * (i / 2)).toString());
+        }
+
+        List<JsonNode> all = new ArrayList<>();
+        for (int page = 0; page < 3; page++) {
+            list("?page=" + page + "&size=10", owner).get("content").forEach(all::add);
+        }
+
+        assertThat(all).hasSize(23);
+        for (int i = 1; i < all.size(); i++) {
+            Instant previous = Instant.parse(all.get(i - 1).get("createdAt").asText());
+            Instant current = Instant.parse(all.get(i).get("createdAt").asText());
+            assertThat(previous).as("row %d not newer than row %d", i, i - 1).isAfterOrEqualTo(current);
+            if (previous.equals(current)) {
+                assertThat(all.get(i - 1).get("id").asText()).as("tie at row %d", i)
+                        .isGreaterThan(all.get(i).get("id").asText());
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Invalid filters get 400 VALIDATION_FAILED, as the history page expects")
+    void invalidFiltersAreRejected() throws Exception {
+        String owner = tokens.mintCustomerToken(OWNER);
+        for (String query : List.of("?from=2026-11-30&to=2026-11-01", "?from=2026-13-01", "?to=yesterday", "?q=" + "x".repeat(33))) {
+            MvcResult result = call("/api/v1/parcels" + query, owner);
+            assertThat(result.getResponse().getStatus()).as(query).isEqualTo(400);
+            assertThat(objectMapper.readTree(result.getResponse().getContentAsString()).get("code").asText())
+                    .as(query).isEqualTo("VALIDATION_FAILED");
+        }
+        assertThat(status("?q=" + "x".repeat(32), owner)).as("32 characters is allowed").isEqualTo(200);
+        assertThat(status("?from=2026-11-01", null)).isEqualTo(401);
+    }
+
     // ------------------------------------------------------------------ receipt with signed tokens
 
     @Test
