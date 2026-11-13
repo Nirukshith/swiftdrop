@@ -155,6 +155,29 @@ class ReceiptIntegrationTest {
     }
 
     @Test
+    @DisplayName("A Tamil recipient and Sinhala city stored in Postgres come out on the downloaded receipt")
+    void sinhalaAndTamilFromTheDatabase() throws Exception {
+        String tamilName = "சுனில் குமார்";
+        String sinhalaCity = "මහනුවර";
+        Parcel stored = parcelRepository.findById(parcel.getId()).orElseThrow();
+        stored.setRecipientName(tamilName);
+        stored.setDropoffAddress(new AddressSnapshot("12 Temple Road", null, sinhalaCity, "Kandy", "20000"));
+        parcelRepository.saveAndFlush(stored);
+        deliver();
+
+        byte[] pdf = mockMvc.perform(get(receiptUrl()).with(user(OWNER).roles("CUSTOMER")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+
+        String shown = String.join("", ReceiptMultilingualTest.shapedRuns(pdf).stream()
+                .map(ReceiptMultilingualTest.Run::actualText).toList());
+        assertThat(shown).contains("சுனில்", "குமார்", sinhalaCity);
+        assertThat(ReceiptMultilingualTest.embeddedFonts(pdf))
+                .anyMatch(name -> name.endsWith("+NotoSansTamil-Regular"))
+                .anyMatch(name -> name.endsWith("+NotoSansSinhala-Regular"));
+    }
+
+    @Test
     @DisplayName("ADMIN may download the receipt")
     void adminDownloadsReceipt() throws Exception {
         deliver();
@@ -210,6 +233,12 @@ class ReceiptIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code", is("RESOURCE_NOT_FOUND")))
                 .andExpect(jsonPath("$.message", is("Parcel not found")));
+        // The frontend asks for application/pdf; the error must still come back as the JSON body.
+        mockMvc.perform(get("/api/v1/parcels/00000000-0000-4000-8000-000000000000/receipt")
+                        .accept(MediaType.APPLICATION_PDF).with(user(OWNER).roles("CUSTOMER")))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.code", is("RESOURCE_NOT_FOUND")));
     }
 
     @Test
