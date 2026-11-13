@@ -91,7 +91,7 @@ public class WebhookController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Page must be non-negative and size must be between 1 and 100");
         }
-        if (status != null && !Set.of("SUCCESS", "PENDING_RETRY", "FAILED", "CANCELLED").contains(status)) {
+        if (status != null && !Set.of("PENDING", "SUCCESS", "PENDING_RETRY", "FAILED", "CANCELLED").contains(status)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported webhook delivery status");
         }
         if (eventType != null && !Set.of("PARCEL_CREATED", "PARCEL_STATUS_CHANGED", "TEST_EVENT").contains(eventType)) {

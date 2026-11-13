@@ -471,6 +471,22 @@ type ActiveTab = 'orders' | 'settings' | 'deliveries' | 'credentials';
               {{ f.label }}
             </button>
           </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <label for="deliveryEventFilter" class="text-xs font-semibold text-slate-500">Event:</label>
+            <select id="deliveryEventFilter" [(ngModel)]="selectedDeliveryEvent"
+                    (change)="onDeliveryFilterChange()"
+                    class="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-700">
+              <option *ngFor="let event of deliveryEventFilterOptions" [value]="event.value">{{ event.label }}</option>
+            </select>
+            <label for="deliveryFromDate" class="text-xs font-semibold text-slate-500">From:</label>
+            <input id="deliveryFromDate" type="date" [(ngModel)]="deliveryFromDate"
+                   (change)="onDeliveryFilterChange()"
+                   class="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-700" />
+            <label for="deliveryToDate" class="text-xs font-semibold text-slate-500">To:</label>
+            <input id="deliveryToDate" type="date" [(ngModel)]="deliveryToDate"
+                   (change)="onDeliveryFilterChange()"
+                   class="rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-700" />
+          </div>
 
           <div class="text-xs text-slate-400">
             Showing {{ deliveries().length }} of {{ deliveryTotalElements() }} deliveries
@@ -683,6 +699,9 @@ export class MerchantComponent implements OnInit, OnDestroy {
   // Deliveries State
   deliveries = signal<WebhookDeliveryItem[]>([]);
   selectedDeliveryFilter = signal<string>('ALL');
+  selectedDeliveryEvent = 'ALL';
+  deliveryFromDate = '';
+  deliveryToDate = '';
   selectedDelivery = signal<WebhookDeliveryItem | null>(null);
   deliveryError = signal<string | null>(null);
   isLoadingDeliveries = signal(false);
@@ -693,10 +712,18 @@ export class MerchantComponent implements OnInit, OnDestroy {
 
   deliveryFilterOptions = [
     { label: 'All', value: 'ALL' },
+    { label: 'Pending', value: 'PENDING' },
     { label: 'Success (2xx)', value: 'SUCCESS' },
     { label: 'Failed', value: 'FAILED' },
     { label: 'Pending Retry', value: 'PENDING_RETRY' },
     { label: 'Cancelled', value: 'CANCELLED' },
+  ];
+
+  deliveryEventFilterOptions = [
+    { label: 'All events', value: 'ALL' },
+    { label: 'Parcel created', value: 'PARCEL_CREATED' },
+    { label: 'Parcel status changed', value: 'PARCEL_STATUS_CHANGED' },
+    { label: 'Test event', value: 'TEST_EVENT' },
   ];
 
   ngOnInit(): void {
@@ -899,7 +926,12 @@ export class MerchantComponent implements OnInit, OnDestroy {
     this.isLoadingDeliveries.set(true);
     this.deliveryError.set(null);
     this.deliverySubscription = this.merchantService.getDeliveryLogs(
-      this.selectedDeliveryFilter(), page, this.deliveryPageSize())
+      this.selectedDeliveryFilter(),
+      page,
+      this.deliveryPageSize(),
+      this.selectedDeliveryEvent,
+      this.deliveryFromDate ? new Date(this.deliveryFromDate).toISOString() : undefined,
+      this.deliveryToDate ? new Date(this.deliveryToDate + 'T23:59:59.999Z').toISOString() : undefined)
       .pipe(finalize(() => this.isLoadingDeliveries.set(false))).subscribe({
       next: (result) => {
         this.deliveries.set(result.content);
@@ -911,6 +943,10 @@ export class MerchantComponent implements OnInit, OnDestroy {
         this.deliveryError.set(this.apiErrorMessage(error, 'Unable to load webhook deliveries.'));
       },
     });
+  }
+
+  onDeliveryFilterChange(): void {
+    this.loadDeliveries(0);
   }
 
   inspectDelivery(item: WebhookDeliveryItem): void {
