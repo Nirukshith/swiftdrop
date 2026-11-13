@@ -104,6 +104,32 @@ Different feature packages within `auth-service` communicate via decoupled, in-p
 # Verify auth-service and its dependencies
 mvn -B verify -pl services/auth-service -am
 
+# Run core security and unit tests
+mvn test -Dtest="AuthSecurityVerificationTest,Week7AuthSecurityVerificationTest,OAuthTokenControllerTest,JwtIssuerTest,JwksControllerTest,LoginGuardTest,SlidingWindowLoginGuardTest,LoginGuardSwitchableConfigurationTest,GoogleOAuthExtendedTest,GoogleOAuthTest,ClientTokenServiceTest,AdminUserSecurityTest"
+
 # Run locally
 mvn spring-boot:run -pl services/auth-service -Dspring-boot.run.profiles=local
 ```
+
+---
+
+## 6. Environment Configuration Reference (M10 Release Readiness)
+
+| Variable Name | Default / Example Value | Description |
+| :--- | :--- | :--- |
+| `SPRING_PROFILES_ACTIVE` | `local` | Active profile (`local`, `dev`, `prod`). |
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://postgres:5432/auth_db` | PostgreSQL connection URL. |
+| `SPRING_DATASOURCE_USERNAME` | `swiftdrop` | Database username. |
+| `SPRING_DATASOURCE_PASSWORD` | `swiftdrop_password` | Database password (Secret). |
+| `SPRING_KAFKA_BOOTSTRAP_SERVERS`| `kafka:9092` | Kafka broker bootstrap list for event dispatch. |
+| `FRONTEND_BASE_URL` | `http://localhost:4200` | Angular frontend base URL. |
+| `GOOGLE_CLIENT_ID` | `test-google-client-id` | Google OAuth 2.0 client ID. |
+| `GOOGLE_CLIENT_SECRET` | `test-google-client-secret` | Google OAuth 2.0 client secret (Secret). |
+| `GOOGLE_REDIRECT_URI` | `http://localhost/api/v1/auth/oauth2/callback/google` | OAuth redirect URI (Nginx gateway path). |
+| `GOOGLE_FRONTEND_CALLBACK_URL` | `http://localhost:4200/auth/callback` | Frontend callback route for session handoff. |
+| `INTERNAL_NOTIFICATIONS_SERVICE_TOKEN` | `swiftdrop-internal-notif-secret-2026` | Service token for `notifications-service` (Secret). |
+| `INTERNAL_MERCHANT_SERVICE_TOKEN` | `swiftdrop-internal-merchant-secret-2026` | Service token for `merchant-service` (Secret). |
+| `INTERNAL_PRICING_SERVICE_TOKEN` | `swiftdrop-internal-pricing-secret-2026` | Pre-shared token for internal pricing calls (Secret). |
+
+*See `docs/m10-week8-auth-release-readiness.md` for the complete Week 8 demonstration walkthrough and verification evidence.*
+
