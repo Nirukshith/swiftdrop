@@ -81,6 +81,24 @@ describe('ReportsComponent', () => {
     expect(reportsService.load).toHaveBeenCalledTimes(1);
   });
 
+  it('does not call the API when a report date is missing', () => {
+    const component = fixture.componentInstance;
+    component.filterForm.setValue({ from: '', to: '2026-11-07' });
+
+    component.loadReport();
+
+    expect(component.invalidRange()).toBe(true);
+    expect(reportsService.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a report loading error from the service', () => {
+    reportsService.error.set('Failed to load delivery reports.');
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent)
+      .toContain('Failed to load delivery reports.');
+  });
+
   it('renders the Export CSV button', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Export CSV');
   });
