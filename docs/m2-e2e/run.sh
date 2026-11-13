@@ -145,9 +145,9 @@ check "tracking_event rows" "3 4 5 6" "$(docker exec "$PG" psql -tA -U swiftdrop
 
 say "10. Public rate limit per visitor behind the gateway (burst 10)"
 # Visitor 1 is this machine; visitor 2 calls the gateway from inside the frontend container, so the
-# two have different IP addresses. Each visitor should have their own limit. This check fails until
-# the gateway forwards the client address (see docs/m2-week7-tracking-hardening-verification.md).
-# Wait a minute between runs so the limit refills.
+# two have different IP addresses. Each visitor should have their own limit; this needs the gateway
+# to forward the client address and be a trusted proxy (in place since M9's #295, see
+# docs/tracking-design.md 6.1). Wait a minute between runs so the limit refills.
 LOOKUP="/api/v1/tracking/SD-20991231-RATE00"
 V1=""; for i in $(seq 1 12); do V1="$V1 $(code "$GW$LOOKUP")"; done
 echo "visitor 1, 12 lookups:$V1"
