@@ -193,3 +193,67 @@ Issue #226 should remain open. Use `Refs #226`, not `Closes #226`, until the par
 - `D:\swiftdrop\m9-week6-compose.override.yml` — untracked temporary override outside the repository
 
 No credentials or `.env` files are included.
+
+## Final verification addendum — 2026-11-13
+
+This addendum supersedes the earlier runtime-blocker observations above. The earlier
+Compose/BuildKit failure was not reproduced as an application compilation failure.
+
+### Direct image builds
+
+M1's direct-build workaround was executed locally without changing M1-owned files:
+
+| Image | Command result |
+|---|---|
+| `swiftdrop-m9-week6-parcel-service:latest` | **PASS**, exit code 0; Maven reactor `BUILD SUCCESS` |
+| `swiftdrop-m9-week6-auth-service:latest` | **PASS**, exit code 0; Maven reactor `BUILD SUCCESS` |
+| `swiftdrop-m9-week6-operations-service:latest` | Existing verified image reused |
+| `swiftdrop-m9-week6-integration-service:latest` | Existing verified image reused |
+| `swiftdrop-m9-week6-frontend:latest` | Existing verified image reused |
+
+### Full-stack runtime
+
+The isolated project was started with the temporary override and `--no-build`:
+
+```text
+docker compose -p swiftdrop-m9-week6 -f deploy/docker-compose.yml \
+  -f D:\swiftdrop\m9-week6-compose.override.yml \
+  --env-file deploy/.env --profile full up --no-build -d
+exit code: 0
+```
+
+All nine runtime services were `Up (healthy)`: PostgreSQL, Kafka, Mailpit,
+auth-service, parcel-service, operations-service, integration-service, frontend,
+and gateway. Kafka initialization exited successfully with code 0. The expected
+`user.registered.v1`, parcel event, retry, and DLT topics were present.
+
+The effective project used only `swiftdrop-m9-week6_*` named volumes and generated
+container names. Existing `swiftdrop-m9-verify` resources were not modified.
+
+### Gateway smoke checks
+
+| Check | Result |
+|---|---|
+| `GET http://localhost:8080/health` | **PASS**, HTTP 200 |
+| Angular frontend through gateway | **PASS**, HTTP 200 |
+| Auth route probe | **PASS**, HTTP 403 from protected route |
+| Parcel route probe | **PASS**, HTTP 401 |
+| Operations courier route without JWT | **PASS**, HTTP 401 |
+| Integration route probe | **PASS**, HTTP 401 |
+| `/internal/health` through gateway | **PASS**, HTTP 404 (not exposed) |
+| Operations-to-parcel/auth service connectivity | **PASS**, downstream actuator health returned `UP` |
+
+Parcel startup emitted transient Kafka `NotCoordinatorException`/rebalance log
+messages while consumer groups settled. The service subsequently became healthy;
+no authenticated event or courier workflow was run to establish business-level
+Kafka behavior.
+
+### Authenticated workflow and closure status
+
+No approved courier credentials, valid JWT, or parcel fixture was available in this
+environment. The authenticated workflow (profile, availability, assignment,
+failure, authoritative parcel transition, summary, requeue, and proof retrieval)
+is therefore **BLOCKED**, not claimed as passed.
+
+Issue #226 remains open pending an approved authenticated fixture and execution of
+the real courier workflow. The report supports `Refs #226`, not `Closes #226`.
