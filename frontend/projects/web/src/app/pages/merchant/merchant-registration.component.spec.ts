@@ -68,6 +68,10 @@ describe('MerchantRegistrationComponent', () => {
     const badge = fixture.nativeElement.querySelector('ui-status-badge');
     expect(badge).toBeTruthy();
     expect(badge.textContent).toContain('PENDING');
+    const resetLink = fixture.nativeElement.querySelector('a[href="/forgot-password"]');
+    expect(resetLink?.textContent).toContain('Forgot password');
+    expect(fixture.nativeElement.textContent).toContain('After approval');
+    expect(fixture.nativeElement.textContent).toContain('separate from your sign-in password');
   });
 
   it('shows a duplicate email message for a registration conflict', () => {
