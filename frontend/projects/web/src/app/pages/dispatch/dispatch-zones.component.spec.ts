@@ -44,6 +44,36 @@ describe('DispatchZonesComponent', () => {
     expect(compiled.querySelector('#tab-pricing-link')).toBeTruthy();
   });
 
+  it('should expose all 25 canonical districts for zone configuration', () => {
+    expect(component.districts).toEqual([
+      'Ampara',
+      'Anuradhapura',
+      'Badulla',
+      'Batticaloa',
+      'Colombo',
+      'Galle',
+      'Gampaha',
+      'Hambantota',
+      'Jaffna',
+      'Kalutara',
+      'Kandy',
+      'Kegalle',
+      'Kilinochchi',
+      'Kurunegala',
+      'Mannar',
+      'Matale',
+      'Matara',
+      'Monaragala',
+      'Mullaitivu',
+      'Nuwara Eliya',
+      'Polonnaruwa',
+      'Puttalam',
+      'Ratnapura',
+      'Trincomalee',
+      'Vavuniya',
+    ]);
+  });
+
   it('should show validation feedback when form inputs are invalid and touched', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     const nameControl = component.zoneForm.get('name');

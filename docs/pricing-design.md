@@ -14,9 +14,20 @@ size. It returns an LKR total and a named breakdown. The pickup district is
 validated against an active served zone. The drop-off district selects the zone
 base fee.
 
-The baseline monetary values, predefined district catalog, and final size
-taxonomy are still open questions and must be agreed before persistence
-migrations or production seed data are added.
+The baseline monetary values and final size taxonomy are still open questions
+and must be agreed before persistence migrations or production seed data are
+added. The current district catalog is the 25 administrative districts already
+defined by operations validation and the OpenAPI contract:
+
+`Ampara`, `Anuradhapura`, `Badulla`, `Batticaloa`, `Colombo`, `Galle`,
+`Gampaha`, `Hambantota`, `Jaffna`, `Kalutara`, `Kandy`, `Kegalle`,
+`Kilinochchi`, `Kurunegala`, `Mannar`, `Matale`, `Matara`, `Monaragala`,
+`Mullaitivu`, `Nuwara Eliya`, `Polonnaruwa`, `Puttalam`, `Ratnapura`,
+`Trincomalee`, `Vavuniya`.
+
+Zone configuration accepts only these district names. No baseline zones,
+weight-band charges, or size charges are seeded because the approved monetary
+values have not been recorded.
 
 ## Strategy composition
 
@@ -52,15 +63,30 @@ that already exist or change their receipts.
 
 ## Reports and events
 
-`operations-service` consumes parcel events and maintains a `DailyStat`
-projection. At minimum, the projection aggregates created, delivered, and
-failed deliveries, and stores processed event IDs for idempotency. It must not
-join another service's database.
+`operations-service` consumes parcel events and maintains a daily report
+projection. The current API reports terminal delivery attempts: `DELIVERED`
+increments successful deliveries and `FAILED` increments failed deliveries.
+`PARCEL_CREATED` events are accepted for sequence and idempotency tracking but
+do not increment the exposed delivery counters. A created-delivery metric is
+described in this document's historical design text but is not defined by the
+current OpenAPI response, so it remains unresolved rather than being inferred.
+The projection stores processed event IDs and rejects stale per-parcel
+sequences. It must not join another service's database.
 
 Report filters are calendar dates in `Asia/Colombo`. Event timestamps are
 stored as UTC instants; the report date is derived by converting the event
 instant to `Asia/Colombo` before grouping. The JSON report and CSV export use
 the same projection and date semantics.
+
+CSV exports use the columns
+`reportDate,totalDeliveries,successfulDeliveries,failedDeliveries,successRate`,
+return `text/csv`, and use the attachment filename `daily-report.csv`.
+
+Zone-level analytics are not available from the current parcel event envelope:
+it contains parcel and status fields but no pickup/drop-off district or zone.
+Adding those metrics requires an approved event-contract change and
+coordination with the parcel-event owner; M5 does not derive zones from
+unrelated fields.
 
 ## Audit
 

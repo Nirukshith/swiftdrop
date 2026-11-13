@@ -1,6 +1,7 @@
 package com.swiftdrop.operations.pricing;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -45,5 +46,52 @@ class QuoteControllerContractTest {
         }
         assertEquals(expected.path("pickupZone"), actual.path("pickupZone"));
         assertEquals(expected.path("dropoffZone"), actual.path("dropoffZone"));
+    }
+
+    @Test
+    void rejectsNonCanonicalDistrictWithBadRequestException() {
+        ZoneRepository zones = org.mockito.Mockito.mock(ZoneRepository.class);
+        PricingRuleRepository rules = org.mockito.Mockito.mock(PricingRuleRepository.class);
+
+        QuoteController controller = new QuoteController(zones, rules);
+
+        assertThrows(IllegalArgumentException.class, () -> controller.quote(
+                new QuoteController.QuoteQuery("Atlantis", "Colombo", new BigDecimal("2.50"), "MEDIUM")));
+        assertThrows(IllegalArgumentException.class, () -> controller.quote(
+                new QuoteController.QuoteQuery("Colombo", "Atlantis", new BigDecimal("2.50"), "MEDIUM")));
+    }
+
+    @Test
+    void throwsUnservedPickupDistrictExceptionWhenPickupZoneIsNotServed() {
+        ZoneRepository zones = org.mockito.Mockito.mock(ZoneRepository.class);
+        PricingRuleRepository rules = org.mockito.Mockito.mock(PricingRuleRepository.class);
+        Zone unservedPickup = new Zone("COLOMBO", Set.of("Colombo"), false, new BigDecimal("500.00"));
+        Zone dropoff = new Zone("GAMPAHA", Set.of("Gampaha"), true, new BigDecimal("500.00"));
+        when(zones.findByDistrictsContaining("Colombo")).thenReturn(java.util.Optional.of(unservedPickup));
+        when(zones.findByDistrictsContaining("Gampaha")).thenReturn(java.util.Optional.of(dropoff));
+        when(rules.findByActiveTrue()).thenReturn(List.of(
+                new PricingRule(PricingRule.Kind.WEIGHT_BAND, "UP_TO_5KG",
+                        BigDecimal.ZERO, new BigDecimal("5.00"), new BigDecimal("200.00"), true),
+                new PricingRule(PricingRule.Kind.SIZE, "MEDIUM", null, null,
+                        new BigDecimal("150.00"), true)));
+
+        QuoteController controller = new QuoteController(zones, rules);
+
+        PricingException exception = assertThrows(PricingException.class, () -> controller.quote(
+                new QuoteController.QuoteQuery("Colombo", "Gampaha", new BigDecimal("2.50"), "MEDIUM")));
+        assertEquals("PICKUP_DISTRICT_UNSERVED", exception.code());
+    }
+
+    @Test
+    void throwsUnknownDistrictExceptionWhenCanonicalDistrictHasNoConfiguredZone() {
+        ZoneRepository zones = org.mockito.Mockito.mock(ZoneRepository.class);
+        PricingRuleRepository rules = org.mockito.Mockito.mock(PricingRuleRepository.class);
+        when(zones.findByDistrictsContaining("Colombo")).thenReturn(java.util.Optional.empty());
+
+        QuoteController controller = new QuoteController(zones, rules);
+
+        PricingException exception = assertThrows(PricingException.class, () -> controller.quote(
+                new QuoteController.QuoteQuery("Colombo", "Gampaha", new BigDecimal("2.50"), "MEDIUM")));
+        assertEquals("UNKNOWN_DISTRICT", exception.code());
     }
 }
