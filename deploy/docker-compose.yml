@@ -99,6 +99,9 @@ services:
       - full
     ports:
       - "8080:80"
+    networks:
+      default:
+        ipv4_address: 172.30.0.254
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -190,6 +193,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWKS_URL: http://auth-service:8081/.well-known/jwks.json
       SWIFTDROP_PRICING_QUOTE_URL: http://operations-service:8083/internal/v1/pricing/quote
+      SWIFTDROP_TRACKING_RATE_LIMIT_TRUSTED_PROXIES: 172.30.0.254/32
       INTERNAL_PRICING_SERVICE_TOKEN: ${INTERNAL_PRICING_SERVICE_TOKEN:-swiftdrop-internal-pricing-secret-2026}
     ports:
       - "8082:8082"
@@ -277,3 +281,9 @@ services:
 volumes:
   postgres_data:
   kafka_data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

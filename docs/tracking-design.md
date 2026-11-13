@@ -212,7 +212,19 @@ Also requested:
 
 Limiting at the gateway rejects floods before they reach the JVM, and it costs no extra process. 30 per minute is far above what a person refreshing the page needs and far below what enumeration needs. The authenticated endpoints are not rate limited beyond the JWT check.
 
-### 6.1 Client address behind the gateway (Week 7 finding, needs M9)
+### 6.1 Client address behind the gateway (Week 7 finding, resolved by M9 in #295)
+
+**Status: resolved.** M9's #295 adds both `proxy_set_header` lines to the tracking location, gives the
+gateway a fixed address on a dedicated Compose network (`172.30.0.254`), and sets
+`SWIFTDROP_TRACKING_RATE_LIMIT_TRUSTED_PROXIES: 172.30.0.254/32` for parcel-service, the stricter
+option below. Rechecked on 2026-11-13 against `development`:
+
+- `run.sh` passes 35/35, and visitor 2 gets their own limit.
+- The browser walkthrough passes 32/32.
+- A direct caller sending a new fake `X-Forwarded-For` each time is still limited by their real
+  address.
+
+The rest of this section records the finding.
 
 parcel-service's own per-IP limit (`TrackingRateLimitFilter`, 30 per minute, burst 10) identifies a
 client by `X-Forwarded-For`, but only when the request comes from a trusted proxy
@@ -227,7 +239,8 @@ Reproduce with `bash docs/m2-e2e/run.sh` (step 10): visitor 1 makes 12 lookups (
 `429`). Visitor 2, from another IP inside the frontend container, then gets `429` on their first
 lookup. `TrackingRateLimitGatewayIntegrationTest` shows the same in code.
 
-**Fix (M9 owns both files).** Tested locally: with it, visitor 2 gets `404` and all 31 checks pass.
+**Fix as proposed (M9 owns both files; applied in #295).** Tested locally first: with it, visitor 2
+gets `404` and all 31 checks pass.
 
 1. `deploy/nginx/nginx.conf`, in `location ^~ /api/v1/tracking`:
 

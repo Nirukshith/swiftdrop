@@ -50,8 +50,10 @@ variable (dots and dashes become underscores, upper case).
 | `trusted-proxies` | `SWIFTDROP_TRACKING_RATE_LIMIT_TRUSTED_PROXIES` | `127.0.0.1/32, ::1/128` | IPs or CIDR ranges whose `X-Forwarded-For` is trusted (the gateway) |
 
 Over the limit, the caller gets `429` with `Retry-After` and the standard JSON error body.
-**Behind the Docker gateway this needs the gateway's address in `trusted-proxies` and
-`X-Forwarded-For` from nginx.** Until then all visitors share one limit; see §5.
+Behind the Docker gateway this needs the gateway's address in `trusted-proxies` and
+`X-Forwarded-For` from nginx. Both are set in `development` since M9's #295 (gateway
+`172.30.0.254`, trusted as `172.30.0.254/32`). If you run the gateway elsewhere, set
+`trusted-proxies` to its address, or all visitors will share one limit.
 
 ### Live stream (`swiftdrop.tracking.stream.*`)
 
@@ -115,10 +117,11 @@ The Docker gateway (`deploy/nginx/nginx.conf`) must route:
 - `/api/v1/parcels/**` to parcel-service. In place.
 - `/` to the frontend container, which serves the Angular app. In place.
 
-Still needed for the per-visitor rate limit (§5, item 1): in `location ^~ /api/v1/tracking`,
+For the per-visitor rate limit, in place since M9's #295: in `location ^~ /api/v1/tracking`,
 `proxy_set_header Host $host;` and `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`.
-**Both lines are needed**; with only the second, Tomcat returns 400. parcel-service also needs
-`SWIFTDROP_TRACKING_RATE_LIMIT_TRUSTED_PROXIES` set to the gateway's address or network.
+**Both lines are needed**; with only the second, Tomcat returns 400. parcel-service has
+`SWIFTDROP_TRACKING_RATE_LIMIT_TRUSTED_PROXIES: 172.30.0.254/32`, the gateway's fixed address on the
+Compose network.
 
 ## 4. Run and check
 
@@ -181,7 +184,8 @@ the pages without a backend (MSW mocks); it is never used for evidence.
 
 | # | Limitation | Effect | Workaround or owner |
 | :--- | :--- | :--- | :--- |
-| 1 | The gateway sends no `X-Forwarded-For` on `/api/v1/tracking`, and the gateway isn't a trusted proxy | In Docker, all public-tracking visitors share one rate limit (30/min, burst 10) | Fix in §3 (M9). Step 10 of `run.sh` shows whether it's fixed. For a demo, keep public lookups under 10 a minute, or set `SWIFTDROP_TRACKING_RATE_LIMIT_ENABLED=false` locally |
+| 1 | ~~The gateway sent no `X-Forwarded-For` on `/api/v1/tracking`, so all visitors shared one rate limit~~ | **Resolved by M9's #295** (rechecked: `run.sh` 35/35) | None needed. Step 10 of `run.sh` checks it on every run |
+| 1a | Host port 8080 is used by another program on the machine | The gateway container doesn't start ("port is already allocated") | Stop that program, or publish the gateway on another port with a local Compose override (`ports: !override` with `"8088:80"`) and run the scripts with `GW=http://localhost:8088` |
 | 2 | Docker Compose 5.x refuses `--build` on this setup | `up --build` fails | Build images one by one (§4) |
 | 3 | The shared app header's nav row doesn't wrap | At 360 px the whole page is 418 px wide (sideways scroll); the M2 page content itself fits | App shell owner (`app.html`) |
 | 4 | `%` and `_` in the history search act as wildcards | A search for `%` matches all of the customer's own parcels | Harmless (own parcels only); M1 could escape them |
