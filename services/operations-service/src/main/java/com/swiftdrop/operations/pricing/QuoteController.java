@@ -48,6 +48,11 @@ public class QuoteController {
         Map<String, BigDecimal> sizes = activeRules.stream()
                 .filter(rule -> rule.getKind() == PricingRule.Kind.SIZE)
                 .collect(java.util.stream.Collectors.toMap(PricingRule::getKey, PricingRule::getChargeLkr));
+        if (bands.isEmpty() || sizes.isEmpty()) {
+            throw new PricingException(
+                    "PRICING_RULE_NOT_FOUND",
+                    "Required active pricing rules are not configured");
+        }
         Quote quote = new QuoteCalculator(List.of(
                 new ZonePricingStrategy(zones),
                 new WeightPricingStrategy(bands),

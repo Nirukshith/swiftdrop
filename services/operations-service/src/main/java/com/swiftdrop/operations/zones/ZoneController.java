@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -81,7 +82,7 @@ public class ZoneController {
             @NotBlank String name,
             @NotEmpty Set<String> districts,
             boolean served,
-            @DecimalMin("0.00") BigDecimal baseFeeLkr) {
+            @NotNull @DecimalMin("0.00") BigDecimal baseFeeLkr) {
         void validateDistricts() { Districts.validate(districts); }
     }
 
