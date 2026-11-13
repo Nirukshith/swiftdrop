@@ -116,6 +116,26 @@ class ReportServiceTest {
     }
 
     @Test
+    void assignsTerminalEventsToTheCorrectColomboDateAtUtcBoundary() {
+        when(processedEventRepository.existsById(any())).thenReturn(false);
+        when(sequenceRepository.findById("parcel-1"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(new ReportParcelSequence("parcel-1", 1)));
+        when(dailyReportRepository.findById(any())).thenReturn(Optional.empty());
+
+        service.processEvent(event("event-before-boundary", 1, "DELIVERED",
+                Instant.parse("2026-11-01T18:29:59Z")));
+        service.processEvent(event("event-at-boundary", 2, "FAILED",
+                Instant.parse("2026-11-01T18:30:00Z")));
+
+        ArgumentCaptor<DailyReportAggregate> aggregate = ArgumentCaptor.forClass(DailyReportAggregate.class);
+        verify(dailyReportRepository, times(2)).save(aggregate.capture());
+        assertThat(aggregate.getAllValues())
+                .extracting(DailyReportAggregate::getReportDate)
+                .containsExactly(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 2));
+    }
+
+    @Test
     void acceptsValidParcelCreatedEventWithoutUpdatingDeliveryCounters() {
         when(processedEventRepository.existsById("event-created")).thenReturn(false);
         when(sequenceRepository.findById("parcel-1")).thenReturn(Optional.empty());
