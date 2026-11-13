@@ -19,6 +19,15 @@ export class CustomerParcelsService {
     if (query.status) {
       params = params.set('status', query.status);
     }
+    if (query.from) {
+      params = params.set('from', query.from);
+    }
+    if (query.to) {
+      params = params.set('to', query.to);
+    }
+    if (query.q?.trim()) {
+      params = params.set('q', query.q.trim());
+    }
     return this.http.get<ParcelPage>(CustomerParcelsService.URL, { params });
   }
 }
