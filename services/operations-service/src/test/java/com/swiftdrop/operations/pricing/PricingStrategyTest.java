@@ -105,6 +105,39 @@ class PricingStrategyTest {
     }
 
     @Test
+    void weightStrategyRejectsWeightBelowConfiguredBands() {
+        WeightPricingStrategy strategy = new WeightPricingStrategy(List.of(
+                new WeightPricingStrategy.WeightBand(
+                        new BigDecimal("1"), new BigDecimal("5"), new BigDecimal("200"))));
+
+        PricingException exception = assertThrows(
+                PricingException.class,
+                () -> strategy.calculate(requestWithWeight("0.50")));
+
+        assertEquals("WEIGHT_OUT_OF_RANGE", exception.code());
+    }
+
+    @Test
+    void weightBandConstructorRejectsInvalidBoundsAndNegativeCharges() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new WeightPricingStrategy.WeightBand(
+                        new BigDecimal("-1"), new BigDecimal("5"), new BigDecimal("100")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new WeightPricingStrategy.WeightBand(
+                        new BigDecimal("5"), new BigDecimal("5"), new BigDecimal("100")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new WeightPricingStrategy.WeightBand(
+                        new BigDecimal("5"), new BigDecimal("2"), new BigDecimal("100")));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new WeightPricingStrategy.WeightBand(
+                        new BigDecimal("0"), new BigDecimal("5"), new BigDecimal("-50")));
+    }
+
+    @Test
     void sizeStrategyReturnsConfiguredChargeAndRejectsUnknownSize() {
         SizePricingStrategy strategy = new SizePricingStrategy(Map.of(
                 "SMALL", new BigDecimal("50"),
