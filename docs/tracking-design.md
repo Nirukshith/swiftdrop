@@ -284,7 +284,7 @@ The public page must work at 360 px width (NF-04).
 | # | Question | Who |
 | :--- | :--- | :--- |
 | Q1 | The SRS gives the shared UI kit to M1 (8.1). Confirm that M1 builds it. | Team |
-| Q2 | CU-05 asks for "history with filters", but M1's `GET /api/v1/parcels` only filters by `status` and has no defined order. **Proposal for M1 in section 12** (date range, tracking-number search, default newest-first order); waiting for M1's agreement. | M1 |
+| Q2 | CU-05 asks for "history with filters", but M1's `GET /api/v1/parcels` only filtered by `status` and had no defined order. **Agreed with M1** (section 12): `from` / `to` dates, `q` tracking-number search, newest-first order. Contract updated in `parcel.yaml`; M1 implements the endpoint, then M2 adds the UI. | M1 |
 | Q3 | Recipient name mask format (`S*** S***` proposed). | Team |
 | Q4 | Show anything for `FAILED` on the public page, e.g. a fixed reason code like `RECIPIENT_UNAVAILABLE`, never free text? | Team |
 | Q5 | ~~Which statuses allow a receipt download? Can DISPATCHER download it too?~~ **Resolved:** `DELIVERED` only (`409 PARCEL_NOT_DELIVERED` otherwise); owner customer and ADMIN only, DISPATCHER and courier get `403` (section 8). | Team |
@@ -297,42 +297,36 @@ The public page must work at 360 px width (NF-04).
 
 ---
 
-## 12. Proposed Change to M1's Parcel List (Q2)
+## 12. Parcel List Filters and Order (Q2, agreed with M1)
 
 CU-05 asks for "delivery history with filters". M2's history page (`/customer/parcels`) reads M1's
-`GET /api/v1/parcels`, which today only filters by `status` and has no defined order. So the page
-can't offer a date range or search, and it can't promise "newest first". M2 does not add a second
-list endpoint (section 1), so this needs a small change to M1's contract (`parcel.yaml`) and
-endpoint. **This is a proposal for M1's agreement. Nothing here is implemented.**
+`GET /api/v1/parcels`, which only filtered by `status` and had no defined order. M2 does not add a
+second list endpoint (section 1), so the change belongs in M1's contract (`parcel.yaml`) and
+endpoint.
 
-Three optional query parameters, plus a documented default order. All are backward compatible:
+**Status:** agreed with M1 on 2026-11-13. The contract is in `parcel.yaml` (`listCustomerParcels`).
+M1 implements the endpoint and its backend tests, then M2 adds the UI.
 
-```yaml
-# GET /api/v1/parcels (parcel.yaml), added to the existing status / page / size parameters
-- name: from
-  in: query
-  required: false
-  description: Only parcels created on or after this date (inclusive, Asia/Colombo).
-  schema: { type: string, format: date, example: "2026-11-01" }
-- name: to
-  in: query
-  required: false
-  description: Only parcels created on or before this date (inclusive, Asia/Colombo).
-  schema: { type: string, format: date, example: "2026-11-30" }
-- name: q
-  in: query
-  required: false
-  description: Case-insensitive match on the tracking number (contains).
-  schema: { type: string, minLength: 1, maxLength: 32, example: "SD-20261112" }
-# description addition: "Results are ordered by createdAt, newest first."
-```
+The agreed contract adds three optional query parameters and a documented order. All are
+backward compatible:
 
-Rules for M1's endpoint:
-- Filters combine with AND, and ownership stays as today (the caller's `customerId` from the token).
-- `from` after `to`, an unreadable date, or `q` outside 1-32 characters gives `400 VALIDATION_FAILED`.
-- The default order is `createdAt` descending, then `id`, so pages are stable.
+| Parameter | Type | Meaning |
+| :--- | :--- | :--- |
+| `from` | date (`YYYY-MM-DD`) | Parcels created on or after this date, inclusive, Asia/Colombo |
+| `to` | date (`YYYY-MM-DD`) | Parcels created on or before this date, inclusive (whole day), Asia/Colombo |
+| `q` | string, at most 32 characters after trimming | Case-insensitive "contains" match on the tracking number |
 
-What M2 adds once M1 merges it:
+Rules:
+- Filters combine with AND, together with `status`. Ownership stays as today: the caller's
+  `customerId` comes from the token.
+- **Order:** `createdAt` descending, then `id` descending, so pages are stable. M1 asked for both
+  directions to be explicit.
+- **Empty `q`:** an empty or whitespace-only `q` (for example `q=`) is treated as omitted, not as
+  an error, so clearing the search box shows everything. M1 asked for this to be explicit.
+- **Errors:** `from` after `to`, a date that is not `YYYY-MM-DD`, or a `q` longer than 32
+  characters after trimming gives `400 VALIDATION_FAILED`.
+
+What M2 adds once M1 merges the endpoint:
 - Date-range inputs and a tracking-number search box on the history page, kept in the URL like
   `page` and `status`.
 - Frontend specs for the new filters.

@@ -266,7 +266,20 @@ paths:
 
     get:
       summary: List customer parcels
-      description: Returns paginated list of deliveries created by the calling customer.
+      description: |
+        Returns paginated list of deliveries created by the calling customer
+        (the customer id comes from the token, never from the request).
+
+        Filters (CU-05 "history with filters") are optional and combine with AND:
+        `status`, the creation-date range `from` / `to`, and the tracking-number
+        search `q`. Without filters every parcel of the caller is returned.
+
+        Order: newest first, by `createdAt` descending, then `id` descending,
+        so pages stay stable when several parcels share a creation time.
+
+        Validation (`400 VALIDATION_FAILED`): `from` after `to`, a date that is
+        not `YYYY-MM-DD`, or a `q` longer than 32 characters after trimming.
+        An empty or whitespace-only `q` (e.g. `q=`) is treated as omitted.
       operationId: listCustomerParcels
       security:
         - BearerAuth: []
@@ -276,6 +289,37 @@ paths:
           required: false
           schema:
             $ref: '#/components/schemas/ParcelStatus'
+        - name: from
+          in: query
+          required: false
+          description: |
+            Only parcels created on or after this date (inclusive), as a calendar
+            date in Asia/Colombo time.
+          schema:
+            type: string
+            format: date
+            example: "2026-11-01"
+        - name: to
+          in: query
+          required: false
+          description: |
+            Only parcels created on or before this date (inclusive, the whole day),
+            as a calendar date in Asia/Colombo time.
+          schema:
+            type: string
+            format: date
+            example: "2026-11-30"
+        - name: q
+          in: query
+          required: false
+          description: |
+            Case-insensitive "contains" match on the tracking number. Leading and
+            trailing spaces are ignored; an empty or whitespace-only value is
+            treated as omitted. At most 32 characters after trimming.
+          schema:
+            type: string
+            maxLength: 32
+            example: "SD-20261112"
         - name: page
           in: query
           required: false
@@ -293,11 +337,13 @@ paths:
             maximum: 50
       responses:
         '200':
-          description: Customer parcel deliveries
+          description: Customer parcel deliveries, newest first
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ParcelPageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
