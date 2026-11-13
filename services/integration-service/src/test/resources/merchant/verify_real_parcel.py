@@ -325,6 +325,32 @@ def verify_recovery(merchant_id, token, admin, run_id):
     faults=expect(call(fault_parcel,'/__verification/faults'),200,'inspect committed parcel fault injection')
     check(faults['injected']==1,'one real successful parcel response was deliberately discarded')
 
+    # Week 7: a single-order response can be lost after the real M1 commit too.
+    single = dict(payload, externalReference='m6-loss-single-' + run_id)
+    single_key = 'lost-single-' + run_id
+    expect(call(INTEGRATION, path, 'POST', single, token, single_key), 502, 'single-order response discarded after real commit')
+    committed_single = expect(call(PARCEL, '/internal/v1/parcels?page=0&size=100'), 200, 'inspect real single-order commit')
+    check(committed_single['totalElements'] == final['totalElements'] + 1, 'one single-order parcel committed before recovery')
+    single_id = next(p['id'] for p in committed_single['content'] if p['id'] not in {old['id'] for old in final['content']})
+    expect(call(INTEGRATION, path, 'POST', single, token, single_key + '-new'), 409, 'unknown single-order reference blocks a new key')
+    conflicting_csv = header + '\n' + f'{single["externalReference"]},Recovery Recipient,+94770000000,10 Road,,Colombo,Colombo,00100,20 Road,,Gampaha,Gampaha,11000,SMALL,1.5\n'
+    conflict = expect(call(INTEGRATION, path + '/bulk', 'POST', conflicting_csv, token, 'cross-path-' + run_id, content_type='text/csv'), 200, 'bulk cannot take an uncertain single-order reference')
+    check(conflict['acceptedRows'] == 0, 'cross-path reservation prevents another parcel write')
+    expect(call(PARCEL, f'/internal/v1/parcels/{single_id}/status', 'PATCH',
+        {'status': 'PICKED_UP', 'expectedCurrentStatus': 'CREATED'}), 200, 'advance single-order parcel before recovery')
+    expect(call(provider, '/api/v1/admin/zones/' + dropoff['id'], 'PUT',
+        {'name': dropoff['name'], 'districts': dropoff['districts'], 'served': dropoff['served'], 'baseFeeLkr': 1500},
+        os.environ['M6_VERIFY_DISPATCHER_TOKEN']), 200, 'change pricing again before single-order retry')
+    recovered = expect(call(INTEGRATION, path, 'POST', single, token, single_key), 201, 'single-order reconciles committed parcel with pinned quote')
+    check(recovered['parcelId'] == single_id and recovered['fee'] == 1350 and recovered['status'] == 'PICKED_UP',
+        'single-order recovery preserves original fee and provider lifecycle')
+    check(expect(call(INTEGRATION, path, 'POST', single, token, single_key), 201, 'recovered single-order replay') == recovered,
+        'recovered single-order response is stable')
+    after_single = expect(call(PARCEL, '/internal/v1/parcels?page=0&size=100'), 200, 'inspect final single-order parcel count')
+    check(after_single['totalElements'] == committed_single['totalElements'], 'single-order recovery created no duplicate parcel')
+    faults = expect(call(fault_parcel, '/__verification/faults'), 200, 'inspect both real committed-response faults')
+    check(faults['injected'] == 2, 'one bulk and one single-order committed response were discarded')
+
 
 if __name__ == '__main__':
     main()

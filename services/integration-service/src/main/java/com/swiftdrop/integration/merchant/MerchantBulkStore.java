@@ -71,8 +71,10 @@ public class MerchantBulkStore {
             if (((Number) saved.get("recovery_version")).intValue() == 0 && !state.equals("WAITING")) return false;
             List<String> reservation = jdbc.queryForList("select row_key from merchant_bulk_references where merchant_id=? and external_reference=?", String.class, merchant, row.request().externalReference());
             if (!reservation.isEmpty() && reservation.getFirst().equals(rowKey)) return true;
-            boolean used = Boolean.TRUE.equals(jdbc.queryForObject("select exists(select 1 from merchant_orders where merchant_id=? and external_reference=?)",
-                    Boolean.class, merchant, row.request().externalReference()));
+            boolean used = Boolean.TRUE.equals(jdbc.queryForObject("""
+                    select exists(select 1 from merchant_orders where merchant_id=? and external_reference=?)
+                        or exists(select 1 from merchant_order_attempts where merchant_id=? and external_reference=?)
+                    """, Boolean.class, merchant, row.request().externalReference(), merchant, row.request().externalReference()));
             int inserted = used ? 0 : jdbc.update("insert into merchant_bulk_references(merchant_id,external_reference,upload_id,row_key) values (?,?,?,?) on conflict do nothing",
                     merchant, row.request().externalReference(), upload, rowKey);
             if (inserted == 0) {
