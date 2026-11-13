@@ -30,10 +30,13 @@ public class ParcelController {
     @GetMapping
     public ResponseEntity<ParcelPageResponse> listCustomerParcels(
             @RequestParam(required = false) ParcelStatus status,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) String q,
             @PageableDefault(size = 20) Pageable pageable
     ) {
         String customerId = CurrentUser.require().userId();
-        return ResponseEntity.ok(parcelService.listCustomerParcels(customerId, status, pageable));
+        return ResponseEntity.ok(parcelService.listCustomerParcels(customerId, status, from, to, q, pageable));
     }
 
     @GetMapping("/quote")

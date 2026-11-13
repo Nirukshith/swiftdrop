@@ -12,6 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 
@@ -62,6 +63,30 @@ public class ParcelExceptionHandler {
                 Instant.now()
         );
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatus(
+            ResponseStatusException ex,
+            HttpServletRequest request
+    ) {
+        String correlationId = resolveCorrelationId(request);
+            HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+            String code = status == HttpStatus.BAD_REQUEST
+                    ? "VALIDATION_FAILED"
+                    : status == HttpStatus.NOT_FOUND
+                    ? "RESOURCE_NOT_FOUND"
+                    : status != null ? status.name() : String.valueOf(ex.getStatusCode().value());
+            String message = status == HttpStatus.NOT_FOUND
+                    ? "Parcel not found"
+                    : ex.getReason() != null ? ex.getReason() : "Request failed";
+        ErrorResponse error = new ErrorResponse(
+                code,
+                    message,
+                correlationId,
+                Instant.now()
+        );
+        return ResponseEntity.status(ex.getStatusCode()).body(error);
     }
 
     private String resolveCorrelationId(HttpServletRequest request) {

@@ -17,6 +17,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -248,6 +250,100 @@ class ParcelControllerIntegrationTest {
                         .param("weightKg", "2.5")
                         .param("size", "MEDIUM"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Customer parcel list applies date, tracking query, status, ownership, and stable ordering")
+    void customerParcelListFiltersAndOrders() throws Exception {
+        saveParcel("SD-20261102-ZZZZZZ", "usr-cust-1", ParcelStatus.CREATED,
+                "2026-11-02T10:00:00");
+        saveParcel("sd-20261130-ABC123", "usr-cust-1", ParcelStatus.DELIVERED,
+                "2026-11-30T23:59:00");
+        saveParcel("SD-20261201-ABC123", "usr-cust-1", ParcelStatus.CREATED,
+                "2026-12-01T10:00:00");
+        saveParcel("SD-20261130-OTHER", "usr-cust-2", ParcelStatus.CREATED,
+                "2026-11-30T12:00:00");
+
+        mockMvc.perform(get("/api/v1/parcels")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .param("from", "2026-11-01")
+                        .param("to", "2026-11-30")
+                        .param("q", "  abc123  ")
+                        .param("status", "DELIVERED")
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements", is(1)))
+                .andExpect(jsonPath("$.content[0].trackingNumber", is("sd-20261130-ABC123")));
+
+        mockMvc.perform(get("/api/v1/parcels")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .param("from", "2026-11-30")
+                        .param("to", "2026-11-30")
+                        .param("q", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements", is(1)))
+                .andExpect(jsonPath("$.content[0].trackingNumber", is("sd-20261130-ABC123")));
+
+        mockMvc.perform(get("/api/v1/parcels")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .param("size", "1")
+                        .param("page", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].trackingNumber", is("SD-20261201-ABC123")));
+
+        mockMvc.perform(get("/api/v1/parcels")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .param("size", "1")
+                        .param("page", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].trackingNumber", is("sd-20261130-ABC123")));
+    }
+
+    @Test
+    @DisplayName("Customer parcel list rejects invalid filter values")
+    void customerParcelListRejectsInvalidFilters() throws Exception {
+        mockMvc.perform(get("/api/v1/parcels")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .param("from", "2026-12-01")
+                        .param("to", "2026-11-30"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code", is("VALIDATION_FAILED")));
+
+        mockMvc.perform(get("/api/v1/parcels")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .param("from", "2026-11-31"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code", is("VALIDATION_FAILED")));
+
+        mockMvc.perform(get("/api/v1/parcels")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .param("q", "123456789012345678901234567890123"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code", is("VALIDATION_FAILED")));
+    }
+
+    private Parcel saveParcel(
+            String trackingNumber,
+            String customerId,
+            ParcelStatus status,
+            String createdAt
+    ) {
+        Parcel parcel = new Parcel();
+        parcel.setTrackingNumber(trackingNumber);
+        parcel.setStatus(status);
+        parcel.setCustomerId(customerId);
+        parcel.setPickupAddress(new AddressSnapshot("A", null, "Colombo", "Colombo", "00100"));
+        parcel.setDropoffAddress(new AddressSnapshot("B", null, "Colombo", "Colombo", "00200"));
+        parcel.setWeightKg(new BigDecimal("1.00"));
+        parcel.setSize(ParcelSize.SMALL);
+        parcel.setFee(new BigDecimal("500.00"));
+        parcel.setRecipientName("Recipient");
+        parcel.setRecipientPhone("+94770000000");
+        parcel.setCreatedAt(LocalDateTime.parse(createdAt)
+                .atZone(ZoneId.of("Asia/Colombo"))
+                .toInstant());
+        return parcelRepository.save(parcel);
     }
 
     @Test
