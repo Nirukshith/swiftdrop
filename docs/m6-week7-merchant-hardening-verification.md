@@ -2,7 +2,8 @@
 
 Issue: <https://github.com/Nirukshith/swiftdrop/issues/243>
 
-Base: `origin/development` at `cd1913e`. This work tests and hardens the merged
+Started from `origin/development` at `cd1913e`; incorporated newly merged
+`development` at `d405857` before final verification. This work tests and hardens the merged
 Week 6 implementation; it does not reimplement #223, #207 or #208. The applicable
 sources are SRS §6.3, decided ADRs 001–006, and the merged merchant, recovery,
 auth, parcel and operations pricing contracts.
@@ -10,7 +11,13 @@ auth, parcel and operations pricing contracts.
 ## Confirmed defects and corrections
 
 The initial `MerchantOrderIntegrationTest` regression run executed 38 tests:
-three failed, with zero errors/skips. A new key could create another parcel after
+three failed, with zero errors/skips, using:
+
+```sh
+mvn -B verify -pl services/integration-service -am -Dtest=MerchantOrderIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+```
+
+A new key could create another parcel after
 an ambiguous single-order response (expected 409, received 201). Cancellation
 accepted foreign/missing merchant responses (expected 502, received 200).
 
@@ -40,7 +47,8 @@ mocks in module tests isolate association checks and specific error responses;
 they are not the evidence for the real end-to-end workflow.
 
 New regressions cover unknown single-order outcomes, changed pricing/keys/bodies,
-single-to-bulk reference conflicts, explicit validation correction, five malformed
+single-to-bulk reference conflicts, local persistence rollback after parcel success,
+explicit validation correction, five malformed
 cancellation variants, four invalid recovery responses followed by safe recovery,
 same-file UI reset and stale file reads. Existing suites also cover CSV limits,
 malformed UTF-8/quoting, tenant authorization, pending/rejected merchants, throttling,
@@ -53,6 +61,8 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
 export PATH="$JAVA_HOME/bin:$PATH"
 mvn -B verify -pl services/integration-service -am
 mvn -B verify -pl services/auth-service,services/parcel-service,services/operations-service,services/integration-service -am
+# After the development update (auth code was unchanged):
+mvn -B verify -pl services/parcel-service,services/operations-service,services/integration-service -am
 ```
 
 Frontend, from `frontend`, using Node 22.23.4:
@@ -80,7 +90,25 @@ the actual parcel to PICKED_UP, changes pricing from 1350 to 1850 LKR, and recov
 the same parcel at its pinned 1350 LKR fee. It checks stable replay and unchanged
 parcel count. The runner cleans up its own processes and containers.
 
-Results are recorded below after verification completes.
+The first extended runtime run passed the existing 149 checks, then exposed a
+fixture-only `NameError` in the new single-order scenario. Its request fixture was
+made local to `verify_recovery`. Final complete runs are recorded below.
+
+Results on 2026-11-13:
+
+| Verification | Result |
+| --- | --- |
+| Integration module + common, first green run | 267 + 13 tests; BUILD SUCCESS |
+| Four-service reactor before development update | 903 tests; BUILD SUCCESS |
+| Latest development: parcel, operations, integration + common | 242 + 206 + 274 + 13 = 735 tests; BUILD SUCCESS |
+| Auth (code unchanged by development update) | 231 tests passed in the four-service run |
+| Node 22 frontend after development update | 65 suites / 506 tests passed; production build passed |
+| HTTP fault fixture | 2 tests; OK |
+| Real services, pricing OAuth mode | 167 checks passed; runner exited 0 and cleaned fixtures |
+| Real services, internal-token pricing mode | 167 checks passed; runner exited 0 and cleaned fixtures |
+
+All passing backend runs have zero failures, errors and skipped tests. The frontend
+dependency audit reports 37 pre-existing findings; the lockfile is unchanged.
 
 ## Boundaries and operational limits
 

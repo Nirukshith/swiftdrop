@@ -326,7 +326,12 @@ def verify_recovery(merchant_id, token, admin, run_id):
     check(faults['injected']==1,'one real successful parcel response was deliberately discarded')
 
     # Week 7: a single-order response can be lost after the real M1 commit too.
-    single = dict(payload, externalReference='m6-loss-single-' + run_id)
+    path = '/api/v1/merchant/orders'
+    address = {'line1': '10 Road', 'city': 'Colombo', 'district': 'Colombo', 'postalCode': '00100'}
+    single = {'externalReference': 'm6-loss-single-' + run_id, 'recipientName': 'Recovery Recipient',
+        'recipientPhone': '+94770000000', 'pickupAddress': address,
+        'dropoffAddress': dict(address, line1='20 Road', city='Gampaha', district='Gampaha', postalCode='11000'),
+        'size': 'SMALL', 'weightKg': 1.5}
     single_key = 'lost-single-' + run_id
     expect(call(INTEGRATION, path, 'POST', single, token, single_key), 502, 'single-order response discarded after real commit')
     committed_single = expect(call(PARCEL, '/internal/v1/parcels?page=0&size=100'), 200, 'inspect real single-order commit')
@@ -341,6 +346,10 @@ def verify_recovery(merchant_id, token, admin, run_id):
     expect(call(provider, '/api/v1/admin/zones/' + dropoff['id'], 'PUT',
         {'name': dropoff['name'], 'districts': dropoff['districts'], 'served': dropoff['served'], 'baseFeeLkr': 1500},
         os.environ['M6_VERIFY_DISPATCHER_TOKEN']), 200, 'change pricing again before single-order retry')
+    changed_quote = expect(call(provider,
+        '/internal/v1/pricing/quote?pickupDistrict=Colombo&dropoffDistrict=Gampaha&weightKg=1.5&size=SMALL',
+        internal_token=os.environ['M6_VERIFY_INTERNAL_PRICING_TOKEN']), 200, 'inspect changed real pricing before retry')
+    check(changed_quote['totalFee'] == 1850, 'current provider quote differs from the pinned single-order fee')
     recovered = expect(call(INTEGRATION, path, 'POST', single, token, single_key), 201, 'single-order reconciles committed parcel with pinned quote')
     check(recovered['parcelId'] == single_id and recovered['fee'] == 1350 and recovered['status'] == 'PICKED_UP',
         'single-order recovery preserves original fee and provider lifecycle')
