@@ -11,6 +11,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -196,6 +198,99 @@ class ReportServiceTest {
         assertThatThrownBy(() -> service.processEvent(invalid))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(processedEventRepository, sequenceRepository, dailyReportRepository);
+    }
+
+    @Test
+    void aggregatesMultipleOutcomesOnSameDayAccurately() {
+        LocalDate date = LocalDate.of(2026, 11, 5);
+        DailyReportAggregate aggregate = new DailyReportAggregate(date);
+        when(processedEventRepository.existsById(any())).thenReturn(false);
+        when(sequenceRepository.findById(any())).thenReturn(Optional.empty());
+        when(dailyReportRepository.findById(date)).thenReturn(Optional.of(aggregate));
+
+        service.processEvent(eventForParcel("p-1", "e-1", 1, "DELIVERED", Instant.parse("2026-11-05T06:00:00Z")));
+        service.processEvent(eventForParcel("p-2", "e-2", 1, "DELIVERED", Instant.parse("2026-11-05T07:00:00Z")));
+        service.processEvent(eventForParcel("p-3", "e-3", 1, "DELIVERED", Instant.parse("2026-11-05T08:00:00Z")));
+        service.processEvent(eventForParcel("p-4", "e-4", 1, "FAILED", Instant.parse("2026-11-05T09:00:00Z")));
+
+        assertThat(aggregate.getTotalDeliveries()).isEqualTo(4);
+        assertThat(aggregate.getSuccessfulDeliveries()).isEqualTo(3);
+        assertThat(aggregate.getFailedDeliveries()).isEqualTo(1);
+
+        when(dailyReportRepository.findByReportDateBetweenOrderByReportDate(date, date))
+                .thenReturn(java.util.List.of(aggregate));
+        DailyReportRow row = service.getDailyReport(date, date).get(0);
+        assertThat(row.totalDeliveries()).isEqualTo(4);
+        assertThat(row.successfulDeliveries()).isEqualTo(3);
+        assertThat(row.failedDeliveries()).isEqualTo(1);
+        assertThat(row.successRate()).isEqualTo(0.75);
+    }
+
+    @Test
+    void preservesLifecycleSequenceWithoutPrematureCounting() {
+        when(processedEventRepository.existsById(any())).thenReturn(false);
+
+        Map<String, ReportParcelSequence> sequenceStore = new HashMap<>();
+        when(sequenceRepository.findById("parcel-seq-1")).thenAnswer(inv ->
+                Optional.ofNullable(sequenceStore.get("parcel-seq-1")));
+        when(sequenceRepository.save(any(ReportParcelSequence.class))).thenAnswer(inv -> {
+            ReportParcelSequence entity = inv.getArgument(0);
+            sequenceStore.put("parcel-seq-1", entity);
+            return entity;
+        });
+
+        service.processEvent(eventForParcel(
+                "parcel-seq-1", "e-step-1", 2, "CREATED", "PICKED_UP", Instant.parse("2026-11-05T04:00:00Z")));
+        service.processEvent(eventForParcel(
+                "parcel-seq-1", "e-step-2", 3, "PICKED_UP", "IN_TRANSIT", Instant.parse("2026-11-05T05:00:00Z")));
+        service.processEvent(eventForParcel(
+                "parcel-seq-1", "e-step-3", 4, "IN_TRANSIT", "OUT_FOR_DELIVERY", Instant.parse("2026-11-05T06:00:00Z")));
+
+        verify(dailyReportRepository, never()).save(any());
+        assertThat(sequenceStore.get("parcel-seq-1")).isNotNull();
+        assertThat(sequenceStore.get("parcel-seq-1").getLastSequence()).isEqualTo(4L);
+
+        LocalDate date = LocalDate.of(2026, 11, 5);
+        when(dailyReportRepository.findById(date)).thenReturn(Optional.empty());
+        service.processEvent(eventForParcel(
+                "parcel-seq-1", "e-step-4", 5, "OUT_FOR_DELIVERY", "DELIVERED", Instant.parse("2026-11-05T07:00:00Z")));
+
+        ArgumentCaptor<DailyReportAggregate> captor = ArgumentCaptor.forClass(DailyReportAggregate.class);
+        verify(dailyReportRepository, times(1)).save(captor.capture());
+        assertThat(captor.getValue().getTotalDeliveries()).isEqualTo(1);
+        assertThat(captor.getValue().getSuccessfulDeliveries()).isEqualTo(1);
+        assertThat(captor.getValue().getFailedDeliveries()).isEqualTo(0);
+        assertThat(captor.getValue().getReportDate()).isEqualTo(date);
+        assertThat(sequenceStore.get("parcel-seq-1").getLastSequence()).isEqualTo(5L);
+
+        // Out-of-order event arriving after sequence advancement does not inflate aggregates or regress sequence
+        service.processEvent(eventForParcel(
+                "parcel-seq-1", "e-step-out-of-order", 3, "OUT_FOR_DELIVERY", "DELIVERED", Instant.parse("2026-11-05T08:00:00Z")));
+        verify(dailyReportRepository, times(1)).save(any());
+        assertThat(sequenceStore.get("parcel-seq-1").getLastSequence()).isEqualTo(5L);
+    }
+
+    private EventEnvelope eventForParcel(String parcelId, String id, long sequence, String status, Instant occurredAt) {
+        return eventForParcel(parcelId, id, sequence, "OUT_FOR_DELIVERY", status, occurredAt);
+    }
+
+    private EventEnvelope eventForParcel(
+            String parcelId, String id, long sequence, String fromStatus, String toStatus, Instant occurredAt) {
+        return new EventEnvelope(
+                id,
+                "PARCEL_STATUS_CHANGED",
+                occurredAt,
+                sequence,
+                parcelId,
+                "SD-20261105-" + parcelId,
+                fromStatus,
+                toStatus,
+                "courier-1",
+                null,
+                null,
+                "customer-1",
+                null
+        );
     }
 
     private EventEnvelope createdEvent(String id, String fromStatus, String toStatus) {
