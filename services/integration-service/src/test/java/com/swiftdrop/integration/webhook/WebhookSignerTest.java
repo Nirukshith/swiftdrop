@@ -94,6 +94,32 @@ class WebhookSignerTest {
     }
 
     @Test
+    @DisplayName("verify() rejects missing secrets and malformed digest values")
+    void testMissingSecretAndMalformedDigestFail() {
+        long timestamp = 1729864800L;
+        String header = WebhookSigner.sign(SAMPLE_PAYLOAD, timestamp, SECRET);
+
+        assertThat(WebhookSigner.verify(SAMPLE_PAYLOAD, header, null, 300L, timestamp)).isFalse();
+        assertThat(WebhookSigner.verify(SAMPLE_PAYLOAD, header, " ", 300L, timestamp)).isFalse();
+        assertThat(WebhookSigner.verify(SAMPLE_PAYLOAD,
+                "t=" + timestamp + ",v1=not-a-hex-digest", SECRET, 300L, timestamp)).isFalse();
+        assertThat(WebhookSigner.verify(SAMPLE_PAYLOAD,
+                "t=" + timestamp + ",v1=", SECRET, 300L, timestamp)).isFalse();
+    }
+
+    @Test
+    @DisplayName("verify() accepts the exact tolerance boundary but rejects timestamps beyond it")
+    void testTimestampToleranceBoundary() {
+        long timestamp = 1729864800L;
+        String header = WebhookSigner.sign(SAMPLE_PAYLOAD, timestamp, SECRET);
+
+        assertThat(WebhookSigner.verify(SAMPLE_PAYLOAD, header, SECRET, 300L, timestamp + 300L))
+                .isTrue();
+        assertThat(WebhookSigner.verify(SAMPLE_PAYLOAD, header, SECRET, 300L, timestamp + 301L))
+                .isFalse();
+    }
+
+    @Test
     @DisplayName("sign() throws exception when secret is null or blank")
     void testNullSecretThrows() {
         assertThatThrownBy(() -> WebhookSigner.sign(SAMPLE_PAYLOAD, 1729864800L, null))
