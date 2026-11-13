@@ -81,10 +81,26 @@ export class MerchantService {
       override ? { targetUrlOverride: override } : {});
   }
 
-  getDeliveryLogs(statusFilter?: string, page = 0, size = 20): Observable<WebhookDeliveryPage> {
+  getDeliveryLogs(
+    statusFilter?: string,
+    page = 0,
+    size = 20,
+    eventType?: string,
+    from?: string,
+    to?: string
+  ): Observable<WebhookDeliveryPage> {
     let params = new HttpParams().set('page', page).set('size', size);
     if (statusFilter && statusFilter !== 'ALL') {
       params = params.set('status', statusFilter);
+    }
+    if (eventType && eventType !== 'ALL') {
+      params = params.set('eventType', eventType);
+    }
+    if (from?.trim()) {
+      params = params.set('from', from.trim());
+    }
+    if (to?.trim()) {
+      params = params.set('to', to.trim());
     }
     return this.http.get<WebhookDeliveryPage>(`${this.webhookUrl}/deliveries`, { params });
   }
