@@ -39,10 +39,38 @@ describe('CustomerParcelsService', () => {
     req.flush(page);
   });
 
+  it('sends the supported date and tracking filters', () => {
+    service.list({ from: '2026-11-01', to: '2026-11-30', q: ' SD-202611 ' }).subscribe();
+
+    const req = http.expectOne((r) => r.url === '/api/v1/parcels');
+    expect(req.request.params.get('from')).toBe('2026-11-01');
+    expect(req.request.params.get('to')).toBe('2026-11-30');
+    expect(req.request.params.get('q')).toBe('SD-202611');
+    req.flush(page);
+  });
+
   it('leaves out a null status', () => {
     service.list({ status: null }).subscribe();
     const req = http.expectOne((r) => r.url === '/api/v1/parcels');
     expect(req.request.params.has('status')).toBe(false);
+    req.flush(page);
+  });
+
+  it('sends the from / to dates and the trimmed tracking-number search (parcel.yaml)', () => {
+    service.list({ from: '2026-11-01', to: '2026-11-30', q: '  SD-2026 ' }).subscribe();
+
+    const req = http.expectOne((r) => r.url === '/api/v1/parcels');
+    expect(req.request.params.get('from')).toBe('2026-11-01');
+    expect(req.request.params.get('to')).toBe('2026-11-30');
+    expect(req.request.params.get('q')).toBe('SD-2026');
+    req.flush(page);
+  });
+
+  it('leaves out empty or blank filters', () => {
+    service.list({ from: null, to: '', q: '   ' }).subscribe();
+
+    const req = http.expectOne((r) => r.url === '/api/v1/parcels');
+    expect(req.request.params.keys().sort()).toEqual(['page', 'size']);
     req.flush(page);
   });
 });

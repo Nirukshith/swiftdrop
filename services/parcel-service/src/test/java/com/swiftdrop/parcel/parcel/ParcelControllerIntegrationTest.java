@@ -22,6 +22,7 @@ import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -51,6 +52,9 @@ class ParcelControllerIntegrationTest {
 
     @Autowired
     private StatusHistoryRepository statusHistoryRepository;
+
+    @Autowired
+    private ParcelService parcelService;
 
     @MockBean
     private PricingQuoteClient pricingQuoteClient;
@@ -99,6 +103,29 @@ class ParcelControllerIntegrationTest {
         assertThat(history.get(0).getFromStatus()).isEqualTo(ParcelStatus.CREATED);
         assertThat(history.get(0).getToStatus()).isEqualTo(ParcelStatus.CREATED);
         assertThat(history.get(0).getChangedBy()).isEqualTo("usr-cust-1");
+    }
+
+    @Test
+    @DisplayName("Customer creation rolls back parcel and history when pricing fails")
+    void customerCreationRollsBackWhenPricingFails() {
+        when(pricingQuoteClient.fetchQuote(any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("pricing service unavailable"));
+
+        CreateCustomerParcelRequest request = new CreateCustomerParcelRequest(
+                new AddressDto("12 Flower Rd", null, "Colombo", "Colombo", "00700"),
+                new AddressDto("45 High Level Rd", null, "Nugegoda", "Colombo", "10250"),
+                new BigDecimal("2.50"),
+                ParcelSize.MEDIUM,
+                "Sunil Silva",
+                "+94771234567",
+                "Fragile"
+        );
+
+        assertThatThrownBy(() -> parcelService.createCustomerParcel("usr-cust-rollback", request))
+                .isInstanceOf(IllegalStateException.class);
+
+        assertThat(parcelRepository.count()).isZero();
+        assertThat(statusHistoryRepository.count()).isZero();
     }
 
     @Test
@@ -184,6 +211,15 @@ class ParcelControllerIntegrationTest {
                         .content(objectMapper.writeValueAsString(new CancelParcelRequest("Changed mind"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status", is("CANCELLED")));
+
+        mockMvc.perform(post("/api/v1/parcels/" + saved.getId() + "/cancel")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CancelParcelRequest("Retry"))))
+                .andExpect(status().isConflict());
+
+        assertThat(parcelRepository.findById(saved.getId()).orElseThrow().getStatus())
+                .isEqualTo(ParcelStatus.CANCELLED);
 
         // 2. Parcel in PICKED_UP status
         Parcel pickedUpParcel = new Parcel();
