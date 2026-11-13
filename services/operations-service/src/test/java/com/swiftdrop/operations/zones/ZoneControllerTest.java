@@ -73,4 +73,26 @@ class ZoneControllerTest {
 
         verify(repository, never()).save(any(Zone.class));
     }
+
+    @Test
+    @WithMockUser(roles = "DISPATCHER")
+    void rejectsZoneWithUnknownDistrictUsingBadRequestResponse() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/zones")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "ATLANTIS",
+                                  "districts": ["Atlantis"],
+                                  "served": true,
+                                  "baseFeeLkr": 500
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("Unknown district")))
+                .andExpect(jsonPath("$.correlationId").exists())
+                .andExpect(jsonPath("$.timestamp").exists());
+
+        verify(repository, never()).save(any(Zone.class));
+    }
 }
