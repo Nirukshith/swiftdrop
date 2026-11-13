@@ -35,6 +35,18 @@ class PricingStrategyTest {
     }
 
     @Test
+    void zoneStrategyRejectsUnknownPickupDistrict() {
+        ZonePricingStrategy strategy = new ZonePricingStrategy(Map.of(
+                "Gampaha", new ZonePricingStrategy.Zone(true, new BigDecimal("650"))));
+
+        PricingException exception = assertThrows(
+                PricingException.class,
+                () -> strategy.calculate(REQUEST));
+
+        assertEquals("UNKNOWN_DISTRICT", exception.code());
+    }
+
+    @Test
     void zoneStrategyRejectsUnservedPickupDistrict() {
         ZonePricingStrategy strategy = new ZonePricingStrategy(Map.of(
                 "Colombo", new ZonePricingStrategy.Zone(false, new BigDecimal("500")),
@@ -62,6 +74,24 @@ class PricingStrategyTest {
     }
 
     @Test
+    void weightStrategyAcceptsExactLowerBoundary() {
+        WeightPricingStrategy strategy = new WeightPricingStrategy(List.of(
+                new WeightPricingStrategy.WeightBand(
+                        new BigDecimal("0"), new BigDecimal("1"), new BigDecimal("100")),
+                new WeightPricingStrategy.WeightBand(
+                        new BigDecimal("1"), new BigDecimal("5"), new BigDecimal("200"))));
+
+        assertEquals(new BigDecimal("200"), strategy.calculate(requestWithWeight("1.00")).amount());
+    }
+
+    @Test
+    void weightStrategyRejectsMissingConfiguration() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new WeightPricingStrategy(List.of()));
+    }
+
+    @Test
     void weightStrategyRejectsWeightAboveConfiguredBands() {
         WeightPricingStrategy strategy = new WeightPricingStrategy(List.of(
                 new WeightPricingStrategy.WeightBand(
@@ -85,6 +115,13 @@ class PricingStrategyTest {
                 PricingException.class,
                 () -> strategy.calculate(requestWithSize("LARGE")));
         assertEquals("UNKNOWN_SIZE", exception.code());
+    }
+
+    @Test
+    void sizeStrategyRejectsMissingConfiguration() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new SizePricingStrategy(Map.of()));
     }
 
     @Test

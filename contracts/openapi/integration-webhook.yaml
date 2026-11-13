@@ -111,7 +111,8 @@ paths:
       summary: List webhook delivery logs
       description: |
         Retrieves a paginated history of outbound webhook delivery attempts for the authenticated merchant.
-        Supports filtering by status (`SUCCESS`, `PENDING_RETRY`, `FAILED`, `CANCELLED`) and date range.
+        Supports filtering by status (`PENDING`, `SUCCESS`, `PENDING_RETRY`, `FAILED`, `CANCELLED`),
+        event type, and date range.
       operationId: listWebhookDeliveries
       tags:
         - Merchant Webhooks
@@ -123,7 +124,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [SUCCESS, PENDING_RETRY, FAILED, CANCELLED]
+            enum: [PENDING, SUCCESS, PENDING_RETRY, FAILED, CANCELLED]
           description: Filter deliveries by execution status.
         - name: eventType
           in: query

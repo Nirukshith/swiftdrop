@@ -244,4 +244,143 @@ class CourierExecutionIntegrationTest extends OperationsKafkaIntegrationTest {
         assertThat(proofResource).isNotNull();
         assertThat(proofResource.getStatusCode().is2xxSuccessful()).isTrue();
     }
+
+    @Test
+    @WithMockUser(username = COURIER_ID, roles = {"COURIER"})
+    @DisplayName("Failed delivery workflow: transition to FAILED requires reason and persists audit record")
+    void testFailedDeliveryWorkflowWithReasonAndAudit() {
+        ParcelResponse outParcel = mockParcel("OUT_FOR_DELIVERY");
+        ParcelResponse failedParcel = mockParcel("FAILED");
+
+        when(parcelServiceClient.getParcel(PARCEL_ID)).thenReturn(outParcel);
+        when(parcelServiceClient.updateStatus(eq(PARCEL_ID), any())).thenReturn(failedParcel);
+
+        CourierStatusUpdateRequest request = new CourierStatusUpdateRequest(
+            "FAILED", "Customer refused acceptance", null, "idem-fail-1"
+        );
+
+        CourierStatusUpdateResponse response = courierExecutionService.updateDeliveryStatus(
+            COURIER_ID, PARCEL_ID, request
+        );
+
+        assertThat(response).isNotNull();
+        assertThat(response.currentStatus()).isEqualTo("FAILED");
+
+        List<DeliveryProofAuditLogEntity> audits = deliveryProofAuditRepository.findAll();
+        assertThat(audits).anyMatch(log ->
+            "DELIVERY_STATUS_UPDATED".equals(log.getAction()) &&
+            PARCEL_ID.toString().equals(log.getTargetId()) &&
+            log.getDetails() != null &&
+            "FAILED".equals(log.getDetails().get("currentStatus")) &&
+            "Customer refused acceptance".equals(log.getDetails().get("reason"))
+        );
+    }
+
+    @Test
+    @WithMockUser(username = COURIER_ID, roles = {"COURIER"})
+    @DisplayName("Transition to FAILED without reason throws 400 Bad Request")
+    void testTransitionToFailedWithoutReasonThrowsBadRequest() {
+        when(parcelServiceClient.getParcel(PARCEL_ID)).thenReturn(mockParcel("OUT_FOR_DELIVERY"));
+
+        CourierStatusUpdateRequest request = new CourierStatusUpdateRequest(
+            "FAILED", "  ", null, "idem-fail-2"
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            courierExecutionService.updateDeliveryStatus(COURIER_ID, PARCEL_ID, request)
+        );
+        assertThat(ex.getStatusCode().value()).isEqualTo(400);
+        assertThat(ex.getReason()).contains("Failure reason is required");
+    }
+
+    @Test
+    @WithMockUser(username = COURIER_ID, roles = {"COURIER"})
+    @DisplayName("Transition to DELIVERED without proof or recipient name throws 400 Bad Request")
+    void testTransitionToDeliveredWithoutProofOrRecipientNameThrowsBadRequest() {
+        UUID freshParcelId = UUID.randomUUID();
+        ParcelResponse parcel = new ParcelResponse(
+            freshParcelId, "SD-NOPROOF-01", "OUT_FOR_DELIVERY", "cust-1", null, COURIER_ID,
+            null, null, 1.0, "SMALL", 300.0, 0, null, "John Doe", "+94770000000", null, null, 1L, Instant.now(), Instant.now()
+        );
+        when(parcelServiceClient.getParcel(freshParcelId)).thenReturn(parcel);
+
+        CourierStatusUpdateRequest request = new CourierStatusUpdateRequest(
+            "DELIVERED", null, null, "idem-deliv-none"
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            courierExecutionService.updateDeliveryStatus(COURIER_ID, freshParcelId, request)
+        );
+        assertThat(ex.getStatusCode().value()).isEqualTo(400);
+        assertThat(ex.getReason()).contains("Proof of delivery (photo or recipient name) is required");
+    }
+
+    @Test
+    @WithMockUser(username = COURIER_ID, roles = {"COURIER"})
+    @DisplayName("Proof upload with corrupted/spoofed magic bytes is rejected with 400 and logged to audit")
+    void testProofUploadWithInvalidMagicBytesThrowsBadRequestAndAuditsRejection() {
+        byte[] fakeBytes = "NOT_A_VALID_IMAGE_HEADER_MZ".getBytes();
+        MockMultipartFile file = new MockMultipartFile("file", "malicious.jpg", "image/jpeg", fakeBytes);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            courierExecutionService.uploadProof(COURIER_ID, PARCEL_ID, file, "Recipient", "Notes")
+        );
+        assertThat(ex.getStatusCode().value()).isEqualTo(400);
+        assertThat(ex.getReason()).contains("Invalid file content");
+
+        List<DeliveryProofAuditLogEntity> audits = deliveryProofAuditRepository.findAll();
+        assertThat(audits).anyMatch(log ->
+            "DELIVERY_PROOF_REJECTED".equals(log.getAction()) &&
+            PARCEL_ID.toString().equals(log.getTargetId()) &&
+            log.getDetails() != null &&
+            "INVALID_FILE_TYPE".equals(log.getDetails().get("reason"))
+        );
+    }
+
+    @Test
+    @WithMockUser(username = COURIER_ID, roles = {"COURIER"})
+    @DisplayName("Proof upload exceeding 5MB size limit is rejected with 413 and logged to audit")
+    void testProofUploadExceeding5MbThrowsPayloadTooLargeAndAuditsRejection() {
+        byte[] oversizedBytes = new byte[5 * 1024 * 1024 + 1];
+        MockMultipartFile file = new MockMultipartFile("file", "large.jpg", "image/jpeg", oversizedBytes);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            courierExecutionService.uploadProof(COURIER_ID, PARCEL_ID, file, "Recipient", "Notes")
+        );
+        assertThat(ex.getStatusCode().value()).isEqualTo(413);
+        assertThat(ex.getReason()).contains("exceeds the 5MB limit");
+
+        List<DeliveryProofAuditLogEntity> audits = deliveryProofAuditRepository.findAll();
+        assertThat(audits).anyMatch(log ->
+            "DELIVERY_PROOF_REJECTED".equals(log.getAction()) &&
+            PARCEL_ID.toString().equals(log.getTargetId()) &&
+            log.getDetails() != null &&
+            "FILE_SIZE_EXCEEDED".equals(log.getDetails().get("reason"))
+        );
+    }
+
+    @Test
+    @WithMockUser(username = "unauthorized-courier-88", roles = {"COURIER"})
+    @DisplayName("Status update by mismatched courier throws 403 and audits unauthorized attempt")
+    void testStatusUpdateByMismatchedCourierAuditsUnauthorizedAttempt() {
+        when(parcelServiceClient.getParcel(PARCEL_ID)).thenReturn(mockParcel("OUT_FOR_DELIVERY"));
+
+        CourierStatusUpdateRequest request = new CourierStatusUpdateRequest(
+            "DELIVERED", null, "Recipient", "idem-unauth"
+        );
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+            courierExecutionService.updateDeliveryStatus("unauthorized-courier-88", PARCEL_ID, request)
+        );
+        assertThat(ex.getStatusCode().value()).isEqualTo(403);
+
+        List<DeliveryProofAuditLogEntity> audits = deliveryProofAuditRepository.findAll();
+        assertThat(audits).anyMatch(log ->
+            "DELIVERY_PROOF_REJECTED".equals(log.getAction()) &&
+            PARCEL_ID.toString().equals(log.getTargetId()) &&
+            "unauthorized-courier-88".equals(log.getActorId()) &&
+            log.getDetails() != null &&
+            "UNAUTHORIZED_COURIER_ACCESS_ATTEMPT".equals(log.getDetails().get("reason"))
+        );
+    }
 }
