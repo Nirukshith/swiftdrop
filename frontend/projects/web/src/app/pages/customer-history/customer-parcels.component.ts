@@ -21,7 +21,7 @@ import {
   humanizeStatus,
 } from 'ui';
 import { ReceiptButtonComponent } from '../tracking/receipt-button.component';
-import { CustomerParcel, PARCEL_STATUSES, ParcelStatus } from './customer-history.model';
+import { CustomerParcel, PARCEL_STATUSES, ParcelListQuery, ParcelStatus } from './customer-history.model';
 import { CustomerParcelsService } from './customer-parcels.service';
 import { CUSTOMER_NAV, errorMessage } from './customer-nav';
 import { PARCEL_COLUMNS, parcelKey } from './parcel-columns';
@@ -61,6 +61,35 @@ import { PARCEL_COLUMNS, parcelKey } from './parcel-columns';
             [ngModel]="status()"
             (ngModelChange)="filterByStatus($event)"
           />
+          <label class="w-full sm:w-56">
+            <span class="mb-1 block text-sm font-medium text-ink">Tracking search</span>
+            <input
+              class="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm text-ink"
+              type="search"
+              placeholder="Contains tracking number"
+              [value]="query()"
+              (input)="query.set($any($event.target).value)"
+            />
+          </label>
+          <label>
+            <span class="mb-1 block text-sm font-medium text-ink">From</span>
+            <input
+              class="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm text-ink"
+              type="date"
+              [value]="fromDate()"
+              (change)="fromDate.set($any($event.target).value)"
+            />
+          </label>
+          <label>
+            <span class="mb-1 block text-sm font-medium text-ink">To</span>
+            <input
+              class="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm text-ink"
+              type="date"
+              [value]="toDate()"
+              (change)="toDate.set($any($event.target).value)"
+            />
+          </label>
+          <ui-button type="button" (click)="applyFilters()">Apply filters</ui-button>
           <p class="text-sm text-ink-muted" aria-live="polite">
             @if (state() === 'ready') {
               {{ totalElements() }} {{ totalElements() === 1 ? 'parcel' : 'parcels' }}
@@ -168,6 +197,9 @@ export class CustomerParcelsComponent implements OnInit {
   readonly page = signal(0);
   readonly totalElements = signal(0);
   readonly status = signal<ParcelStatus | null>(null);
+  readonly query = signal('');
+  readonly fromDate = signal('');
+  readonly toDate = signal('');
 
   /** Page and filter come from the URL (?page=2&status=DELIVERED), so Back from a parcel keeps them. */
   ngOnInit(): void {
@@ -177,11 +209,20 @@ export class CustomerParcelsComponent implements OnInit {
     // The URL shows pages from 1; the API counts from 0. Anything unusable falls back to the defaults.
     this.page.set(Number.isInteger(page) && page >= 1 ? page - 1 : 0);
     this.status.set(status && PARCEL_STATUSES.includes(status) ? status : null);
+    this.query.set(params.get('q') ?? '');
+    this.fromDate.set(params.get('from') ?? '');
+    this.toDate.set(params.get('to') ?? '');
     this.load();
   }
 
   filterByStatus(status: ParcelStatus | null): void {
     this.status.set(status);
+    this.page.set(0);
+    this.syncUrl();
+    this.load();
+  }
+
+  applyFilters(): void {
     this.page.set(0);
     this.syncUrl();
     this.load();
@@ -196,7 +237,13 @@ export class CustomerParcelsComponent implements OnInit {
   private syncUrl(): void {
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { page: this.page() > 0 ? this.page() + 1 : null, status: this.status() },
+      queryParams: {
+        page: this.page() > 0 ? this.page() + 1 : null,
+        status: this.status(),
+        from: this.fromDate() || null,
+        to: this.toDate() || null,
+        q: this.query().trim() || null,
+      },
       replaceUrl: true,
     });
   }
@@ -204,8 +251,22 @@ export class CustomerParcelsComponent implements OnInit {
   load(): void {
     this.state.set('loading');
     this.request?.unsubscribe(); // a newer filter or page wins over a slower older request
+    const query: ParcelListQuery = {
+      page: this.page(),
+      size: this.size,
+      status: this.status(),
+    };
+    if (this.fromDate()) {
+      query.from = this.fromDate();
+    }
+    if (this.toDate()) {
+      query.to = this.toDate();
+    }
+    if (this.query().trim()) {
+      query.q = this.query().trim();
+    }
     this.request = this.parcels
-      .list({ page: this.page(), size: this.size, status: this.status() })
+      .list(query)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {

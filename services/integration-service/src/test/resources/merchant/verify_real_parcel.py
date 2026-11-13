@@ -1,28 +1,36 @@
 """Exercise M6 orders over real HTTP; credentials stay in memory and are never printed.
 
-Requires isolated running services and a prepared ADMIN account. See the M6-02
-verification document for environment variables and fixture setup.
+Requires the isolated runner's real services, Mailpit and prepared ADMIN account.
+See docs/m6-week8-release-demo.md for environment variables and fixture setup.
 """
 import concurrent.futures
 import base64
 import hashlib
 import json
 import os
+from pathlib import Path
+import secrets
+import time
 import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 import uuid
+from merchant_demo import is_reset_message, reset_token_from_message
 
 AUTH = os.environ['M6_VERIFY_AUTH_URL'].rstrip('/')
+AUTH_INTERNAL = os.environ.get('M6_VERIFY_AUTH_INTERNAL_URL', AUTH).rstrip('/')
 INTEGRATION = os.environ['M6_VERIFY_INTEGRATION_URL'].rstrip('/')
 PARCEL = os.environ['M6_VERIFY_PARCEL_URL'].rstrip('/')
-for endpoint in [AUTH, INTEGRATION, PARCEL, os.environ.get('M6_VERIFY_PRICING_PROVIDER_URL', PARCEL)]:
+MAILPIT = os.environ['M6_VERIFY_MAILPIT_URL'].rstrip('/')
+for endpoint in [AUTH, AUTH_INTERNAL, INTEGRATION, PARCEL, MAILPIT, os.environ.get('M6_VERIFY_PRICING_PROVIDER_URL', PARCEL)]:
     if urlparse(endpoint).hostname not in {'localhost', '127.0.0.1', '::1'}:
         raise ValueError('Verification requires isolated services on loopback URLs')
 
 
 def call(base, path, method='GET', body=None, token=None, key=None, internal_token=None, content_type='application/json'):
     headers = {'Content-Type': content_type}
+    if base == os.environ.get('M6_VERIFY_FRONTEND_URL'):
+        headers['Origin'] = base
     if token:
         headers['Authorization'] = 'Bearer ' + token
     if key:
@@ -54,6 +62,69 @@ def check(condition, label):
     print('PASS ' + label, flush=True)
 
 
+def verify_portal_login(email, merchant_id):
+    expect(call(AUTH, '/api/v1/auth/password/forgot', 'POST', {'email': email}),
+        202, 'approved merchant requests sign-in password setup')
+    deadline = time.monotonic() + 20
+    reset_token = None
+    while time.monotonic() < deadline:
+        status, mailbox = call(MAILPIT, '/api/v1/messages')
+        if status != 200:
+            raise AssertionError('Demo Mailpit messages API unavailable')
+        message = next((m for m in mailbox['messages'] if is_reset_message(m, email)), None)
+        if message:
+            status, full = call(MAILPIT, '/api/v1/message/' + message['ID'])
+            if status != 200:
+                raise AssertionError('Demo Mailpit reset message unavailable')
+            reset_token = reset_token_from_message(full, email)
+            break
+        time.sleep(0.2)
+    check(reset_token is not None, 'real SMTP delivered the intended merchant reset email')
+    password = secrets.token_urlsafe(24) + 'A1!'
+    reset = {'token': reset_token, 'newPassword': password}
+    expect(call(AUTH, '/api/v1/auth/password/reset', 'POST', reset), 200, 'merchant sets a separate sign-in password')
+    expect(call(AUTH, '/api/v1/auth/password/reset', 'POST', reset), 400, 'reset token is single-use')
+    expect(call(AUTH, '/api/v1/auth/login', 'POST', {'email': email, 'password': 'incorrect-demo-password'}),
+        401, 'wrong merchant sign-in password is denied')
+    login = expect(call(AUTH, '/api/v1/auth/login', 'POST', {'email': email, 'password': password}),
+        200, 'merchant signs in after email setup')
+    if os.environ.get('M6_DEMO_ACCOUNTS_FILE'):
+        private_path = Path(os.environ['M6_DEMO_ACCOUNTS_FILE'])
+        accounts = json.loads(private_path.read_text())
+        accounts['merchant'] = {'email': email, 'password': password}
+        private_path.write_text(json.dumps(accounts))
+    check(login['user']['role'] == 'MERCHANT' and login['user']['merchantId'] == merchant_id,
+        'human sign-in retains the approved merchant association')
+    expect(call(INTEGRATION, '/api/v1/merchant/orders', token=login['accessToken']), 200, 'signed-in merchant can load portal orders')
+    expect(call(INTEGRATION, '/api/v1/admin/merchants', token=login['accessToken']), 403, 'merchant sign-in does not grant ADMIN approval')
+    return login['accessToken']
+
+
+def verify_portal_template(token, other_token, run_id):
+    template = Path(__file__).resolve().parents[6] / 'docs/templates/merchant-orders.csv'
+    csv = template.read_text().replace('example-001', 'portal-demo-' + run_id)
+    path = '/api/v1/merchant/orders/bulk'
+    key = 'portal-template-' + run_id
+    result = expect(call(INTEGRATION, path, 'POST', csv, token, key, content_type='text/csv'),
+        200, 'signed-in merchant submits the documented CSV template')
+    check(result['acceptedRows'] == 1 and result['rejectedRows'] == 0, 'demo template creates one real parcel')
+    replay = expect(call(INTEGRATION, path, 'POST', csv, token, key, content_type='text/csv'),
+        200, 'signed-in merchant replays the confirmed upload')
+    check(replay == result, 'portal upload replay preserves the exact result')
+    other = expect(call(INTEGRATION, '/api/v1/merchant/orders', token=other_token), 200, 'inspect another merchant after portal upload')
+    check(result['results'][0]['order']['orderId'] not in {o['orderId'] for o in other['content']},
+        'portal-created order remains isolated from another merchant')
+    demo_path = template.parent.parent / 'm6-demo/merchant-orders-demo.csv'
+    demo_csv = demo_path.read_text().replace('demo-order-', 'demo-' + run_id + '-')
+    partial = expect(call(INTEGRATION, path, 'POST', demo_csv, token, key + '-partial', content_type='text/csv'),
+        200, 'signed-in merchant submits the mixed-validity demo CSV')
+    check(partial['totalRows'] == 2 and partial['acceptedRows'] == 1 and partial['rejectedRows'] == 1,
+        'demo CSV reports one valid order and one invalid row')
+    replay = expect(call(INTEGRATION, path, 'POST', demo_csv, token, key + '-partial', content_type='text/csv'),
+        200, 'mixed-validity demo upload replays')
+    check(replay == partial, 'demo CSV replay preserves partial success without another order')
+
+
 def main():
     run_id = uuid.uuid4().hex[:10]
     admin = expect(call(AUTH, '/api/v1/auth/login', 'POST', {
@@ -81,6 +152,7 @@ def main():
 
     first_id, first_token = merchant('first')
     second_id, second_token = merchant('second')
+    portal_token = verify_portal_login(f'm6-{run_id}-first@example.test', first_id)
     pending = expect(call(INTEGRATION, '/api/v1/merchants/register', 'POST', {
         'businessName': 'M6 Pending Verification', 'contactName': 'Verification Contact',
         'email': f'm6-{run_id}-pending@example.test', 'phoneNumber': '+94770000000',
@@ -92,11 +164,11 @@ def main():
     check(all('clientSecret' not in m for m in pending_list['content']), 'pending list never exposes a secret')
     # Fixture-only M10 provisioning creates an inactive account/client to exercise negative token issuance.
     internal_token = os.environ['M6_VERIFY_INTERNAL_TOKEN']
-    expect(call(AUTH, '/internal/v1/users', 'POST', {
+    expect(call(AUTH_INTERNAL, '/internal/v1/users', 'POST', {
         'email': pending['email'], 'fullName': pending['contactName'], 'phoneNumber': pending['phoneNumber'],
         'role': 'MERCHANT', 'merchantId': pending['id'], 'enabled': False,
     }, internal_token=internal_token), 201, 'M10 inactive user fixture')
-    inactive_client = expect(call(AUTH, '/internal/v1/clients', 'POST', {
+    inactive_client = expect(call(AUTH_INTERNAL, '/internal/v1/clients', 'POST', {
         'merchantId': pending['id'], 'clientName': 'M6 inactive test fixture', 'scopes': ['parcels:create'],
     }, internal_token=internal_token), 201, 'M10 inactive client fixture')
     inactive_grant = {'grant_type': 'client_credentials', 'client_id': inactive_client['clientId'],
@@ -223,6 +295,7 @@ def main():
     expect(call(INTEGRATION, path, 'POST', payload, None, 'anonymous-key'), 401, 'anonymous request rejected')
     verify_bulk(first_id, first_token, second_id, second_token, admin, run_id)
     verify_recovery(first_id, first_token, admin, run_id)
+    verify_portal_template(portal_token, second_token, run_id)
     print('ALL REAL-SERVICE MERCHANT ORDER CHECKS PASSED', flush=True)
 
 
@@ -281,7 +354,7 @@ def verify_recovery(merchant_id, token, admin, run_id):
     faults=expect(call(fault_auth,'/__verification/faults'),200,'inspect isolated auth fault injection')
     check(faults['injected']==1 and len(faults['operationIds'])==1,'one real provisioning response was discarded')
     operation=faults['operationIds'][0]
-    status=expect(call(AUTH,f'/internal/v1/merchant-provisioning/{operation}',internal_token=os.environ['M6_VERIFY_INTERNAL_TOKEN']),200,'real auth non-secret recovery status')
+    status=expect(call(AUTH_INTERNAL,f'/internal/v1/merchant-provisioning/{operation}',internal_token=os.environ['M6_VERIFY_INTERNAL_TOKEN']),200,'real auth non-secret recovery status')
     check(status.get('clientSecret') is None and status['credentialRecoveryRequired'],'status never reads a stored secret')
     client_id=status['clientId']
     recovery=f'/api/v1/admin/merchants/{registered["id"]}/recover-credentials'
@@ -324,6 +397,41 @@ def verify_recovery(merchant_id, token, admin, run_id):
     expect(call(INTEGRATION,'/api/v1/merchant/orders/bulk','POST',csv.replace(reference,reference+'changed'),token,upload_key,content_type='text/csv'),409,'recovery rejects changed file with the original key')
     faults=expect(call(fault_parcel,'/__verification/faults'),200,'inspect committed parcel fault injection')
     check(faults['injected']==1,'one real successful parcel response was deliberately discarded')
+
+    # Week 7: a single-order response can be lost after the real M1 commit too.
+    path = '/api/v1/merchant/orders'
+    address = {'line1': '10 Road', 'city': 'Colombo', 'district': 'Colombo', 'postalCode': '00100'}
+    single = {'externalReference': 'm6-loss-single-' + run_id, 'recipientName': 'Recovery Recipient',
+        'recipientPhone': '+94770000000', 'pickupAddress': address,
+        'dropoffAddress': dict(address, line1='20 Road', city='Gampaha', district='Gampaha', postalCode='11000'),
+        'size': 'SMALL', 'weightKg': 1.5}
+    single_key = 'lost-single-' + run_id
+    expect(call(INTEGRATION, path, 'POST', single, token, single_key), 502, 'single-order response discarded after real commit')
+    committed_single = expect(call(PARCEL, '/internal/v1/parcels?page=0&size=100'), 200, 'inspect real single-order commit')
+    check(committed_single['totalElements'] == final['totalElements'] + 1, 'one single-order parcel committed before recovery')
+    single_id = next(p['id'] for p in committed_single['content'] if p['id'] not in {old['id'] for old in final['content']})
+    expect(call(INTEGRATION, path, 'POST', single, token, single_key + '-new'), 409, 'unknown single-order reference blocks a new key')
+    conflicting_csv = header + '\n' + f'{single["externalReference"]},Recovery Recipient,+94770000000,10 Road,,Colombo,Colombo,00100,20 Road,,Gampaha,Gampaha,11000,SMALL,1.5\n'
+    conflict = expect(call(INTEGRATION, path + '/bulk', 'POST', conflicting_csv, token, 'cross-path-' + run_id, content_type='text/csv'), 200, 'bulk cannot take an uncertain single-order reference')
+    check(conflict['acceptedRows'] == 0, 'cross-path reservation prevents another parcel write')
+    expect(call(PARCEL, f'/internal/v1/parcels/{single_id}/status', 'PATCH',
+        {'status': 'PICKED_UP', 'expectedCurrentStatus': 'CREATED'}), 200, 'advance single-order parcel before recovery')
+    expect(call(provider, '/api/v1/admin/zones/' + dropoff['id'], 'PUT',
+        {'name': dropoff['name'], 'districts': dropoff['districts'], 'served': dropoff['served'], 'baseFeeLkr': 1500},
+        os.environ['M6_VERIFY_DISPATCHER_TOKEN']), 200, 'change pricing again before single-order retry')
+    changed_quote = expect(call(provider,
+        '/internal/v1/pricing/quote?pickupDistrict=Colombo&dropoffDistrict=Gampaha&weightKg=1.5&size=SMALL',
+        internal_token=os.environ['M6_VERIFY_INTERNAL_PRICING_TOKEN']), 200, 'inspect changed real pricing before retry')
+    check(changed_quote['totalFee'] == 1850, 'current provider quote differs from the pinned single-order fee')
+    recovered = expect(call(INTEGRATION, path, 'POST', single, token, single_key), 201, 'single-order reconciles committed parcel with pinned quote')
+    check(recovered['parcelId'] == single_id and recovered['fee'] == 1350 and recovered['status'] == 'PICKED_UP',
+        'single-order recovery preserves original fee and provider lifecycle')
+    check(expect(call(INTEGRATION, path, 'POST', single, token, single_key), 201, 'recovered single-order replay') == recovered,
+        'recovered single-order response is stable')
+    after_single = expect(call(PARCEL, '/internal/v1/parcels?page=0&size=100'), 200, 'inspect final single-order parcel count')
+    check(after_single['totalElements'] == committed_single['totalElements'], 'single-order recovery created no duplicate parcel')
+    faults = expect(call(fault_parcel, '/__verification/faults'), 200, 'inspect both real committed-response faults')
+    check(faults['injected'] == 2, 'one bulk and one single-order committed response were discarded')
 
 
 if __name__ == '__main__':

@@ -1,0 +1,3 @@
+externalReference,recipientName,recipientPhone,pickupLine1,pickupLine2,pickupCity,pickupDistrict,pickupPostalCode,dropoffLine1,dropoffLine2,dropoffCity,dropoffDistrict,dropoffPostalCode,size,weightKg
+demo-order-001,Demo Recipient,+94771234567,12 Main Road,,Colombo,Colombo,00700,45 Lake Road,,Gampaha,Gampaha,11000,SMALL,1.50
+demo-order-002,Invalid Weight Example,+94771234567,12 Main Road,,Colombo,Colombo,00700,45 Lake Road,,Gampaha,Gampaha,11000,SMALL,0.01

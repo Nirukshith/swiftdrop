@@ -366,6 +366,99 @@ class MerchantOrderIntegrationTest {
     }
 
     @Test
+    void ambiguousCreatePinsTheQuoteAndReservesTheReferenceAcrossRequests() throws Exception {
+        UUID merchant = approvedMerchant("ambiguous-create@example.test");
+        when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"), new BigDecimal("1350.00"));
+        when(parcelClient.createParcel(eq(merchant), any(), any(), any()))
+                .thenThrow(new org.springframework.web.client.ResourceAccessException("Response lost after commit"))
+                .thenReturn(parcel(merchant, UUID.randomUUID().toString(), "SD-RECOVERED"));
+        String body = requestJson("ambiguous-reference");
+        mockMvc.perform(createRequest(merchant, "original-key", body)).andExpect(status().isBadGateway());
+        mockMvc.perform(createRequest(merchant, "new-key", body)).andExpect(status().isConflict());
+        mockMvc.perform(createRequest(merchant, "original-key", requestJson("changed-reference")))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/v1/merchant/orders/bulk")
+                .with(jwt().jwt(token -> token.subject("client-123").claim("role", "MERCHANT")
+                        .claim("merchantId", merchant.toString())))
+                .header("Idempotency-Key", "bulk-cannot-steal")
+                .contentType("text/csv").content(MerchantCsvTest.file(MerchantCsvTest.row("ambiguous-reference"))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.acceptedRows").value(0));
+        mockMvc.perform(createRequest(merchant, "original-key", body))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.fee").value(850));
+        mockMvc.perform(createRequest(merchant, "original-key", body)).andExpect(status().isCreated());
+        verify(pricingQuoteClient).quote(any());
+        var fees = org.mockito.ArgumentCaptor.forClass(BigDecimal.class);
+        var keys = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(parcelClient, org.mockito.Mockito.times(2)).createParcel(eq(merchant), any(), fees.capture(), keys.capture());
+        org.assertj.core.api.Assertions.assertThat(fees.getAllValues()).containsOnly(new BigDecimal("850.00"));
+        org.assertj.core.api.Assertions.assertThat(keys.getAllValues().get(0)).isEqualTo(keys.getAllValues().get(1));
+        org.assertj.core.api.Assertions.assertThat(orderRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void explicitParcelValidationFailureReleasesTheReferenceForACorrectedRequest() throws Exception {
+        UUID merchant = approvedMerchant("correctable@example.test");
+        when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"));
+        when(parcelClient.createParcel(eq(merchant), any(), any(), any()))
+                .thenThrow(new org.springframework.web.client.HttpClientErrorException(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY))
+                .thenReturn(parcel(merchant, UUID.randomUUID().toString(), "SD-CORRECTED"));
+        mockMvc.perform(createRequest(merchant, "invalid-key", requestJson("correctable")))
+                .andExpect(status().isUnprocessableEntity());
+        org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject("select count(*) from merchant_order_attempts", Integer.class))
+                .isZero();
+        mockMvc.perform(createRequest(merchant, "corrected-key", requestJson("correctable")))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void localPersistenceFailureAfterParcelSuccessRetainsTheDurableQuote() throws Exception {
+        UUID merchant = approvedMerchant("order-local-failure@example.test");
+        when(pricingQuoteClient.quote(any())).thenReturn(new BigDecimal("850.00"), new BigDecimal("1350.00"));
+        when(parcelClient.createParcel(eq(merchant), any(), any(), any()))
+                .thenReturn(parcel(merchant, UUID.randomUUID().toString(), "SD-LOCAL-RECOVERY"));
+        jdbcTemplate.execute("CREATE FUNCTION reject_test_order() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'simulated insert failure' USING ERRCODE='23505'; END $$");
+        jdbcTemplate.execute("CREATE TRIGGER test_order_failure BEFORE INSERT ON merchant_orders FOR EACH ROW EXECUTE FUNCTION reject_test_order()");
+        try {
+            mockMvc.perform(createRequest(merchant, "local-failure", requestJson("local-failure")))
+                    .andExpect(status().isConflict());
+            org.assertj.core.api.Assertions.assertThat(orderRepository.count()).isZero();
+            org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject("select count(*) from merchant_order_attempts", Integer.class))
+                    .isEqualTo(1);
+            org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject("select count(*) from idempotency_keys", Integer.class))
+                    .isZero();
+        } finally {
+            jdbcTemplate.execute("DROP TRIGGER test_order_failure ON merchant_orders");
+            jdbcTemplate.execute("DROP FUNCTION reject_test_order()");
+        }
+        mockMvc.perform(createRequest(merchant, "local-failure", requestJson("local-failure")))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.fee").value(850));
+        verify(pricingQuoteClient).quote(any());
+        verify(parcelClient, org.mockito.Mockito.times(2)).createParcel(eq(merchant), any(), eq(new BigDecimal("850.00")), any());
+        org.assertj.core.api.Assertions.assertThat(jdbcTemplate.queryForObject("select count(*) from merchant_order_attempts", Integer.class))
+                .isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"foreign-merchant", "missing-merchant", "wrong-parcel", "wrong-status", "invalid-id"})
+    void invalidCancellationResponsePreservesTheOrderAndAllowsSameKeyRetry(String variant) throws Exception {
+        UUID merchant = approvedMerchant("cancel-validation@example.test");
+        var order = storedOrder(merchant, MerchantOrderStatus.CREATED);
+        var invalid = new ParcelClient.InternalParcelResponse(
+                "invalid-id".equals(variant) ? "invalid" : "wrong-parcel".equals(variant) ? UUID.randomUUID().toString() : order.getParcelId().toString(),
+                order.getTrackingNumber(), "wrong-status".equals(variant) ? "PICKED_UP" : "CANCELLED",
+                "foreign-merchant".equals(variant) ? UUID.randomUUID().toString() : "missing-merchant".equals(variant) ? null : merchant.toString(),
+                order.getFee(), order.getCreatedAt(), Instant.now());
+        when(parcelClient.cancelParcel(eq(order.getParcelId()), any(), any()))
+                .thenReturn(invalid, cancelledParcel(order));
+        mockMvc.perform(cancelRequest(merchant, order.getOrderId(), "cancel-validation", "{\"reason\":\"Mistake\"}"))
+                .andExpect(status().isBadGateway());
+        org.assertj.core.api.Assertions.assertThat(orderRepository.findById(order.getOrderId()).orElseThrow().getStatus())
+                .isEqualTo(MerchantOrderStatus.CREATED);
+        mockMvc.perform(cancelRequest(merchant, order.getOrderId(), "cancel-validation", "{\"reason\":\"Mistake\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    @Test
     void rejectedMerchantCannotUseMerchantRoleClaimsToCreateAnOrder() throws Exception {
         Merchant merchant = new Merchant(UUID.randomUUID(), "Rejected Store", "Contact", "rejected-order@example.test",
                 "+94771234567", null, Instant.now());

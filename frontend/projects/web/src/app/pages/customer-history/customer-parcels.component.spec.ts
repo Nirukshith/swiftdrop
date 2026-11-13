@@ -184,14 +184,31 @@ describe('CustomerParcelsComponent', () => {
 
     fixture.componentInstance.goToPage(2);
     expect(navigate).toHaveBeenLastCalledWith([], expect.objectContaining({
-      queryParams: { page: 3, status: null },
+      queryParams: { page: 3, status: null, from: null, to: null, q: null },
       replaceUrl: true,
     }));
 
     fixture.componentInstance.filterByStatus('DELIVERED');
     expect(navigate).toHaveBeenLastCalledWith([], expect.objectContaining({
-      queryParams: { page: null, status: 'DELIVERED' },
+      queryParams: { page: null, status: 'DELIVERED', from: null, to: null, q: null },
     }));
+  });
+
+  it('applies date and tracking filters from the customer parcel contract', () => {
+    render();
+    fixture.componentInstance.query.set(' SD-202611 ');
+    fixture.componentInstance.fromDate.set('2026-11-01');
+    fixture.componentInstance.toDate.set('2026-11-30');
+    fixture.componentInstance.applyFilters();
+
+    expect(list).toHaveBeenLastCalledWith({
+      page: 0,
+      size: 10,
+      status: null,
+      from: '2026-11-01',
+      to: '2026-11-30',
+      q: 'SD-202611',
+    });
   });
 });
 
@@ -212,12 +229,25 @@ describe('CustomerParcelsComponent opened from a URL with page and filter', () =
     return { fixture, list };
   }
 
-  it('starts on the page and status from the URL', async () => {
-    const { fixture, list } = openWith({ page: '3', status: 'DELIVERED' });
+  it('starts on the page and filters from the URL', async () => {
+    const { fixture, list } = openWith({
+      page: '3',
+      status: 'DELIVERED',
+      from: '2026-11-01',
+      to: '2026-11-30',
+      q: 'SD-202611',
+    });
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(list).toHaveBeenCalledWith({ page: 2, size: 10, status: 'DELIVERED' });
+    expect(list).toHaveBeenCalledWith({
+      page: 2,
+      size: 10,
+      status: 'DELIVERED',
+      from: '2026-11-01',
+      to: '2026-11-30',
+      q: 'SD-202611',
+    });
     expect(fixture.componentInstance.page()).toBe(2);
     const select = (fixture.nativeElement as HTMLElement).querySelector('select') as HTMLSelectElement;
     expect(select.selectedOptions[0]?.textContent?.trim()).toBe('Delivered');

@@ -27,6 +27,7 @@ import java.util.StringJoiner;
 /**
  * Builds the one-page receipt PDF with OpenPDF (docs/tracking-design.md section 8).
  * Table cells wrap long text, and missing optional values are shown as a dash.
+ * Values in Sinhala or Tamil use the bundled Noto fonts (ReceiptFonts); Latin text stays Helvetica.
  */
 @Component
 class ReceiptPdfRenderer {
@@ -53,6 +54,7 @@ class ReceiptPdfRenderer {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         Document document = new Document(PageSize.A4, 48, 48, 48, 48);
         try {
+            ReceiptFonts fonts = ReceiptFonts.get();
             PdfWriter.getInstance(document, out);
             document.addTitle("SwiftDrop receipt " + data.trackingNumber());
             document.addCreator("SwiftDrop parcel-service");
@@ -63,23 +65,23 @@ class ReceiptPdfRenderer {
             document.add(spacer(12));
 
             PdfPTable parcel = table();
-            row(parcel, "Tracking number", text(data.trackingNumber()), strong);
-            row(parcel, "Parcel ID", text(data.parcelId()), value);
-            row(parcel, "Status", "Delivered", value);
-            row(parcel, "Created", date(data.createdAt()), value);
-            row(parcel, "Delivered", date(data.deliveredAt()), value);
+            row(fonts, parcel, "Tracking number", text(data.trackingNumber()), strong);
+            row(fonts, parcel, "Parcel ID", text(data.parcelId()), value);
+            row(fonts, parcel, "Status", "Delivered", value);
+            row(fonts, parcel, "Created", date(data.createdAt()), value);
+            row(fonts, parcel, "Delivered", date(data.deliveredAt()), value);
             addSection(document, "Parcel", parcel);
 
             PdfPTable route = table();
-            row(route, "Pickup address", address(data.pickupAddress()), value);
-            row(route, "Drop-off address", address(data.dropoffAddress()), value);
-            row(route, "Recipient", text(data.recipientName()), value);
+            row(fonts, route, "Pickup address", address(data.pickupAddress()), value);
+            row(fonts, route, "Drop-off address", address(data.dropoffAddress()), value);
+            row(fonts, route, "Recipient", text(data.recipientName()), value);
             addSection(document, "Delivery", route);
 
             PdfPTable details = table();
-            row(details, "Size", data.size() != null ? capitalize(data.size().name()) : MISSING, value);
-            row(details, "Weight", weight(data.weightKg()), value);
-            row(details, "Delivery fee", fee(data.fee()), strong);
+            row(fonts, details, "Size", data.size() != null ? capitalize(data.size().name()) : MISSING, value);
+            row(fonts, details, "Weight", weight(data.weightKg()), value);
+            row(fonts, details, "Delivery fee", fee(data.fee()), strong);
             addSection(document, "Charges", details);
 
             Paragraph generated = new Paragraph(
@@ -152,9 +154,10 @@ class ReceiptPdfRenderer {
         return table;
     }
 
-    private void row(PdfPTable table, String name, String content, Font font) {
+    /** Labels are fixed English text; values may contain Sinhala or Tamil (names, addresses). */
+    private void row(ReceiptFonts fonts, PdfPTable table, String name, String content, Font font) {
         table.addCell(cell(new Phrase(name, label)));
-        table.addCell(cell(new Phrase(content, font)));
+        table.addCell(cell(fonts.phrase(content, font, font == strong)));
     }
 
     private static PdfPCell cell(Phrase phrase) {

@@ -1,5 +1,9 @@
 # Merchant bulk CSV upload and recovery — #178 / #223
 
+For the final setup, live demonstration, environment requirements and current
+limitations, use the [M6 Week 8 release runbook](m6-week8-release-demo.md) and
+[final evidence](m6-week8-verification.md).
+
 Sign in as a MERCHANT and open **Bulk CSV orders** from `/merchant` or
 `/merchant/bulk`. Download the template, select a UTF-8 CSV, review row errors,
 then confirm valid rows. Preview and removing invalid rows create no parcels.
@@ -72,6 +76,12 @@ correct the data in a NEW upload because changing the original bytes conflicts.
 Timeouts, provider/server errors and local commit failures retain reservations.
 Never retry an uncertain row with a new reference/key. The UI freezes the confirmed
 payload/key together and retries only on explicit **Check / replay this upload**.
+
+Week 7 also reserves references for uncertain single-order API requests before
+their remote write. A CSV row cannot take such a reference while it is unresolved.
+Single-order retries pin the original fee and key, just as bulk retries do.
+**Start another upload** clears the native file selection so the same corrected
+file can be selected again. See [Week 7 evidence](m6-week7-merchant-hardening-verification.md).
 
 Migration V8 marks new attempts with recovery_version=1. Older ambiguous attempts
 without a durable original quote stay reserved for controlled operator/M1

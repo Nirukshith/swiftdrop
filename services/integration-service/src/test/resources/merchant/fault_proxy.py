@@ -41,7 +41,7 @@ class FaultProxy(BaseHTTPRequestHandler):
         payload = json.loads(data) if data and self.headers.get('Content-Type', '').startswith('application/json') else {}
         with self.server.guard:
             if self.server.kind == 'parcel' and self.command == 'POST' and self.path == '/internal/v1/parcels':
-                if payload.get('externalReference', '').startswith('m6-loss-bulk-'):
+                if payload.get('externalReference', '').startswith(('m6-loss-bulk-', 'm6-loss-single-')):
                     fault = ('parcel', self.headers.get('Idempotency-Key'))
             elif self.server.kind == 'auth' and self.command == 'PUT' and '/merchant-provisioning/' in self.path:
                 operation = self.path.rsplit('/', 1)[-1]
