@@ -4,9 +4,8 @@
 
 Issue #224 completes the merchant order dashboard, webhook delivery visibility and
 retry controls, and login protection. The existing M7 implementation is preserved;
-this completion hardens webhook delivery-log query validation and keeps a transient
-manual retry in `PENDING_RETRY` with its next retry time instead of presenting it as
-a terminal failure.
+this completion hardens webhook delivery-log query validation while retaining the
+established immediate manual-retry behavior.
 
 Merchant APIs derive the merchant identifier from the validated JWT claim. Order
 and delivery repositories scope reads and retries by that identifier, while

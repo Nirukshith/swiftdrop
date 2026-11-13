@@ -291,14 +291,8 @@ public class WebhookService {
         }
 
         delivery.setHttpStatusCode(result.statusCode());
-        boolean retryable = WebhookDeliveryPolicy.isRetryable(result);
-        delivery.setStatus(result.success() ? "SUCCESS"
-                : retryable ? "PENDING_RETRY" : "FAILED");
-        delivery.setNextRetryAt(retryable
-                ? WebhookDeliveryPolicy.nextDelay(delivery.getAttempts())
-                .map(delay -> Instant.now().plus(delay))
-                .orElse(null)
-                : null);
+        delivery.setStatus(result.success() ? "SUCCESS" : "FAILED");
+        delivery.setNextRetryAt(null);
         delivery.setErrorSummary(result.errorMessage());
         try {
             delivery.setRequestHeaders(objectMapper.writeValueAsString(result.requestHeaders()));
