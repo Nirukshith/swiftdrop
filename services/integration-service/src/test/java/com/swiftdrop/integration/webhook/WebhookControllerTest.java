@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -260,6 +261,29 @@ class WebhookControllerTest {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].deliveryId").value(deliveryId.toString()))
                 .andExpect(jsonPath("$.content[0].status").value("SUCCESS"));
+    }
+
+    @Test
+    @DisplayName("GET /deliveries rejects unsupported filters and invalid pagination")
+    void listDeliveries_rejectsInvalidQuery() throws Exception {
+        mockMvc.perform(get("/api/v1/merchant/webhooks/deliveries")
+                        .with(merchantJwt())
+                        .param("status", "UNKNOWN"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/v1/merchant/webhooks/deliveries")
+                        .with(merchantJwt())
+                        .param("page", "-1"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(get("/api/v1/merchant/webhooks/deliveries")
+                        .with(merchantJwt())
+                        .param("from", "2026-11-02T00:00:00Z")
+                        .param("to", "2026-11-01T00:00:00Z"))
+                .andExpect(status().isBadRequest());
+
+        verify(webhookService, never()).listDeliveries(
+                any(UUID.class), any(), any(), any(), any(), anyInt(), anyInt());
     }
 
     @Test
