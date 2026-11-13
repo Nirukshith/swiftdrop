@@ -1,64 +1,53 @@
-# SharedAuth
+# SwiftDrop Shared Authentication Library (`shared-auth`)
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.0.
+**Package:** `@swiftdrop/shared-auth`  
+**Owner:** Member M10  
+**Angular Version:** 21 / Standalone Components  
 
-## Code scaffolding
+---
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## 1. Overview
+
+`shared-auth` is the centralized Angular authentication library for the SwiftDrop multi-portal frontend. It implements:
+- In-memory JWT access token management complying with **ADR-004** (zero storage in `localStorage` or `sessionStorage`).
+- Seamless session restoration and refresh rotation via `HttpOnly` cookie exchange with `auth-service`.
+- Functional HTTP interceptor (`authInterceptor`) injecting Bearer authorization tokens with cross-origin leakage defense.
+- Functional route guard (`authGuard`) enforcing role-based client-side authorization.
+- Reusable UI components for login, customer registration, Google OAuth 2.0 callback, forgot password, and password reset.
+
+---
+
+## 2. Components & Architecture
+
+### 2.1 Reusable UI Components
+- **`LoginComponent` (`/auth/login`):** Email and password authentication with validation, error toast integration, and "Continue with Google" initiation.
+- **`RegisterComponent` (`/auth/register`):** Customer self-service onboarding with client-side validation.
+- **`CallbackComponent` (`/auth/callback`):** Handles Google OAuth 2.0 session handoff. Calls `AuthService.restoreSession()` upon landing, retrieves the in-memory access token, and navigates to the authorized dashboard.
+- **`ForgotPasswordComponent` (`/auth/forgot-password`):** Self-service password recovery initiation (owned by M3).
+- **`ResetPasswordComponent` (`/auth/reset-password`):** Recovery token validation and password reset form (owned by M3).
+
+### 2.2 Core Services
+- **`AuthService`:** Manages authentication signals (`currentUser`, `isAuthenticated`, `accessToken`), executes login/register/logout/refresh requests, and provides `hasRole(role)` and `hasAnyRole(roles)` authorization utilities.
+- **`authGuard`:** Route guard inspecting `authService.currentUser()`. Redirects unauthenticated users to `/auth/login` and unauthorized roles to their respective portal root.
+- **`authInterceptor`:** Attaches `Authorization: Bearer <token>` to outbound HTTP requests matching the application origin or gateway. Strictly prevents token injection to external third-party URLs.
+
+---
+
+## 3. ADR-004 Token Storage & Security Design
+
+Per **ADR-004 (Token Storage and Session Management)**:
+1. **Access Token:** Stored exclusively in TypeScript memory (`AuthService._accessToken` signal). Tokens are lost upon full page reload and automatically re-acquired via background refresh.
+2. **Refresh Token:** Stored in an `HttpOnly`, `SameSite=Lax`, `Path=/api/v1/auth` cookie issued by `auth-service`. Inaccessible to browser JavaScript, mitigating XSS token theft.
+3. **Session Restoration:** When the frontend initializes or reloads, `AuthService.restoreSession()` calls `POST /api/v1/auth/refresh` with `withCredentials: true`. The backend verifies the refresh cookie, rotates the token, and returns a fresh in-memory access token.
+
+---
+
+## 4. Verification & Testing
 
 ```bash
-ng generate component component-name
-```
+# Run unit tests
+npm test -- --watch=false --browsers=ChromeHeadless
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the library, run:
-
-```bash
+# Build shared-auth library
 ng build shared-auth
 ```
-
-This command will compile your project, and the build artifacts will be placed in the `dist/` directory.
-
-### Publishing the Library
-
-Once the project is built, you can publish your library by following these steps:
-
-1. Navigate to the `dist` directory:
-
-   ```bash
-   cd dist/shared-auth
-   ```
-
-2. Run the `npm publish` command to publish your library to the npm registry:
-   ```bash
-   npm publish
-   ```
-
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
