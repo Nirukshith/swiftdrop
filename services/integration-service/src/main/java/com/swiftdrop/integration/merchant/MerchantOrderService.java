@@ -7,6 +7,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.server.ResponseStatusException;
@@ -24,13 +26,16 @@ public class MerchantOrderService {
     private final PricingQuoteClient pricingQuoteClient;
     private final ParcelClient parcelClient;
     private final MerchantBulkStore bulkStore;
+    private final MerchantOrderAttemptStore attempts;
+    private final TransactionTemplate transaction;
 
     public MerchantOrderService(MerchantRepository merchantRepository,
                                 MerchantOrderRepository orderRepository,
                                 MerchantOrderIdempotencyStore idempotencyStore,
                                 IdempotencyRequestHasher requestHasher,
                                 PricingQuoteClient pricingQuoteClient,
-                                ParcelClient parcelClient, MerchantBulkStore bulkStore) {
+                                ParcelClient parcelClient, MerchantBulkStore bulkStore,
+                                MerchantOrderAttemptStore attempts, PlatformTransactionManager manager) {
         this.merchantRepository = merchantRepository;
         this.orderRepository = orderRepository;
         this.idempotencyStore = idempotencyStore;
@@ -38,12 +43,20 @@ public class MerchantOrderService {
         this.pricingQuoteClient = pricingQuoteClient;
         this.parcelClient = parcelClient;
         this.bulkStore = bulkStore;
+        this.attempts = attempts;
+        this.transaction = new TransactionTemplate(manager);
     }
 
-    @Transactional
     public MerchantOrderIdempotencyStore.StoredResponse create(UUID merchantId, String idempotencyKey,
                                                                CreateMerchantOrderRequest request) {
-        return createInternal(merchantId, idempotencyKey, request, false);
+        attempts.prepare(merchantId, idempotencyKey, requestHasher.hash(CREATE_OPERATION, request),
+                request.externalReference(), () -> quoteForBulk(request));
+        try {
+            return transaction.execute(status -> createInternal(merchantId, idempotencyKey, request, false));
+        } catch (ResponseStatusException exception) {
+            if (exception.getStatusCode().value() == 422) attempts.validationFailed(merchantId, idempotencyKey);
+            throw exception;
+        }
     }
 
     @Transactional
@@ -76,7 +89,7 @@ public class MerchantOrderService {
                     "External reference has already been used by this merchant");
         }
 
-        BigDecimal quote = bulk ? bulkStore.requireQuote(merchantId, idempotencyKey) : quoteForBulk(request);
+        BigDecimal quote = bulk ? bulkStore.requireQuote(merchantId, idempotencyKey) : attempts.requireQuote(merchantId, idempotencyKey);
         try {
             ParcelClient.InternalParcelResponse parcel = requestParcel(merchantId, request, quote, idempotencyKey);
             if (parcel == null || parcel.id() == null || parcel.id().isBlank()
@@ -95,6 +108,7 @@ public class MerchantOrderService {
             MerchantOrderEntity saved = orderRepository.saveAndFlush(entity);
             MerchantOrderResponse response = MerchantOrderResponse.from(saved);
             idempotencyStore.complete(merchantId, CREATE_OPERATION, idempotencyKey, 201, response);
+            if (!bulk) attempts.complete(merchantId, idempotencyKey);
             return new MerchantOrderIdempotencyStore.StoredResponse(201, response);
         } catch (RestClientException | IllegalArgumentException | IllegalStateException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
@@ -176,7 +190,8 @@ public class MerchantOrderService {
                 throw new IllegalStateException("Parcel service returned an incomplete cancellation response");
             }
             UUID parcelId = UUID.fromString(parcel.id());
-            if (!order.getParcelId().equals(parcelId) || !"CANCELLED".equals(parcel.status())) {
+            if (!order.getParcelId().equals(parcelId) || !"CANCELLED".equals(parcel.status())
+                    || !merchantId.toString().equals(parcel.merchantId())) {
                 throw new IllegalStateException("Parcel service returned an unexpected cancellation response");
             }
 

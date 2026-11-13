@@ -98,4 +98,34 @@ describe('Merchant bulk upload', () => {
     expect(c.error()).toContain('five uploads'); expect(c.busy()).toBe(false);
     fixture.destroy();
   });
+  it('clears the file control so the same corrected CSV can be selected again', () => {
+    const fixture = TestBed.createComponent(MerchantBulkComponent), c = fixture.componentInstance;
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector('#csv-file') as HTMLInputElement;
+    const clear = jest.spyOn(input, 'value', 'set');
+    c.preview(CSV_HEADER + '\n' + row('same-file'));
+    c.reset();
+    expect(clear).toHaveBeenCalledWith('');
+    expect(input.disabled).toBe(false);
+    expect(c.rows()).toEqual([]);
+    http.expectNone('/api/v1/merchant/orders/bulk');
+    fixture.destroy();
+  });
+  it('discards a late read from a file replaced by another selection', () => {
+    Object.defineProperty(globalThis, 'TextDecoder', { value: TextDecoder, configurable: true });
+    const fixture = TestBed.createComponent(MerchantBulkComponent), c = fixture.componentInstance;
+    const readers: FileReader[] = [];
+    jest.spyOn(FileReader.prototype, 'readAsArrayBuffer').mockImplementation(function (this: FileReader) { readers.push(this); });
+    const load = (name: string) => c.loadFile({ target: { files: [new File(['data'], name)] } } as unknown as Event);
+    load('old.csv'); load('current.csv');
+    const finish = (reader: FileReader, ref: string) => {
+      Object.defineProperty(reader, 'result', { value: new Uint8Array(Buffer.from(CSV_HEADER + '\n' + row(ref))).buffer });
+      reader.onload?.call(reader, new ProgressEvent('load') as ProgressEvent<FileReader>);
+    };
+    finish(readers[1], 'current'); finish(readers[0], 'stale');
+    expect(c.rows()[0].cells[0]).toBe('current');
+    expect(c.reading()).toBe(false);
+    http.expectNone('/api/v1/merchant/orders/bulk');
+    fixture.destroy();
+  });
 });

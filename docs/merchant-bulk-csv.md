@@ -73,6 +73,12 @@ Timeouts, provider/server errors and local commit failures retain reservations.
 Never retry an uncertain row with a new reference/key. The UI freezes the confirmed
 payload/key together and retries only on explicit **Check / replay this upload**.
 
+Week 7 also reserves references for uncertain single-order API requests before
+their remote write. A CSV row cannot take such a reference while it is unresolved.
+Single-order retries pin the original fee and key, just as bulk retries do.
+**Start another upload** clears the native file selection so the same corrected
+file can be selected again. See [Week 7 evidence](m6-week7-merchant-hardening-verification.md).
+
 Migration V8 marks new attempts with recovery_version=1. Older ambiguous attempts
 without a durable original quote stay reserved for controlled operator/M1
 reconciliation; the server never guesses their fee or blindly repeats them.
