@@ -48,9 +48,12 @@ node docs/m2-e2e/browser-walkthrough.mjs   # real browser, 32 checks, screenshot
 bash docs/m2-e2e/run.sh                    # API level, 35 checks
 ```
 
-Recorded result of the browser walkthrough: **32 ok, 0 failed** (Edge 157). Recorded result of
-`run.sh`: **34 ok, 1 failed**. The one failure is the shared rate-limit defect waiting on M9; see
-"Current Week 8 readiness".
+Recorded results with M9's gateway fix (#295): browser walkthrough **32 ok, 0 failed** (Edge 157),
+`run.sh` **35 ok, 0 failed**. Before #295, `run.sh` had one failure: visitors shared one rate limit
+behind the gateway.
+
+If port 8080 is taken by another program, publish the gateway on another port with a local Compose
+override and set `GW`, for example `GW=http://localhost:8088 bash docs/m2-e2e/run.sh`.
 
 ## Demo sequence
 
@@ -153,7 +156,8 @@ header above them is wider; see the limitations.
 | Symptom | Cause and fix |
 | :--- | :--- |
 | `POST /api/v1/parcels` fails with a pricing error | No zones or rules for the districts. Run either script once (they insert demo pricing), or add them as an admin |
-| Public page shows "Too many tracking requests" | Shared rate limit behind the gateway (limitation 1): wait a minute, or locally set `SWIFTDROP_TRACKING_RATE_LIMIT_ENABLED=false` for parcel-service |
+| Public page shows "Too many tracking requests" | You made more than 10 lookups at once, or 30 a minute, from one browser. That's the per-visitor limit working; wait a minute |
+| Gateway container doesn't start: "port is already allocated" | Another program uses port 8080. Stop it, or publish the gateway on another port with a local override and set `GW` (see above) |
 | Live indicator stays on "Connecting" | Gateway or parcel-service not healthy; check `docker compose ps` and `docker logs deploy-parcel-service-1` |
 | Timeline doesn't update | Kafka not healthy, or the status change failed (check the PATCH response) |
 | `up --build` fails with `--allow=fs.read` | Build images one by one (`m2-configuration.md` §4) |
@@ -173,9 +177,9 @@ clash.
 
 - **Ready to demonstrate:** every step above, in a real browser, through the gateway, against real
   auth, M1's parcel workflow, pricing, Kafka and PostgreSQL.
+- **Resolved:** visitors sharing one rate limit behind the gateway (M9's #295). Each visitor now has
+  their own limit, so no workaround is needed during the demo.
 - **Known limitations** (details and owners in `m2-configuration.md` §5):
-  1. Public tracking visitors share one rate limit behind the gateway; the fix is with M9. Keep
-     public lookups under about 10 a minute during the demo.
-  2. Docker Compose `--build` needs the image-by-image workaround.
-  3. The shared app header is wider than a 360 px screen; the M2 pages themselves fit.
-  4. No admin is seeded for pricing, so the scripts insert demo pricing.
+  1. Docker Compose `--build` needs the image-by-image workaround.
+  2. The shared app header is wider than a 360 px screen; the M2 pages themselves fit.
+  3. No admin is seeded for pricing, so the scripts insert demo pricing.

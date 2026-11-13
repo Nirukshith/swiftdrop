@@ -106,7 +106,8 @@ check now measures the M2 page itself and reports the header separately (limitat
 
 ## API end-to-end check (`bash docs/m2-e2e/run.sh`)
 
-**Result: 34 ok, 1 failed.** The failure is the known gateway rate-limit defect (limitation 1).
+**Result: 34 ok, 1 failed**, before M9's #295. The failure was the gateway rate-limit defect
+(limitation 1), now resolved: see "Recheck after M9's gateway fix", where the result is 35 ok.
 
 ```text
 ok    POST /api/v1/parcels (201)            trackingNumber=SD-20261113-I9134R fee=LKR 700
@@ -125,6 +126,35 @@ visitor 2 (container swiftdrop-frontend), first lookup: 429
 FAIL  visitor 2 has their own limit: expected 404, got 429
 ```
 
+## Recheck after M9's gateway fix (#295)
+
+On 2026-11-13, after M9 merged #295 (`848c03c`), the stack was recreated from `development`. The
+gateway now has the fixed address `172.30.0.254`, and parcel-service trusts only
+`172.30.0.254/32`. Port 8080 was in use by an unrelated program on this machine, so the gateway was
+published on 8088 with a local, uncommitted override and the scripts were run with
+`GW=http://localhost:8088`.
+
+```text
+bash docs/m2-e2e/run.sh
+PICKED_UP 134 ms   IN_TRANSIT 132 ms   OUT_FOR_DELIVERY 111 ms   DELIVERED 131 ms
+visitor 1, 12 lookups: 404 404 404 404 404 404 404 404 404 404 429 429
+ok    visitor 1 is limited after the burst (429)
+visitor 2 (container swiftdrop-frontend), first lookup: 404
+ok    visitor 2 has their own limit (404)
+### Result: 0 failed check(s)                                   (35 ok)
+
+node docs/m2-e2e/browser-walkthrough.mjs                          (Edge 157)
+Picked up 63 ms   In transit 137 ms   Out for delivery 138 ms   Delivered 150 ms
+### Result: 0 failed check(s)                                   (32 ok)
+
+direct to parcel-service, a new fake X-Forwarded-For each time:
+404 404 404 404 404 429 429 429 429 429 429 429
+```
+
+A direct caller who sends a different fake address each time is still limited by their real
+address. The limit was reached after 5 lookups because earlier requests from the same machine had
+already used part of the allowance.
+
 ## Configuration check
 
 The environment-variable names in `docs/m2-configuration.md` were checked against a running
@@ -139,7 +169,8 @@ The default configuration was restored afterwards.
 
 | # | Item | Status | Workaround or owner |
 | :--- | :--- | :--- | :--- |
-| 1 | Behind the Docker gateway, all public-tracking visitors share one rate limit (30/min, burst 10), because nginx sends no `X-Forwarded-For` on `/api/v1/tracking` | **Unresolved; not M2's file** | M9: the fix tested in Week 7 (`docs/tracking-design.md` 6.1). For the demo, keep public lookups under about 10 a minute, or locally set `SWIFTDROP_TRACKING_RATE_LIMIT_ENABLED=false` |
+| 1 | Behind the Docker gateway, all public-tracking visitors shared one rate limit (30/min, burst 10), because nginx sent no `X-Forwarded-For` on `/api/v1/tracking` | **Resolved by M9's #295** | None needed; rechecked 35/35 |
+| 1a | Host port 8080 can be taken by another program | Environment | Publish the gateway on another port with a local override and set `GW` (`m2-configuration.md` §5) |
 | 2 | Docker Compose 5.x refuses `up --build` (`--allow=fs.read`) | Environment | Build images one by one, then `up --no-build` (`m2-configuration.md` §4) |
 | 3 | The shared app header's nav row doesn't wrap at 360 px (page 418 px wide) | Open; not M2's file | App shell owner (`app.html`); the M2 pages themselves fit |
 | 4 | `%` and `_` in the history search act as wildcards | Harmless (own parcels only) | M1 could escape them |
