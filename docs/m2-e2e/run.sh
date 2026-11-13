@@ -8,7 +8,8 @@
 # Needs bash, curl, node and docker on the host. Nothing is inserted into parcel_db: the customer
 # creates the parcel through the API. The only setup is demo pricing data for Colombo and Kandy in
 # ops_db (skipped when present), because no admin user is seeded to create it through the API.
-# Every check prints "ok" or "FAIL"; the script exits with the number of failures.
+# Every check prints "ok" or "FAIL"; the script exits with the number of failures. See also
+# browser-walkthrough.mjs, which drives the same flow through the real web app.
 set -u
 GW=${GW:-http://localhost:8080}
 PARCEL=${PARCEL:-http://localhost:8082}   # internal status endpoint, as courier/dispatch services call it
@@ -113,6 +114,15 @@ check "A /history" 200 "$(code -H "Authorization: Bearer $A" "$GW/api/v1/parcels
 check "B /history" 403 "$(code -H "Authorization: Bearer $B" "$GW/api/v1/parcels/$ID/history")"
 check "no token /history" 401 "$(code "$GW/api/v1/parcels/$ID/history")"
 check "timeline" "CREATED PICKED_UP IN_TRANSIT OUT_FOR_DELIVERY DELIVERED" "$(curl -s -H "Authorization: Bearer $A" "$GW/api/v1/parcels/$ID/history" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).entries.map(e=>e.toStatus).join(" ")))')"
+
+say "6b. History filters (dates in Asia/Colombo, tracking-number search)"
+TODAY=$(TZ=Asia/Colombo date +%Y-%m-%d)
+PART=$(echo "$TN" | cut -c13- | tr 'A-Z' 'a-z')
+filtered() { curl -s -H "Authorization: Bearer $A" "$GW/api/v1/parcels?size=50$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(j.content.some(p=>p.trackingNumber===process.argv[1]))})' "$TN"; }
+check "q=$PART (lower case) finds the parcel" true "$(filtered "&q=$PART")"
+check "from=to=$TODAY finds the parcel" true "$(filtered "&from=$TODAY&to=$TODAY")"
+check "to=2026-01-01 does not" false "$(filtered "&to=2026-01-01")"
+check "from after to" 400 "$(code -H "Authorization: Bearer $A" "$GW/api/v1/parcels?from=2026-11-30&to=2026-11-01")"
 
 say "7. PDF receipt (Tamil recipient, Sinhala city)"
 check "A receipt" 200 "$(curl -s -o "$OUT/receipt.pdf" -w '%{http_code}' -H "Authorization: Bearer $A" "$GW/api/v1/parcels/$ID/receipt")"
