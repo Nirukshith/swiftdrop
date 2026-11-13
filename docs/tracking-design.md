@@ -322,7 +322,7 @@ The public page must work at 360 px width (NF-04).
 | # | Question | Who |
 | :--- | :--- | :--- |
 | Q1 | The SRS gives the shared UI kit to M1 (8.1). Confirm that M1 builds it. | Team |
-| Q2 | CU-05 asks for "history with filters", but M1's `GET /api/v1/parcels` only filtered by `status` and had no defined order. **Agreed with M1** (section 12): `from` / `to` dates, `q` tracking-number search, newest-first order. Contract updated in `parcel.yaml`; M1 implements the endpoint, then M2 adds the UI. | M1 |
+| Q2 | CU-05 asks for "history with filters", but M1's `GET /api/v1/parcels` only filtered by `status` and had no defined order. **Resolved and implemented** (section 12): `from` / `to` dates, `q` tracking-number search, newest-first order. Contract #275, endpoint #280 (M1), history page filters (M2). | M1 |
 | Q3 | Recipient name mask format (`S*** S***` proposed). | Team |
 | Q4 | Show anything for `FAILED` on the public page, e.g. a fixed reason code like `RECIPIENT_UNAVAILABLE`, never free text? | Team |
 | Q5 | ~~Which statuses allow a receipt download? Can DISPATCHER download it too?~~ **Resolved:** `DELIVERED` only (`409 PARCEL_NOT_DELIVERED` otherwise); owner customer and ADMIN only, DISPATCHER and courier get `403` (section 8). | Team |
@@ -335,14 +335,14 @@ The public page must work at 360 px width (NF-04).
 
 ---
 
-## 12. Parcel List Filters and Order (Q2, agreed with M1)
+## 12. Parcel List Filters and Order (Q2, implemented)
 
 CU-05 asks for "delivery history with filters". M2's history page (`/customer/parcels`) reads M1's
 `GET /api/v1/parcels`, which only filtered by `status` and had no defined order. M2 does not add a
 second list endpoint (section 1), so the change belongs in M1's contract (`parcel.yaml`) and
 endpoint.
 
-**Status:** agreed with M1 on 2026-11-13. The contract is in `parcel.yaml` (`listCustomerParcels`).
+**Status:** implemented. Agreed with M1 on 2026-11-13; the contract is in `parcel.yaml` (`listCustomerParcels`, #275), the endpoint in M1's #280, and the history page filters in M2's Week 6 follow-up.
 M1 implements the endpoint and its backend tests, then M2 adds the UI.
 
 The agreed contract adds three optional query parameters and a documented order. All are
@@ -364,8 +364,11 @@ Rules:
 - **Errors:** `from` after `to`, a date that is not `YYYY-MM-DD`, or a `q` longer than 32
   characters after trimming gives `400 VALIDATION_FAILED`.
 
-What M2 adds once M1 merges the endpoint:
-- Date-range inputs and a tracking-number search box on the history page, kept in the URL like
-  `page` and `status`.
-- Frontend specs for the new filters.
-- A consumer test in `CustomerHistoryIntegrationTest` for the filters, the order and the 400 cases.
+What M2 added on the history page:
+- From / To date inputs and a tracking-number search next to the status filter, applied together
+  from page 1 and kept in the URL like `page` and `status`. Clear filters resets them all.
+- The same checks as the endpoint before sending (From not after To, search at most 32 characters,
+  blank search means none); a `400` from the server is shown as a message.
+- "No parcels match these filters" when filters give nothing; the list is labelled newest first.
+- Frontend specs, the mock list filtering like the endpoint, and consumer tests in
+  `CustomerHistoryIntegrationTest` for Colombo dates, search, combined filters, order and the `400` cases.
