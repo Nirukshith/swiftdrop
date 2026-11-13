@@ -129,6 +129,36 @@ class ParcelControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("Customers cannot read or cancel merchant-owned parcels")
+    void customerCannotAccessMerchantParcel() throws Exception {
+        Parcel merchantParcel = new Parcel();
+        merchantParcel.setTrackingNumber("SD-20261027-MERCH01");
+        merchantParcel.setStatus(ParcelStatus.CREATED);
+        merchantParcel.setMerchantId("mch-merchant-1");
+        merchantParcel.setPickupAddress(new AddressSnapshot("A", null, "Colombo", "Colombo", "00100"));
+        merchantParcel.setDropoffAddress(new AddressSnapshot("B", null, "Colombo", "Colombo", "00200"));
+        merchantParcel.setWeightKg(new BigDecimal("1.00"));
+        merchantParcel.setSize(ParcelSize.SMALL);
+        merchantParcel.setFee(new BigDecimal("500.00"));
+        merchantParcel.setRecipientName("Merchant Recipient");
+        merchantParcel.setRecipientPhone("+94770000000");
+        Parcel saved = parcelRepository.save(merchantParcel);
+
+        mockMvc.perform(get("/api/v1/parcels/" + saved.getId())
+                        .with(user("usr-cust-1").roles("CUSTOMER")))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/v1/parcels/" + saved.getId() + "/cancel")
+                        .with(user("usr-cust-1").roles("CUSTOMER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CancelParcelRequest("Unauthorized"))))
+                .andExpect(status().isForbidden());
+
+        assertThat(parcelRepository.findById(saved.getId()).orElseThrow().getStatus())
+                .isEqualTo(ParcelStatus.CREATED);
+    }
+
+    @Test
     @DisplayName("Cancel rules: allowed while CREATED, rejected with 409 once PICKED_UP")
     void testCancellationRules() throws Exception {
         // 1. Parcel in CREATED status

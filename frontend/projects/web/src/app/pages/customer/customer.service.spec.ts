@@ -114,13 +114,16 @@ describe('CustomerService', () => {
       size: 20,
     };
 
-    service.listParcels('CREATED').subscribe((parcels) => {
-      expect(parcels).toEqual([]);
+    service.listParcels('CREATED', 2, 10).subscribe((parcels) => {
+      expect(parcels.content).toEqual([]);
+      expect(parcels.page).toBe(2);
     });
 
     const req = httpMock.expectOne((request) =>
       request.url === '/api/v1/parcels' &&
-      request.params.get('status') === 'CREATED'
+      request.params.get('status') === 'CREATED' &&
+      request.params.get('page') === '2' &&
+      request.params.get('size') === '10'
     );
     expect(req.request.method).toBe('GET');
     req.flush(page);

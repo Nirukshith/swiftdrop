@@ -6,6 +6,7 @@ import {
   CreateCustomerParcelRequest,
   CustomerAddress,
   CustomerParcel,
+  CustomerParcelPage,
   District,
   FeePreview,
   ParcelSize,
@@ -143,7 +144,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             @for (st of statusFilters; track st.value) {
             <button
               type="button"
-              (click)="selectedStatusFilter.set(st.value); loadParcels()"
+              (click)="selectedStatusFilter.set(st.value); selectedParcelPage.set(0); loadParcels()"
               [class.bg-indigo-600]="selectedStatusFilter() === st.value"
               [class.text-white]="selectedStatusFilter() === st.value"
               [class.bg-slate-100]="selectedStatusFilter() !== st.value"
@@ -245,6 +246,31 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               </tbody>
             </table>
           </div>
+          @if (parcelPage().totalPages > 1) {
+          <div class="flex items-center justify-between border-t border-slate-100 px-6 py-4">
+            <span class="text-xs font-semibold text-slate-500">
+              Page {{ parcelPage().page + 1 }} of {{ parcelPage().totalPages }}
+            </span>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                (click)="changeParcelPage(parcelPage().page - 1)"
+                [disabled]="parcelPage().page === 0"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                (click)="changeParcelPage(parcelPage().page + 1)"
+                [disabled]="parcelPage().page >= parcelPage().totalPages - 1"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+          }
         </div>
       </div>
       }
@@ -1069,7 +1095,15 @@ export class CustomerComponent implements OnInit {
 
   activeTab = signal<CustomerTab>('deliveries');
   parcels = signal<CustomerParcel[]>([]);
+  parcelPage = signal<CustomerParcelPage>({
+    content: [],
+    totalElements: 0,
+    totalPages: 0,
+    page: 0,
+    size: 20,
+  });
   addresses = signal<CustomerAddress[]>([]);
+  selectedParcelPage = signal(0);
   selectedStatusFilter = signal<ParcelStatus | null>(null);
   notification = signal<string | null>(null);
 
@@ -1124,10 +1158,22 @@ export class CustomerComponent implements OnInit {
   }
 
   loadParcels(): void {
-    this.customerService.listParcels(this.selectedStatusFilter() || undefined).subscribe({
-      next: (p) => this.parcels.set(p),
+    this.customerService.listParcels(
+      this.selectedStatusFilter() || undefined,
+      this.selectedParcelPage()
+    ).subscribe({
+      next: (page) => {
+        this.parcelPage.set(page);
+        this.parcels.set(page.content);
+      },
       error: (err) => this.notification.set(this.apiErrorMessage(err, 'Unable to load parcels.')),
     });
+  }
+
+  changeParcelPage(page: number): void {
+    if (page < 0 || page >= this.parcelPage().totalPages) return;
+    this.selectedParcelPage.set(page);
+    this.loadParcels();
   }
 
   loadAddresses(): void {
