@@ -305,6 +305,32 @@ class TrackingEndToEndIntegrationTest {
         }
     }
 
+    @Test
+    @DisplayName("NF-01: each real status change reaches an open stream within 2 seconds")
+    void liveUpdateWithinTwoSeconds() throws Exception {
+        Duration limit = Duration.ofSeconds(2);
+        try (SseTestClient client = SseTestClient.connect(streamUrl(), null)) {
+            client.nextFrame(WAIT); // retry
+            client.nextEvent(WAIT); // current state
+            assignCourier();
+            ParcelStatus[][] steps = {
+                    {ParcelStatus.CREATED, ParcelStatus.PICKED_UP},
+                    {ParcelStatus.PICKED_UP, ParcelStatus.IN_TRANSIT},
+                    {ParcelStatus.IN_TRANSIT, ParcelStatus.OUT_FOR_DELIVERY},
+                    {ParcelStatus.OUT_FOR_DELIVERY, ParcelStatus.DELIVERED},
+            };
+            for (ParcelStatus[] step : steps) {
+                // Timed from the request that changes the status to the event on the client.
+                long started = System.nanoTime();
+                long sequence = changeStatus(step[0], step[1]);
+                SseTestClient.Frame frame = client.nextEvent(limit);
+                Duration took = Duration.ofNanos(System.nanoTime() - started);
+                assertStatusEvent(frame, sequence, step[1]);
+                assertThat(took).as("%s reached the stream after %d ms", step[1], took.toMillis()).isLessThan(limit);
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ what each page reads
 
     @Test
