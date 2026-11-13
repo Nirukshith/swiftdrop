@@ -130,4 +130,12 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/track.component').then((m) => m.TrackComponent),
   },
+  {
+    path: 'customer/assistant',
+    canActivate: [roleGuard(['CUSTOMER'])],
+    loadComponent: () =>
+      import('./pages/assistant/assistant-chat.component').then(
+        (m) => m.AssistantChatComponent
+      ),
+  },
 ];
