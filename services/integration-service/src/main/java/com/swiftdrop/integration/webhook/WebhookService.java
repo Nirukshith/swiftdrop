@@ -292,6 +292,7 @@ public class WebhookService {
 
         delivery.setHttpStatusCode(result.statusCode());
         delivery.setStatus(result.success() ? "SUCCESS" : "FAILED");
+        delivery.setNextRetryAt(null);
         delivery.setErrorSummary(result.errorMessage());
         try {
             delivery.setRequestHeaders(objectMapper.writeValueAsString(result.requestHeaders()));
