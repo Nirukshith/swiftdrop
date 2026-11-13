@@ -28,11 +28,29 @@ describe('App', () => {
     expect(compiled.querySelector('h1')?.textContent).toContain('Hello, web');
   });
 
-  it('should render notification bell', () => {
+  it('should not render notification bell for signed-out visitors', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('app-notification-bell')).toBeFalsy();
+  });
+
+  it('should render notification bell for customers only', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    jest.spyOn(app.authService, 'hasRole').mockImplementation((role: string) => role === 'CUSTOMER');
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('app-notification-bell')).toBeTruthy();
+  });
+
+  it('should not render notification bell for non-customer roles', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    jest.spyOn(app.authService, 'hasRole').mockImplementation((role: string) => role === 'DISPATCHER');
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('app-notification-bell')).toBeFalsy();
   });
 
   it('should not show admin or dispatcher links to signed-out visitor', () => {

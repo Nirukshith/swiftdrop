@@ -89,6 +89,20 @@ class NotificationControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/notifications ignores caller supplied identity headers")
+    void getNotifications_usesJwtIdentity() throws Exception {
+        when(notificationService.getNotifications(eq("cust-100"), anyInt(), anyInt(), anyBoolean()))
+                .thenReturn(new NotificationPageResponse(List.of(), 0L, 0L));
+
+        mockMvc.perform(get("/api/v1/notifications")
+                        .with(jwt().jwt(builder -> builder.subject("cust-100")))
+                        .header("X-User-Id", "cust-200"))
+                .andExpect(status().isOk());
+
+        verify(notificationService).getNotifications("cust-100", 0, 20, false);
+    }
+
+    @Test
     @DisplayName("POST /api/v1/notifications/{id}/read marks notification as read")
     void markNotificationRead_success() throws Exception {
         NotificationDto readDto = new NotificationDto(
@@ -151,4 +165,3 @@ class NotificationControllerTest {
         verify(notificationService).markAsRead("notif-userA", "cust-userB");
     }
 }
-

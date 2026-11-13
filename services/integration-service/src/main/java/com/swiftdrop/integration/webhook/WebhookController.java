@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -78,9 +79,27 @@ public class WebhookController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        validateDeliveryQuery(status, eventType, from, to, page, size);
         UUID merchantId = requireMerchantId();
         WebhookDeliveryLogPage pageResult = webhookService.listDeliveries(merchantId, status, eventType, from, to, page, size);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(pageResult);
+    }
+
+    private void validateDeliveryQuery(String status, String eventType, Instant from, Instant to,
+                                       int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Page must be non-negative and size must be between 1 and 100");
+        }
+        if (status != null && !Set.of("SUCCESS", "PENDING_RETRY", "FAILED", "CANCELLED").contains(status)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported webhook delivery status");
+        }
+        if (eventType != null && !Set.of("PARCEL_CREATED", "PARCEL_STATUS_CHANGED", "TEST_EVENT").contains(eventType)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported webhook event type");
+        }
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The delivery date range is invalid");
+        }
     }
 
     @GetMapping("/deliveries/{deliveryId}")
