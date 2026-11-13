@@ -39,6 +39,16 @@ describe('CustomerParcelsService', () => {
     req.flush(page);
   });
 
+  it('sends the supported date and tracking filters', () => {
+    service.list({ from: '2026-11-01', to: '2026-11-30', q: ' SD-202611 ' }).subscribe();
+
+    const req = http.expectOne((r) => r.url === '/api/v1/parcels');
+    expect(req.request.params.get('from')).toBe('2026-11-01');
+    expect(req.request.params.get('to')).toBe('2026-11-30');
+    expect(req.request.params.get('q')).toBe('SD-202611');
+    req.flush(page);
+  });
+
   it('leaves out a null status', () => {
     service.list({ status: null }).subscribe();
     const req = http.expectOne((r) => r.url === '/api/v1/parcels');

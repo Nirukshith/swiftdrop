@@ -242,6 +242,20 @@ describe('CustomerParcelsComponent opened from a URL with page and filter', () =
     expect(el.querySelector('[data-testid="clear-filters"]')).not.toBeNull();
   });
 
+  // From M1's #289, adapted: page, status and all filters together from the URL.
+  it('starts on the page and filters from the URL', () => {
+    const { list } = openWith({ page: '3', status: 'DELIVERED', from: '2026-11-01', to: '2026-11-30', q: 'SD-202611' });
+
+    expect(list).toHaveBeenCalledWith({
+      page: 2,
+      size: 10,
+      status: 'DELIVERED',
+      from: '2026-11-01',
+      to: '2026-11-30',
+      q: 'SD-202611',
+    });
+  });
+
   it('drops a URL date range or search the API would reject', () => {
     expect(openWith({ from: '2026-11-30', to: '2026-11-01' }).list)
       .toHaveBeenCalledWith(expect.objectContaining({ from: null, to: null }));
@@ -309,6 +323,24 @@ describe('CustomerParcelsComponent filters', () => {
       queryParams: { page: null, status: null, from: '2026-11-01', to: '2026-11-30', q: 'sd-20261112' },
     }));
     expect(q('filter-error')).toBeNull();
+  });
+
+  // From M1's #289, adapted to the component's inputs.
+  it('applies date and tracking filters from the customer parcel contract', () => {
+    fixture.componentInstance.searchInput = ' SD-202611 ';
+    fixture.componentInstance.fromInput = '2026-11-01';
+    fixture.componentInstance.toInput = '2026-11-30';
+
+    fixture.componentInstance.applyFilters();
+
+    expect(list).toHaveBeenLastCalledWith({
+      page: 0,
+      size: 10,
+      status: null,
+      from: '2026-11-01',
+      to: '2026-11-30',
+      q: 'SD-202611',
+    });
   });
 
   it('does not send a range where "From" is after "To"', async () => {
