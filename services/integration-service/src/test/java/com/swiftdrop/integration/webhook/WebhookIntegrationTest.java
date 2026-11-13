@@ -117,7 +117,7 @@ class WebhookIntegrationTest {
     @DisplayName("End-to-End: Parcel status event creates signed delivery record and delivery log shows it")
     void parcelStatusEvent_createsSignedDeliveryRecord_andIdempotent() {
         UUID merchantId = UUID.randomUUID();
-        String webhookUrl = "https://api.testmerchant.com/swiftdrop/webhook";
+        String webhookUrl = "https://127.0.0.1/swiftdrop/webhook";
 
         // 1. Setup active webhook settings for merchant
         UpdateWebhookSettingsRequest settingsReq = new UpdateWebhookSettingsRequest(
@@ -229,7 +229,7 @@ class WebhookIntegrationTest {
     @DisplayName("Manual replay resets attempt count and cannot repeat a successful delivery")
     void failedDelivery_canBeReplayedOnlyUntilItSucceeds() {
         UUID merchantId = UUID.randomUUID();
-        String webhookUrl = "https://api.testmerchant.com/swiftdrop/webhook";
+        String webhookUrl = "https://127.0.0.1/swiftdrop/webhook";
         webhookService.updateSettings(merchantId, new UpdateWebhookSettingsRequest(
                 webhookUrl, true, List.of("PARCEL_STATUS_CHANGED"), true));
 
@@ -275,7 +275,7 @@ class WebhookIntegrationTest {
     @DisplayName("Concurrent retry requests serialize and never duplicate a successful delivery")
     void concurrentRetry_sendsOnlyOnce() throws Exception {
         UUID merchantId = UUID.randomUUID();
-        String webhookUrl = "https://api.testmerchant.com/webhook";
+        String webhookUrl = "https://127.0.0.1/webhook";
         webhookService.updateSettings(merchantId, new UpdateWebhookSettingsRequest(
                 webhookUrl, true, List.of("PARCEL_STATUS_CHANGED"), true));
         WebhookDeliveryEntity failed = new WebhookDeliveryEntity();
@@ -319,7 +319,7 @@ class WebhookIntegrationTest {
     @DisplayName("Manual retry records a transient DNS failure without exposing its exception text")
     void manualRetry_recordsSafeDnsFailure() {
         UUID merchantId = UUID.randomUUID();
-        String webhookUrl = "https://api.testmerchant.com/webhook";
+        String webhookUrl = "https://127.0.0.1/webhook";
         webhookService.updateSettings(merchantId, new UpdateWebhookSettingsRequest(
                 webhookUrl, true, List.of("PARCEL_STATUS_CHANGED"), true));
         WebhookDeliveryEntity failed = new WebhookDeliveryEntity();
@@ -352,7 +352,7 @@ class WebhookIntegrationTest {
         delivery.setEventId(UUID.randomUUID());
         delivery.setMerchantId(merchantId);
         delivery.setEventType("PARCEL_STATUS_CHANGED");
-        delivery.setTargetUrl("https://merchant.example/webhook");
+        delivery.setTargetUrl("https://127.0.0.1/webhook");
         delivery.setPayload("{}");
         delivery.setStatus("FAILED");
         delivery.setAttempts(1);
@@ -518,7 +518,7 @@ class WebhookIntegrationTest {
         UUID otherMerchant = createMerchant();
         MerchantOrderEntity order = createOrder(owner, Instant.now().minus(Duration.ofMinutes(5)));
         webhookService.updateSettings(otherMerchant, new UpdateWebhookSettingsRequest(
-                "https://example.com/merchant-hook", true, List.of("PARCEL_STATUS_CHANGED"), false));
+                "https://127.0.0.1/merchant-hook", true, List.of("PARCEL_STATUS_CHANGED"), false));
         EventEnvelope event = orderStatusEvent(otherMerchant, order.getParcelId(), Instant.now(),
                 "CREATED", "IN_TRANSIT");
 
