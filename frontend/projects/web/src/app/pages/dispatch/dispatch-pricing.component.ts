@@ -1,10 +1,33 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  AbstractControl,
+  FormBuilder,
+  FormGroup,
+  ReactiveFormsModule,
+  ValidationErrors,
+  ValidatorFn,
+  Validators,
+} from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ButtonComponent, CardComponent } from 'ui';
 import { DispatchService } from './dispatch.service';
 import { PricingRule } from './dispatch.model';
+
+const weightBandBoundsValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
+  if (control.get('kind')?.value !== 'WEIGHT_BAND') {
+    return null;
+  }
+
+  const minimum = control.get('minimumWeightKg')?.value;
+  const maximum = control.get('maximumWeightKg')?.value;
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)
+    || minimum < 0 || maximum <= 0 || maximum <= minimum) {
+    return { weightBandBounds: true };
+  }
+
+  return null;
+};
 
 @Component({
   selector: 'app-dispatch-pricing',
@@ -180,6 +203,14 @@ import { PricingRule } from './dispatch.model';
                   </label>
                 </div>
               </div>
+              @if (pricingForm.hasError('weightBandBounds')
+                && (pricingForm.get('minimumWeightKg')?.touched
+                  || pricingForm.get('maximumWeightKg')?.touched)) {
+                <p id="pricing-weight-bounds-error" class="text-xs text-rose-600 font-medium">
+                  Minimum weight must be at least 0, maximum weight must be greater than 0,
+                  and maximum weight must be greater than minimum weight
+                </p>
+              }
             }
 
             <div>
@@ -227,7 +258,7 @@ export class DispatchPricingComponent {
       maximumWeightKg: [0],
       chargeLkr: [0, [Validators.required, Validators.min(0)]],
       active: [true],
-    });
+    }, { validators: weightBandBoundsValidator });
     this.loadPricingRules();
   }
   private loadPricingRules(): void {

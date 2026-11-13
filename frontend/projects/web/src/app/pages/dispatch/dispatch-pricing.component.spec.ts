@@ -104,4 +104,78 @@ describe('DispatchPricingComponent', () => {
     expect(compiled.querySelector('#pricing-min-kg-input')).toBeTruthy();
     expect(compiled.querySelector('#pricing-max-kg-input')).toBeTruthy();
   });
+
+  it('should reject a zero maximum weight for a weight band', () => {
+    setWeightBand(0, 0);
+
+    expect(component.pricingForm.invalid).toBe(true);
+  });
+
+  it('should reject a negative maximum weight for a weight band', () => {
+    setWeightBand(0, -1);
+
+    expect(component.pricingForm.invalid).toBe(true);
+  });
+
+  it('should reject a negative minimum weight for a weight band', () => {
+    setWeightBand(-1, 5);
+
+    expect(component.pricingForm.invalid).toBe(true);
+  });
+
+  it('should reject equal minimum and maximum weights', () => {
+    setWeightBand(5, 5);
+
+    expect(component.pricingForm.invalid).toBe(true);
+  });
+
+  it('should reject a minimum weight greater than the maximum', () => {
+    setWeightBand(5, 1);
+
+    expect(component.pricingForm.invalid).toBe(true);
+  });
+
+  it('should accept a zero minimum with a positive maximum', () => {
+    setWeightBand(0, 5);
+
+    expect(component.pricingForm.valid).toBe(true);
+  });
+
+  it('should accept a positive minimum below the maximum', () => {
+    setWeightBand(1, 5);
+
+    expect(component.pricingForm.valid).toBe(true);
+  });
+
+  it('should not apply weight-bound validation to size rules', () => {
+    component.pricingForm.setValue({
+      kind: 'SIZE',
+      key: 'MEDIUM',
+      minimumWeightKg: 0,
+      maximumWeightKg: 0,
+      chargeLkr: 150,
+      active: true,
+    });
+
+    expect(component.pricingForm.valid).toBe(true);
+  });
+
+  it('should not submit an invalid weight band', () => {
+    setWeightBand(5, 1);
+
+    component.savePricingRule();
+
+    httpMock.expectNone('/api/v1/admin/pricing-rules');
+  });
+
+  function setWeightBand(minimumWeightKg: number, maximumWeightKg: number): void {
+    component.pricingForm.setValue({
+      kind: 'WEIGHT_BAND',
+      key: 'UP_TO_5KG',
+      minimumWeightKg,
+      maximumWeightKg,
+      chargeLkr: 200,
+      active: true,
+    });
+  }
 });
