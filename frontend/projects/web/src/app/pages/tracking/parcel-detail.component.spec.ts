@@ -209,4 +209,11 @@ describe('ParcelDetailComponent', () => {
     harness.detectChanges();
     expect(text('tracking-number')).toBe(TN);
   });
+
+  it('provides a back button that returns to customer deliveries', async () => {
+    await open('p-1', TN);
+    const backBtn = el().querySelector('button[title="Back to Deliveries"]') as HTMLButtonElement;
+    expect(backBtn).not.toBeNull();
+    expect(backBtn.textContent).toContain('Back to Deliveries');
+  });
 });
