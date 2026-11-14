@@ -16,55 +16,61 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="max-w-6xl mx-auto space-y-6 pb-16 px-4 sm:px-6">
+    <div class="courier-portal-wrap max-w-7xl mx-auto space-y-6 pb-16">
       <!-- Courier Top Bar Header -->
       <div
-        class="bg-white/90 backdrop-blur-md rounded-2xl shadow-sm border border-slate-200/80 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        class="portal-header bg-white rounded-3xl p-6 sm:p-7 border border-[#e8e2dc] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5"
       >
-        <div class="flex items-center gap-3.5">
+        <div class="flex items-center gap-4">
           <div
-            class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-200 text-xl font-black"
+            class="brand-badge w-12 h-12 rounded-2xl bg-[#a53a26] text-white flex items-center justify-center shadow-md shadow-[#a53a26]/20 flex-shrink-0"
           >
-            🚚
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <rect x="1" y="3" width="15" height="13" rx="2"></rect>
+              <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+              <circle cx="5.5" cy="18.5" r="2.5"></circle>
+              <circle cx="18.5" cy="18.5" r="2.5"></circle>
+            </svg>
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <h1 class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-                Courier Run Sheet
-              </h1>
+              <span class="portal-pill">Courier Portal</span>
               <span
-                class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
+                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80"
               >
-                ● Online
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Online
               </span>
             </div>
-            <p class="text-xs sm:text-sm text-slate-500 font-medium">
+            <h1 class="portal-title text-2xl font-black text-[#1d1b2c] tracking-tight mt-0.5">
+              Courier Run Sheet
+            </h1>
+            <p class="text-xs font-semibold text-[#6f6d85] mt-0.5">
               {{ profile().name }} (ID: {{ profile().userId }}) • {{ profile().zone || 'Assigned Zone' }}
             </p>
           </div>
         </div>
 
         <!-- Quick Summary Chips -->
-        <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+        <div class="flex items-center gap-2.5 overflow-x-auto pb-1 sm:pb-0">
           <div
-            class="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-center flex-1 sm:flex-initial"
+            class="stat-pill px-4 py-2 rounded-2xl bg-[#faf8f6] border border-[#e8e2dc] text-center min-w-[80px]"
           >
-            <p class="text-[11px] uppercase font-bold text-slate-400">Total Run</p>
-            <p class="text-base font-extrabold text-slate-800">{{ stats().total }}</p>
+            <p class="text-[10px] uppercase font-bold text-[#6f6d85] tracking-wider">Total Run</p>
+            <p class="text-lg font-black text-[#1d1b2c]">{{ stats().total }}</p>
           </div>
           <div
-            class="px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-center flex-1 sm:flex-initial"
+            class="stat-pill px-4 py-2 rounded-2xl bg-[#fffbeb] border border-[#fef3c7] text-center min-w-[80px]"
           >
-            <p class="text-[11px] uppercase font-bold text-amber-600">Pending</p>
-            <p class="text-base font-extrabold text-amber-700">
+            <p class="text-[10px] uppercase font-bold text-amber-700 tracking-wider">Pending</p>
+            <p class="text-lg font-black text-amber-800">
               {{ stats().created + stats().pickedUp + stats().inTransit + stats().outForDelivery }}
             </p>
           </div>
           <div
-            class="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-center flex-1 sm:flex-initial"
+            class="stat-pill px-4 py-2 rounded-2xl bg-[#ecfdf5] border border-[#d1fae5] text-center min-w-[80px]"
           >
-            <p class="text-[11px] uppercase font-bold text-emerald-600">Delivered</p>
-            <p class="text-base font-extrabold text-emerald-700">{{ stats().delivered }}</p>
+            <p class="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Delivered</p>
+            <p class="text-lg font-black text-emerald-800">{{ stats().delivered }}</p>
           </div>
           <button
             type="button"
@@ -72,85 +78,106 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
             (click)="refreshDeliveries()"
             [disabled]="isLoading()"
             title="Refresh Deliveries"
-            class="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-indigo-600 transition-colors shadow-xs"
+            class="p-3 rounded-2xl border border-[#e8e2dc] bg-[#faf8f6] hover:bg-white text-[#6f6d85] hover:text-[#a53a26] transition-all shadow-xs cursor-pointer"
           >
-            <span [class.animate-spin]="isLoading()" class="inline-block">🔄</span>
+            <span [class.animate-spin]="isLoading()" class="inline-block text-base">🔄</span>
           </button>
         </div>
       </div>
 
       <!-- Action & Search Toolbar -->
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <!-- Filter Tabs -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <!-- Filter Tabs (Segmented Pill Bar matching Customer Portal) -->
         <div
-          class="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs sm:text-sm font-semibold overflow-x-auto"
+          class="tab-pill-bar inline-flex rounded-full bg-[#f1f5f9] p-1.5 border border-[#e2e8f0]/80 text-sm font-bold overflow-x-auto"
         >
           <button
             type="button"
             id="tab-filter-all"
             (click)="activeFilter.set('ALL')"
-            [class.bg-white]="activeFilter() === 'ALL'"
-            [class.shadow-sm]="activeFilter() === 'ALL'"
-            [class.text-indigo-600]="activeFilter() === 'ALL'"
-            [class.text-slate-600]="activeFilter() !== 'ALL'"
-            class="px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap"
+            [class.active]="activeFilter() === 'ALL'"
+            class="tab-pill px-4 py-2 rounded-full transition-all flex items-center gap-1.5 font-bold text-xs sm:text-sm whitespace-nowrap cursor-pointer"
           >
-            All ({{ stats().total }})
+            <span>All</span>
+            <span
+              class="count-badge ml-1 text-xs px-2 py-0.5 rounded-full"
+              [class.active-badge]="activeFilter() === 'ALL'"
+            >
+              {{ stats().total }}
+            </span>
           </button>
           <button
             type="button"
             id="tab-filter-active"
             (click)="activeFilter.set('ACTIVE')"
-            [class.bg-white]="activeFilter() === 'ACTIVE'"
-            [class.shadow-sm]="activeFilter() === 'ACTIVE'"
-            [class.text-indigo-600]="activeFilter() === 'ACTIVE'"
-            [class.text-slate-600]="activeFilter() !== 'ACTIVE'"
-            class="px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap"
+            [class.active]="activeFilter() === 'ACTIVE'"
+            class="tab-pill px-4 py-2 rounded-full transition-all flex items-center gap-1.5 font-bold text-xs sm:text-sm whitespace-nowrap cursor-pointer"
           >
-            Active ({{ stats().created + stats().pickedUp + stats().inTransit + stats().outForDelivery }})
+            <span>Active</span>
+            <span
+              class="count-badge ml-1 text-xs px-2 py-0.5 rounded-full"
+              [class.active-badge]="activeFilter() === 'ACTIVE'"
+            >
+              {{ stats().created + stats().pickedUp + stats().inTransit + stats().outForDelivery }}
+            </span>
           </button>
           <button
             type="button"
             id="tab-filter-delivered"
             (click)="activeFilter.set('DELIVERED')"
-            [class.bg-white]="activeFilter() === 'DELIVERED'"
-            [class.shadow-sm]="activeFilter() === 'DELIVERED'"
-            [class.text-emerald-600]="activeFilter() === 'DELIVERED'"
-            [class.text-slate-600]="activeFilter() !== 'DELIVERED'"
-            class="px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap"
+            [class.active]="activeFilter() === 'DELIVERED'"
+            class="tab-pill px-4 py-2 rounded-full transition-all flex items-center gap-1.5 font-bold text-xs sm:text-sm whitespace-nowrap cursor-pointer"
           >
-            Delivered ({{ stats().delivered }})
+            <span>Delivered</span>
+            <span
+              class="count-badge ml-1 text-xs px-2 py-0.5 rounded-full"
+              [class.active-badge]="activeFilter() === 'DELIVERED'"
+            >
+              {{ stats().delivered }}
+            </span>
           </button>
           <button
             type="button"
             id="tab-filter-failed"
             (click)="activeFilter.set('FAILED')"
-            [class.bg-white]="activeFilter() === 'FAILED'"
-            [class.shadow-sm]="activeFilter() === 'FAILED'"
-            [class.text-rose-600]="activeFilter() === 'FAILED'"
-            [class.text-slate-600]="activeFilter() !== 'FAILED'"
-            class="px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 whitespace-nowrap"
+            [class.active]="activeFilter() === 'FAILED'"
+            class="tab-pill px-4 py-2 rounded-full transition-all flex items-center gap-1.5 font-bold text-xs sm:text-sm whitespace-nowrap cursor-pointer"
           >
-            Failed ({{ stats().failed }})
+            <span>Failed</span>
+            <span
+              class="count-badge ml-1 text-xs px-2 py-0.5 rounded-full"
+              [class.active-badge]="activeFilter() === 'FAILED'"
+            >
+              {{ stats().failed }}
+            </span>
           </button>
         </div>
 
-        <!-- Search Input -->
-        <div class="relative w-full md:w-72">
+        <!-- Search Input matching Customer Portal -->
+        <div class="relative w-full md:w-80">
+          <svg
+            class="w-4 h-4 text-[#a09eaf] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
           <input
             type="text"
             id="search-input"
             [ngModel]="searchQuery()"
             (ngModelChange)="searchQuery.set($event)"
             placeholder="Search tracking, recipient, address..."
-            class="w-full pl-9 pr-4 py-2 bg-white rounded-xl border border-slate-200 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm transition-all"
+            class="w-full pl-11 pr-8 py-2.5 rounded-full bg-white border border-[#e8e2dc] text-xs font-semibold text-[#1d1b2c] placeholder-[#a09eaf] focus:outline-none focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] shadow-2xs transition-all"
           />
-          <span class="absolute left-3 top-2.5 text-slate-400 text-sm">🔍</span>
           <button
             *ngIf="searchQuery()"
             type="button"
             (click)="searchQuery.set('')"
-            class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs"
+            class="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#a09eaf] hover:text-[#1d1b2c] text-xs font-bold"
           >
             ✕
           </button>
@@ -161,18 +188,27 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
       <div
         *ngIf="toastMessage()"
         id="toast-notification"
-        class="rounded-xl p-4 bg-indigo-50 border border-indigo-200 text-indigo-900 text-sm flex items-center justify-between shadow-sm animate-fade-in"
+        class="toast-alert bg-[#faf6f0] border border-[#a53a26]/20 text-[#1d1b2c] px-5 py-3.5 rounded-2xl flex items-center justify-between text-sm shadow-sm transition-all"
       >
-        <div class="flex items-center gap-2">
-          <span>✨</span>
-          <span class="font-medium">{{ toastMessage() }}</span>
+        <div class="flex items-center gap-3 font-semibold">
+          <div
+            class="w-7 h-7 rounded-full bg-[#a53a26]/10 text-[#a53a26] flex items-center justify-center flex-shrink-0"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+          <span>{{ toastMessage() }}</span>
         </div>
         <button
           type="button"
           (click)="toastMessage.set('')"
-          class="text-indigo-400 hover:text-indigo-700 font-bold"
+          class="text-[#6f6d85] hover:text-[#1d1b2c] font-bold p-1 rounded-lg transition-colors cursor-pointer"
         >
-          ✕
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
         </button>
       </div>
 
@@ -180,16 +216,16 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
       <div
         *ngIf="errorMessage()"
         id="courier-error-banner"
-        class="rounded-xl p-4 bg-rose-50 border border-rose-200 text-rose-900 text-sm flex items-center justify-between shadow-sm"
+        class="rounded-2xl p-4 bg-rose-50 border border-rose-200 text-rose-900 text-sm flex items-center justify-between shadow-sm"
       >
-        <div class="flex items-center gap-2">
-          <span>⚠️</span>
-          <span class="font-medium">{{ errorMessage() }}</span>
+        <div class="flex items-center gap-2.5">
+          <span class="text-base">⚠️</span>
+          <span class="font-semibold">{{ errorMessage() }}</span>
         </div>
         <button
           type="button"
           (click)="refreshDeliveries()"
-          class="px-3 py-1 bg-white border border-rose-200 rounded-lg text-xs font-bold text-rose-700 hover:bg-rose-100"
+          class="px-4 py-1.5 bg-white border border-rose-200 rounded-full text-xs font-bold text-rose-700 hover:bg-rose-100 transition-colors shadow-2xs cursor-pointer"
         >
           Retry
         </button>
@@ -199,11 +235,15 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
       <div
         *ngIf="isLoading() && filteredDeliveries().length === 0"
         id="courier-loading-spinner"
-        class="bg-white rounded-2xl border border-slate-200 p-12 text-center"
+        class="bg-white rounded-3xl border border-[#e8e2dc] p-12 text-center shadow-sm"
       >
-        <div class="text-4xl animate-bounce mb-3">🚚</div>
-        <h3 class="text-base font-bold text-slate-800">Loading deliveries...</h3>
-        <p class="text-xs text-slate-500 mt-1">Fetching your assigned parcels from operations service.</p>
+        <div
+          class="w-16 h-16 rounded-2xl bg-[#faf6f0] text-[#a53a26] flex items-center justify-center mx-auto mb-4 text-2xl shadow-sm"
+        >
+          🚚
+        </div>
+        <h3 class="text-base font-bold text-[#1d1b2c]">Loading deliveries...</h3>
+        <p class="text-xs text-[#6f6d85] mt-1">Fetching your assigned parcels from operations service.</p>
       </div>
 
       <!-- Deliveries List (Cards) -->
@@ -211,54 +251,68 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
         <div
           *ngFor="let delivery of filteredDeliveries()"
           [id]="'delivery-card-' + delivery.parcelId"
-          class="bg-white rounded-2xl shadow-sm border border-slate-200/90 hover:border-indigo-300 hover:shadow-md transition-all overflow-hidden"
+          class="delivery-run-card bg-white rounded-3xl shadow-sm border border-[#eee7e0] hover:border-[#a53a26]/40 hover:shadow-md transition-all overflow-hidden"
         >
           <!-- Card Header -->
-          <div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/50">
+          <div
+            class="px-5 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#f4efe9] bg-[#faf8f6]/60"
+          >
             <div class="flex items-center gap-3">
-              <span class="text-xs font-mono font-bold px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 shadow-2xs">
+              <span
+                class="text-xs font-mono font-black px-3 py-1 bg-white border border-[#e8e2dc] rounded-full text-[#1d1b2c] shadow-2xs"
+              >
                 {{ delivery.trackingNumber }}
               </span>
               <span
                 [ngClass]="getStatusBadgeClass(delivery.status)"
-                class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1"
+                class="px-3 py-0.5 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5"
               >
+                <span class="w-1.5 h-1.5 rounded-full bg-current opacity-80"></span>
                 {{ getStatusLabel(delivery.status) }}
               </span>
             </div>
 
-            <div class="flex items-center gap-2 text-xs text-slate-500">
-              <span *ngIf="delivery.attemptCount !== undefined" class="font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+            <div class="flex items-center gap-2 text-xs text-[#6f6d85]">
+              <span
+                *ngIf="delivery.attemptCount !== undefined"
+                class="font-bold bg-white border border-[#e8e2dc] px-2.5 py-0.5 rounded-full"
+              >
                 Attempt: {{ delivery.attemptCount }}
               </span>
-              <span *ngIf="delivery.weightKg" class="font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+              <span
+                *ngIf="delivery.weightKg"
+                class="font-bold bg-white border border-[#e8e2dc] px-2.5 py-0.5 rounded-full"
+              >
                 ⚖️ {{ delivery.weightKg }} kg
               </span>
             </div>
           </div>
 
           <!-- Card Body -->
-          <div class="p-4 sm:p-5 grid grid-cols-1 md:grid-cols-12 gap-4">
+          <div class="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-12 gap-5">
             <!-- Recipient & Destination -->
-            <div class="md:col-span-7 space-y-2">
-              <div class="flex items-baseline justify-between">
-                <h3 class="text-base font-bold text-slate-900 flex items-center gap-1.5">
-                  👤 {{ delivery.recipientName }}
+            <div class="md:col-span-7 space-y-3">
+              <div class="flex items-baseline justify-between gap-2">
+                <h3 class="text-base font-black text-[#1d1b2c] flex items-center gap-2">
+                  <span
+                    class="w-6 h-6 rounded-full bg-[#faf6f0] text-[#a53a26] flex items-center justify-center text-xs"
+                  >👤</span>
+                  {{ delivery.recipientName }}
                 </h3>
                 <a
                   *ngIf="delivery.recipientPhone"
                   [href]="'tel:' + delivery.recipientPhone"
-                  class="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-colors"
+                  class="inline-flex items-center gap-1.5 text-xs font-bold text-[#a53a26] hover:text-[#7e2615] bg-[#faf6f0] hover:bg-[#faf0e6] border border-[#a53a26]/20 px-3 py-1 rounded-full transition-colors"
                 >
                   📞 Call ({{ delivery.recipientPhone }})
                 </a>
               </div>
 
               <!-- Address -->
-              <div class="text-xs sm:text-sm text-slate-600 flex items-start gap-1.5">
-                <span class="text-slate-400 mt-0.5">📍</span>
+              <div class="text-xs sm:text-sm text-[#6f6d85] flex items-start gap-2">
+                <span class="text-[#a53a26] mt-0.5 font-bold">📍</span>
                 <div>
-                  <p class="font-medium text-slate-800">
+                  <p class="font-semibold text-[#1d1b2c]">
                     {{ delivery.dropoffAddress || (delivery.recipientAddress?.line1) }}
                     <span *ngIf="delivery.recipientAddress?.city">, {{ delivery.recipientAddress?.city }}</span>
                   </p>
@@ -267,7 +321,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                     [href]="delivery.googleMapsUrl"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="text-xs font-medium text-indigo-600 hover:underline inline-flex items-center gap-1 mt-0.5"
+                    class="text-xs font-bold text-[#a53a26] hover:underline inline-flex items-center gap-1 mt-1"
                   >
                     🗺️ Open in Google Maps
                   </a>
@@ -277,31 +331,31 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               <!-- Special Instructions -->
               <div
                 *ngIf="delivery.specialInstructions"
-                class="p-2.5 bg-amber-50/70 border border-amber-200/70 rounded-xl text-xs text-amber-900 flex items-start gap-1.5"
+                class="p-3 bg-[#fffbeb] border border-[#fef3c7] rounded-2xl text-xs text-amber-900 flex items-start gap-2"
               >
-                <span class="text-amber-500">📝</span>
+                <span class="text-amber-500 font-bold">📝</span>
                 <p><span class="font-bold">Instructions:</span> {{ delivery.specialInstructions }}</p>
               </div>
 
               <!-- Failure Reason if any -->
               <div
                 *ngIf="(delivery.status === 'FAILED' || delivery.status === 'FAILED_DELIVERY') && delivery.failureReason"
-                class="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-1.5"
+                class="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 flex items-start gap-2"
               >
-                <span class="text-rose-500">⚠️</span>
+                <span class="text-rose-500 font-bold">⚠️</span>
                 <p><span class="font-bold">Failure Reason:</span> {{ delivery.failureReason }}</p>
               </div>
 
               <!-- Proof Thumbnail if delivered -->
               <div
                 *ngIf="delivery.status === 'DELIVERED' && delivery.proof"
-                class="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center justify-between"
+                class="p-3 bg-[#ecfdf5] border border-[#d1fae5] rounded-2xl text-xs text-emerald-900 flex items-center justify-between gap-3"
               >
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2.5">
                   <span class="text-emerald-600 text-lg">📸</span>
                   <div>
-                    <p class="font-bold">Proof of Delivery Captured</p>
-                    <p class="text-[11px] text-emerald-700">
+                    <p class="font-extrabold text-[#1d1b2c]">Proof of Delivery Captured</p>
+                    <p class="text-[11px] text-emerald-700 font-semibold">
                       Received by {{ delivery.proof.recipientName }}
                     </p>
                   </div>
@@ -309,7 +363,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                 <button
                   type="button"
                   (click)="viewProofDetail(delivery)"
-                  class="px-2.5 py-1 bg-white rounded-lg border border-emerald-300 font-semibold text-emerald-800 hover:bg-emerald-100 text-[11px] transition-colors"
+                  class="px-3 py-1.5 bg-white rounded-full border border-emerald-300 font-bold text-emerald-800 hover:bg-emerald-50 text-[11px] transition-colors shadow-2xs cursor-pointer"
                 >
                   View Details
                 </button>
@@ -317,15 +371,17 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
             </div>
 
             <!-- Sender / Origin Info & Stepper -->
-            <div class="md:col-span-5 flex flex-col justify-between border-t md:border-t-0 md:border-l border-slate-100 md:pl-4 pt-3 md:pt-0 space-y-3">
-              <div class="text-xs text-slate-500">
-                <p class="text-[11px] uppercase font-bold text-slate-400">Pickup Origin</p>
-                <p class="font-semibold text-slate-700 mt-0.5">{{ delivery.senderName || 'SwiftDrop Merchant' }}</p>
-                <p>{{ delivery.pickupAddress || (delivery.senderAddress?.line1) }}</p>
+            <div
+              class="md:col-span-5 flex flex-col justify-between border-t md:border-t-0 md:border-l border-[#f4efe9] md:pl-5 pt-4 md:pt-0 space-y-4"
+            >
+              <div class="text-xs text-[#6f6d85]">
+                <p class="text-[10px] uppercase font-black text-[#a09eaf] tracking-wider">Pickup Origin</p>
+                <p class="font-bold text-[#1d1b2c] mt-0.5">{{ delivery.senderName || 'SwiftDrop Merchant' }}</p>
+                <p class="text-xs text-[#6f6d85]">{{ delivery.pickupAddress || (delivery.senderAddress?.line1) }}</p>
               </div>
 
               <!-- Action Buttons Depending on State -->
-              <div class="pt-2 space-y-2">
+              <div class="pt-2 space-y-2.5">
                 <!-- If CREATED or ASSIGNED -> Can Confirm Picked Up -->
                 <button
                   *ngIf="delivery.status === 'CREATED' || delivery.status === 'ASSIGNED'"
@@ -333,7 +389,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                   [id]="'pickup-btn-' + delivery.parcelId"
                   [disabled]="isActionPending(delivery.parcelId)"
                   (click)="advanceStatus(delivery, 'PICKED_UP')"
-                  class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm shadow-sm shadow-indigo-200 hover:shadow-md transition-all flex items-center justify-center gap-1.5"
+                  class="action-pill-btn w-full py-2.5 px-4 rounded-full bg-[#a53a26] hover:bg-[#7e2615] disabled:opacity-40 text-white font-bold text-xs sm:text-sm shadow-md shadow-[#a53a26]/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>📦</span> Confirm Picked Up
                 </button>
@@ -345,7 +401,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                   [id]="'transit-btn-' + delivery.parcelId"
                   [disabled]="isActionPending(delivery.parcelId)"
                   (click)="advanceStatus(delivery, 'IN_TRANSIT')"
-                  class="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm shadow-sm shadow-blue-200 hover:shadow-md transition-all flex items-center justify-center gap-1.5"
+                  class="action-pill-btn w-full py-2.5 px-4 rounded-full bg-[#1d1b2c] hover:bg-[#2d2b3d] disabled:opacity-40 text-white font-bold text-xs sm:text-sm shadow-md shadow-[#1d1b2c]/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>🚚</span> Start Delivery (In Transit)
                 </button>
@@ -357,7 +413,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                   [id]="'out-btn-' + delivery.parcelId"
                   [disabled]="isActionPending(delivery.parcelId)"
                   (click)="advanceStatus(delivery, 'OUT_FOR_DELIVERY')"
-                  class="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm shadow-sm shadow-amber-200 hover:shadow-md transition-all flex items-center justify-center gap-1.5"
+                  class="action-pill-btn w-full py-2.5 px-4 rounded-full bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white font-bold text-xs sm:text-sm shadow-md shadow-amber-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>📍</span> Out for Final Delivery
                 </button>
@@ -369,7 +425,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                     [id]="'deliver-btn-' + delivery.parcelId"
                     [disabled]="isActionPending(delivery.parcelId)"
                     (click)="openProofModal(delivery)"
-                    class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm shadow-sm shadow-emerald-200 hover:shadow-md transition-all flex items-center justify-center gap-1.5"
+                    class="action-pill-btn w-full py-2.5 px-4 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <span>📸</span> Complete & Upload Proof
                   </button>
@@ -378,7 +434,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                     [id]="'fail-btn-' + delivery.parcelId"
                     [disabled]="isActionPending(delivery.parcelId)"
                     (click)="openFailModal(delivery)"
-                    class="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 disabled:opacity-50 text-slate-700 hover:text-rose-700 font-semibold text-xs border border-slate-200 hover:border-rose-200 transition-colors flex items-center justify-center gap-1"
+                    class="w-full py-2 px-3 rounded-full bg-[#f1f5f9] hover:bg-rose-50 disabled:opacity-40 text-[#6f6d85] hover:text-rose-700 font-bold text-xs border border-[#e2e8f0] hover:border-rose-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <span>⚠️</span> Mark Delivery Attempt Failed
                   </button>
@@ -387,7 +443,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                 <!-- If DELIVERED -> Done Badge -->
                 <div
                   *ngIf="delivery.status === 'DELIVERED'"
-                  class="w-full py-2 px-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs font-bold text-center border border-emerald-200"
+                  class="w-full py-2.5 px-4 rounded-full bg-[#ecfdf5] text-emerald-800 text-xs font-extrabold text-center border border-[#d1fae5] shadow-2xs"
                 >
                   ✅ Completed & Confirmed
                 </div>
@@ -395,7 +451,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                 <!-- If FAILED -> Attempt Recorded -->
                 <div
                   *ngIf="delivery.status === 'FAILED' || delivery.status === 'FAILED_DELIVERY'"
-                  class="w-full py-2 px-3 rounded-xl bg-rose-50 text-rose-800 text-xs font-bold text-center border border-rose-200"
+                  class="w-full py-2.5 px-4 rounded-full bg-rose-50 text-rose-800 text-xs font-extrabold text-center border border-rose-200 shadow-2xs"
                 >
                   ❌ Delivery Attempt Failed
                 </div>
@@ -407,17 +463,21 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
         <!-- Empty State -->
         <div
           *ngIf="filteredDeliveries().length === 0 && !isLoading()"
-          class="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center"
+          class="bg-white rounded-3xl border border-dashed border-[#e8e2dc] p-12 text-center shadow-sm"
         >
-          <div class="text-4xl mb-3">📦</div>
-          <h3 class="text-base font-bold text-slate-800">No deliveries found</h3>
-          <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+          <div
+            class="w-16 h-16 rounded-2xl bg-[#faf6f0] text-[#a53a26] flex items-center justify-center mx-auto mb-3 text-2xl shadow-sm"
+          >
+            📦
+          </div>
+          <h3 class="text-base font-black text-[#1d1b2c]">No deliveries found</h3>
+          <p class="text-xs text-[#6f6d85] mt-1 max-w-sm mx-auto">
             No parcels match the current filter or search criteria.
           </p>
           <button
             type="button"
             (click)="activeFilter.set('ALL'); searchQuery.set('')"
-            class="mt-4 px-4 py-2 bg-indigo-50 text-indigo-600 font-semibold text-xs rounded-xl hover:bg-indigo-100 transition-colors"
+            class="mt-4 px-5 py-2 bg-[#faf6f0] text-[#a53a26] hover:bg-[#a53a26] hover:text-white font-bold text-xs rounded-full border border-[#a53a26]/20 transition-all cursor-pointer"
           >
             Clear Filters
           </button>
@@ -427,18 +487,21 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
       <!-- Proof of Delivery Modal Dialog -->
       <div
         *ngIf="selectedDeliveryForProof()"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1d1b2c]/60 backdrop-blur-xs animate-fade-in"
       >
         <div
-          class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden transform transition-all"
+          class="bg-white rounded-3xl shadow-xl border border-[#e8e2dc] w-full max-w-md overflow-hidden transform transition-all"
         >
           <!-- Modal Header -->
-          <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div class="p-6 border-b border-[#f4efe9] flex items-center justify-between bg-[#faf8f6]/80">
             <div>
-              <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <span>📸</span> Proof of Delivery
+              <div class="flex items-center gap-2">
+                <span class="portal-pill">Proof of Delivery</span>
+              </div>
+              <h2 class="text-lg font-black text-[#1d1b2c] flex items-center gap-2 mt-1">
+                <span>📸</span> Complete Delivery
               </h2>
-              <p class="text-xs text-slate-500 font-mono">
+              <p class="text-xs text-[#6f6d85] font-mono mt-0.5">
                 Tracking: {{ selectedDeliveryForProof()?.trackingNumber }}
               </p>
             </div>
@@ -446,17 +509,17 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               type="button"
               id="close-proof-modal"
               (click)="closeProofModal()"
-              class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-bold transition-colors"
+              class="w-8 h-8 rounded-full bg-white hover:bg-[#faf6f0] text-[#6f6d85] hover:text-[#1d1b2c] border border-[#e8e2dc] flex items-center justify-center text-sm font-bold transition-colors cursor-pointer"
             >
               ✕
             </button>
           </div>
 
           <!-- Modal Body Form -->
-          <div class="p-5 space-y-4">
+          <div class="p-6 space-y-4">
             <!-- Recipient Name -->
             <div>
-              <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
+              <label class="block text-xs font-bold uppercase tracking-wider text-[#6f6d85] mb-1.5">
                 Received By (Full Name) *
               </label>
               <input
@@ -464,13 +527,13 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                 id="proof-recipient-name"
                 [(ngModel)]="proofRecipientName"
                 placeholder="Enter recipient or signatory name"
-                class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                class="w-full px-4 py-2.5 rounded-2xl border border-[#e8e2dc] text-sm font-semibold text-[#1d1b2c] placeholder-[#a09eaf] focus:outline-none focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] transition-all"
               />
             </div>
 
             <!-- Notes -->
             <div>
-              <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
+              <label class="block text-xs font-bold uppercase tracking-wider text-[#6f6d85] mb-1.5">
                 Delivery Notes / Remarks
               </label>
               <textarea
@@ -478,24 +541,24 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                 [(ngModel)]="proofDeliveryNotes"
                 rows="2"
                 placeholder="e.g. Left with security, signed at front door"
-                class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                class="w-full px-4 py-2.5 rounded-2xl border border-[#e8e2dc] text-sm font-semibold text-[#1d1b2c] placeholder-[#a09eaf] focus:outline-none focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] transition-all"
               ></textarea>
             </div>
 
             <!-- Photo Upload Area -->
             <div>
-              <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
+              <label class="block text-xs font-bold uppercase tracking-wider text-[#6f6d85] mb-1.5">
                 Photo Proof (JPEG, PNG, WEBP - Max 5MB)
               </label>
 
               <div
                 *ngIf="!proofImagePreview"
-                class="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-6 text-center cursor-pointer transition-colors bg-slate-50/50"
+                class="border-2 border-dashed border-[#e8e2dc] hover:border-[#a53a26] rounded-2xl p-6 text-center cursor-pointer transition-colors bg-[#faf8f6]/50"
                 (click)="fileInput.click()"
               >
                 <div class="text-3xl mb-1">📷</div>
-                <p class="text-xs font-bold text-indigo-600">Click or tap to capture/upload photo</p>
-                <p class="text-[11px] text-slate-400 mt-0.5">JPEG, PNG or WEBP up to 5MB</p>
+                <p class="text-xs font-bold text-[#a53a26]">Click or tap to capture/upload photo</p>
+                <p class="text-[11px] text-[#a09eaf] mt-0.5">JPEG, PNG or WEBP up to 5MB</p>
                 <input
                   #fileInput
                   type="file"
@@ -507,7 +570,10 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               </div>
 
               <!-- Image Preview -->
-              <div *ngIf="proofImagePreview" class="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+              <div
+                *ngIf="proofImagePreview"
+                class="relative rounded-2xl overflow-hidden border border-[#e8e2dc] bg-[#faf8f6]"
+              >
                 <img
                   [src]="proofImagePreview"
                   alt="Proof preview"
@@ -516,24 +582,24 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                 <button
                   type="button"
                   (click)="clearProofFile()"
-                  class="absolute top-2 right-2 px-2.5 py-1 bg-slate-900/70 hover:bg-slate-900 text-white rounded-lg text-xs font-bold transition-colors"
+                  class="absolute top-2 right-2 px-3 py-1 bg-[#1d1b2c]/80 hover:bg-[#1d1b2c] text-white rounded-full text-xs font-bold transition-colors cursor-pointer"
                 >
                   ✕ Remove
                 </button>
               </div>
 
-              <p *ngIf="fileError()" class="text-xs text-rose-600 mt-1 font-medium">
+              <p *ngIf="fileError()" class="text-xs text-rose-600 mt-1 font-bold">
                 {{ fileError() }}
               </p>
             </div>
           </div>
 
           <!-- Modal Footer -->
-          <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-2">
+          <div class="p-5 border-t border-[#f4efe9] bg-[#faf8f6]/80 flex items-center justify-end gap-2.5">
             <button
               type="button"
               (click)="closeProofModal()"
-              class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold"
+              class="px-5 py-2 rounded-full border border-[#e8e2dc] text-[#6f6d85] hover:bg-white text-xs font-bold transition-all cursor-pointer"
             >
               Cancel
             </button>
@@ -542,7 +608,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               id="submit-proof-btn"
               (click)="submitProof()"
               [disabled]="isSubmittingProof || !isProofFormValid()"
-              class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-sm shadow-emerald-200 transition-all flex items-center gap-1.5"
+              class="action-pill-btn px-6 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <span *ngIf="isSubmittingProof" class="animate-spin">⏳</span>
               <span>Confirm & Deliver</span>
@@ -554,18 +620,21 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
       <!-- Failure Modal Dialog -->
       <div
         *ngIf="selectedDeliveryForFailure()"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1d1b2c]/60 backdrop-blur-xs animate-fade-in"
       >
         <div
-          class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden transform transition-all"
+          class="bg-white rounded-3xl shadow-xl border border-[#e8e2dc] w-full max-w-md overflow-hidden transform transition-all"
         >
           <!-- Modal Header -->
-          <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-rose-50/50">
+          <div class="p-6 border-b border-rose-100 flex items-center justify-between bg-rose-50/50">
             <div>
-              <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <span>⚠️</span> Record Failed Delivery Attempt
+              <span class="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-700">
+                Failed Attempt
+              </span>
+              <h2 class="text-lg font-black text-[#1d1b2c] flex items-center gap-2 mt-1">
+                <span>⚠️</span> Record Failed Attempt
               </h2>
-              <p class="text-xs text-slate-500 font-mono">
+              <p class="text-xs text-[#6f6d85] font-mono mt-0.5">
                 Tracking: {{ selectedDeliveryForFailure()?.trackingNumber }}
               </p>
             </div>
@@ -573,22 +642,22 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               type="button"
               id="close-fail-modal"
               (click)="closeFailModal()"
-              class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-bold transition-colors"
+              class="w-8 h-8 rounded-full bg-white hover:bg-rose-100 text-[#6f6d85] hover:text-rose-700 border border-rose-200 flex items-center justify-center text-sm font-bold transition-colors cursor-pointer"
             >
               ✕
             </button>
           </div>
 
           <!-- Modal Body -->
-          <div class="p-5 space-y-4">
+          <div class="p-6 space-y-4">
             <div>
-              <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
+              <label class="block text-xs font-bold uppercase tracking-wider text-[#6f6d85] mb-1.5">
                 Reason Category *
               </label>
               <select
                 id="fail-reason-select"
                 [(ngModel)]="failureReasonCategory"
-                class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 bg-white"
+                class="w-full px-4 py-2.5 rounded-2xl border border-[#e8e2dc] text-sm font-semibold text-[#1d1b2c] focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 bg-white transition-all"
               >
                 <option value="RECIPIENT_UNAVAILABLE">Recipient unavailable / phone unreachable</option>
                 <option value="INCORRECT_ADDRESS">Incorrect address / premises not found</option>
@@ -599,7 +668,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
             </div>
 
             <div>
-              <label class="block text-xs font-bold uppercase text-slate-600 mb-1">
+              <label class="block text-xs font-bold uppercase tracking-wider text-[#6f6d85] mb-1.5">
                 Additional Notes
               </label>
               <textarea
@@ -607,17 +676,17 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                 [(ngModel)]="failureNotes"
                 rows="3"
                 placeholder="Details of the delivery attempt..."
-                class="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                class="w-full px-4 py-2.5 rounded-2xl border border-[#e8e2dc] text-sm font-semibold text-[#1d1b2c] placeholder-[#a09eaf] focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all"
               ></textarea>
             </div>
           </div>
 
           <!-- Modal Footer -->
-          <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-2">
+          <div class="p-5 border-t border-[#f4efe9] bg-[#faf8f6]/80 flex items-center justify-end gap-2.5">
             <button
               type="button"
               (click)="closeFailModal()"
-              class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold"
+              class="px-5 py-2 rounded-full border border-[#e8e2dc] text-[#6f6d85] hover:bg-white text-xs font-bold transition-all cursor-pointer"
             >
               Cancel
             </button>
@@ -626,7 +695,7 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               id="submit-fail-btn"
               (click)="submitFailure()"
               [disabled]="isSubmittingFailure || (failureReasonCategory === 'OTHER' && !failureNotes.trim())"
-              class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold shadow-sm shadow-rose-200 transition-all flex items-center gap-1.5"
+              class="action-pill-btn px-6 py-2 rounded-full bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white text-xs font-bold shadow-md shadow-rose-600/20 transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <span *ngIf="isSubmittingFailure" class="animate-spin">⏳</span>
               <span>Save Failed Attempt</span>
@@ -638,18 +707,21 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
       <!-- View Proof Modal Dialog -->
       <div
         *ngIf="selectedDeliveryForProofView()"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1d1b2c]/60 backdrop-blur-xs animate-fade-in"
       >
         <div
-          class="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden transform transition-all"
+          class="bg-white rounded-3xl shadow-xl border border-[#e8e2dc] w-full max-w-lg overflow-hidden transform transition-all"
         >
           <!-- Modal Header -->
-          <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-emerald-50/50">
+          <div class="p-6 border-b border-[#f4efe9] flex items-center justify-between bg-[#faf8f6]/80">
             <div>
-              <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <div class="flex items-center gap-2">
+                <span class="portal-pill">Proof Verified</span>
+              </div>
+              <h2 class="text-lg font-black text-[#1d1b2c] flex items-center gap-2 mt-1">
                 <span>📸</span> Delivery Proof Details
               </h2>
-              <p class="text-xs text-slate-500 font-mono">
+              <p class="text-xs text-[#6f6d85] font-mono mt-0.5">
                 Tracking: {{ selectedDeliveryForProofView()?.trackingNumber }}
               </p>
             </div>
@@ -657,21 +729,33 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               type="button"
               id="close-proof-view-modal"
               (click)="closeProofViewModal()"
-              class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-bold transition-colors"
+              class="w-8 h-8 rounded-full bg-white hover:bg-[#faf6f0] text-[#6f6d85] hover:text-[#1d1b2c] border border-[#e8e2dc] flex items-center justify-center text-sm font-bold transition-colors cursor-pointer"
             >
               ✕
             </button>
           </div>
 
           <!-- Modal Body -->
-          <div class="p-5 space-y-4">
-            <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-200 text-xs space-y-1.5">
-              <p><span class="font-bold text-slate-700">Recipient Name:</span> {{ selectedDeliveryForProofView()?.proof?.recipientName }}</p>
-              <p><span class="font-bold text-slate-700">Uploaded At:</span> {{ selectedDeliveryForProofView()?.proof?.uploadedAt | date:'medium' }}</p>
+          <div class="p-6 space-y-4">
+            <div class="bg-[#faf8f6] rounded-2xl p-4 border border-[#e8e2dc] text-xs space-y-1.5">
+              <p>
+                <span class="font-bold text-[#6f6d85]">Recipient Name:</span>
+                <span class="font-black text-[#1d1b2c] ml-1">
+                  {{ selectedDeliveryForProofView()?.proof?.recipientName }}
+                </span>
+              </p>
+              <p>
+                <span class="font-bold text-[#6f6d85]">Uploaded At:</span>
+                <span class="font-semibold text-[#1d1b2c] ml-1">
+                  {{ selectedDeliveryForProofView()?.proof?.uploadedAt | date: 'medium' }}
+                </span>
+              </p>
             </div>
 
-            <div class="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 min-h-[160px] flex items-center justify-center">
-              <div *ngIf="isLoadingProofImage()" class="text-xs text-slate-500 font-semibold flex items-center gap-2">
+            <div
+              class="relative rounded-2xl overflow-hidden border border-[#e8e2dc] bg-[#faf8f6] min-h-[180px] flex items-center justify-center"
+            >
+              <div *ngIf="isLoadingProofImage()" class="text-xs text-[#6f6d85] font-bold flex items-center gap-2">
                 <span class="animate-spin">🔄</span> Loading authorized proof photo...
               </div>
               <img
@@ -679,20 +763,20 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
                 [src]="viewProofImageUrl()"
                 alt="Delivery proof"
                 id="view-proof-image"
-                class="w-full max-h-72 object-contain bg-slate-950"
+                class="w-full max-h-72 object-contain bg-[#1d1b2c]"
               />
-              <p *ngIf="!isLoadingProofImage() && !viewProofImageUrl()" class="text-xs text-slate-400">
+              <p *ngIf="!isLoadingProofImage() && !viewProofImageUrl()" class="text-xs text-[#a09eaf] font-semibold">
                 Photo preview not available.
               </p>
             </div>
           </div>
 
           <!-- Modal Footer -->
-          <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end">
+          <div class="p-5 border-t border-[#f4efe9] bg-[#faf8f6]/80 flex items-center justify-end">
             <button
               type="button"
               (click)="closeProofViewModal()"
-              class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold"
+              class="action-pill-btn px-6 py-2 rounded-full bg-[#1d1b2c] hover:bg-[#2d2b3d] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
             >
               Close
             </button>
@@ -701,6 +785,65 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
       </div>
     </div>
   `,
+  styles: [
+    `
+      :host {
+        --terracotta: #a53a26;
+        --terracotta-dark: #7e2615;
+        --coral: #f2533a;
+        --ink: #1d1b2c;
+        --ink-2: #3a384e;
+        --ink-3: #6f6d85;
+        --sand: #faf6f0;
+        --disp: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+        display: block;
+        font-family: var(--disp);
+      }
+      .portal-title {
+        font-family: var(--disp);
+      }
+      .portal-pill {
+        display: inline-block;
+        padding: 0.2rem 0.65rem;
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--terracotta);
+        background: rgba(165, 58, 38, 0.08);
+        border-radius: 9999px;
+      }
+      .tab-pill {
+        color: var(--ink-3);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+      }
+      .tab-pill:hover {
+        color: var(--ink);
+      }
+      .tab-pill.active {
+        background: #fff;
+        color: var(--ink);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+      .count-badge {
+        background: #e2e8f0;
+        color: var(--ink-3);
+        font-weight: 700;
+      }
+      .count-badge.active-badge {
+        background: rgba(165, 58, 38, 0.12);
+        color: var(--terracotta);
+      }
+      .action-pill-btn {
+        transition: all 0.2s ease;
+      }
+      .action-pill-btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+      }
+    `,
+  ],
 })
 export class CourierComponent implements OnInit {
   private courierService = inject(CourierService);
@@ -741,7 +884,7 @@ export class CourierComponent implements OnInit {
 
   refreshDeliveries(): void {
     this.courierService.loadDeliveries().subscribe({
-      error: (err) => {
+      error: () => {
         // Handled in service signal
       },
     });
@@ -818,20 +961,20 @@ export class CourierComponent implements OnInit {
     switch (status) {
       case 'CREATED':
       case 'ASSIGNED':
-        return 'bg-amber-100 text-amber-800 border border-amber-200';
+        return 'bg-amber-50 text-amber-800 border border-amber-200/80';
       case 'PICKED_UP':
-        return 'bg-blue-100 text-blue-800 border border-blue-200';
+        return 'bg-[#faf6f0] text-[#a53a26] border border-[#a53a26]/20';
       case 'IN_TRANSIT':
-        return 'bg-indigo-100 text-indigo-800 border border-indigo-200';
+        return 'bg-blue-50 text-blue-800 border border-blue-200/80';
       case 'OUT_FOR_DELIVERY':
-        return 'bg-purple-100 text-purple-800 border border-purple-200';
+        return 'bg-[#fffbeb] text-amber-800 border border-amber-300';
       case 'DELIVERED':
-        return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+        return 'bg-emerald-50 text-emerald-800 border border-emerald-200/80';
       case 'FAILED':
       case 'FAILED_DELIVERY':
-        return 'bg-rose-100 text-rose-800 border border-rose-200';
+        return 'bg-rose-50 text-rose-800 border border-rose-200/80';
       default:
-        return 'bg-slate-100 text-slate-800 border border-slate-200';
+        return 'bg-slate-50 text-slate-800 border border-slate-200';
     }
   }
 
@@ -842,7 +985,7 @@ export class CourierComponent implements OnInit {
     const idempotencyKey = `ui-${delivery.parcelId}-${nextStatus}-${Date.now()}`;
 
     this.courierService.updateStatus(delivery.parcelId, { status: nextStatus, idempotencyKey }).subscribe({
-      next: (res) => {
+      next: () => {
         this.setActionPending(delivery.parcelId, false);
         this.showToast(`Updated ${delivery.trackingNumber} to ${this.getStatusLabel(nextStatus)}`);
       },
