@@ -90,6 +90,22 @@ describe('LoginComponent', () => {
     expect(component.isLoading()).toBe(false);
   });
 
+  it('should navigate a successful Courier login to the Courier portal', () => {
+    authServiceMock.login.mockReturnValue(of({
+      ...mockAuthResponse,
+      user: { ...mockAuthResponse.user, role: 'COURIER' },
+    }));
+    component.selectRole('COURIER');
+    component.loginForm.setValue({
+      email: 'courier@swiftdrop.lk',
+      password: 'Password123!',
+    });
+
+    component.onSubmit();
+
+    expect(router.navigate).toHaveBeenCalledWith(['/courier']);
+  });
+
   it('should display error message on 401 Unauthorized', () => {
     authServiceMock.login.mockReturnValue(throwError(() => ({ status: 401 })));
 
@@ -170,9 +186,9 @@ describe('LoginComponent', () => {
     expect(navLinks[2].textContent.trim()).toBe('Sign In');
   });
 
-  it('should support switching between 4 roles and pre-filling sample credentials', () => {
+  it('should support switching between 5 roles and pre-filling sample credentials', () => {
     const roleTabs = fixture.nativeElement.querySelectorAll('.role-tab');
-    expect(roleTabs.length).toBe(4);
+    expect(roleTabs.length).toBe(5);
 
     // Default is CUSTOMER
     expect(component.selectedRole()).toBe('CUSTOMER');
@@ -197,5 +213,13 @@ describe('LoginComponent', () => {
     expect(component.selectedRole()).toBe('DISPATCHER');
     component.useSampleCredentials('DISPATCHER');
     expect(component.loginForm.get('email')?.value).toBe('dispatcher@swiftdrop.lk');
+
+    // Switch to COURIER
+    component.selectRole('COURIER');
+    fixture.detectChanges();
+    expect(component.selectedRole()).toBe('COURIER');
+    component.useSampleCredentials('COURIER');
+    expect(component.loginForm.get('email')?.value).toBe('courier@swiftdrop.lk');
+    expect(component.loginForm.get('password')?.value).toBe('Password123!');
   });
 });

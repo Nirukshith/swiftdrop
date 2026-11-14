@@ -304,4 +304,58 @@ describe('NotificationBellComponent', () => {
 
     expect(btn.nativeElement.getAttribute('aria-expanded')).toBe('true');
   });
+
+  describe('dropdown placement', () => {
+    const openDropdown = (): HTMLElement => {
+      fixture.detectChanges();
+      http.expectOne((r) => r.url === '/api/v1/notifications' && r.params.get('size') === '1')
+        .flush({ items: [], totalElements: 0, unreadCount: 0 });
+      fixture.debugElement.query(By.css('#notification-bell-btn')).nativeElement.click();
+      fixture.detectChanges();
+      http.expectOne((r) => r.url === '/api/v1/notifications' && r.params.get('page') === '0')
+        .flush(mockPage);
+      fixture.detectChanges();
+      return fixture.debugElement.query(By.css('#notification-dropdown')).nativeElement;
+    };
+
+    const placeBell = (top: number, bottom: number, right: number) =>
+      jest.spyOn(fixture.nativeElement as HTMLElement, 'getBoundingClientRect')
+        .mockReturnValue({ top, bottom, right, left: right - 36 } as DOMRect);
+
+    it('drops down below the bell by default (top bars)', () => {
+      const panel = openDropdown();
+      expect(panel.classList).toContain('absolute');
+      expect(panel.classList).toContain('right-0');
+      expect(panel.classList).not.toContain('fixed');
+      expect(panel.style.left).toBe('');
+    });
+
+    it('placement="right" opens beside the bell, downward when there is more room below', () => {
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 });
+      fixture.componentRef.setInput('placement', 'right');
+      placeBell(200, 236, 58);
+
+      const panel = openDropdown();
+
+      expect(panel.classList).toContain('fixed');
+      expect(panel.classList).not.toContain('right-0');
+      expect(panel.style.left).toBe('82px');
+      expect(panel.style.top).toBe('200px');
+      expect(panel.style.bottom).toBe('');
+      expect(panel.style.maxHeight).toBe('684px');
+      expect(panel.textContent).toContain('Parcel In Transit');
+    });
+
+    it('placement="right" opens upward and is capped when the bell is low on the screen', () => {
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
+      fixture.componentRef.setInput('placement', 'right');
+      placeBell(500, 536, 58);
+
+      const panel = openDropdown();
+
+      expect(panel.style.top).toBe('');
+      expect(panel.style.bottom).toBe('64px');
+      expect(panel.style.maxHeight).toBe('520px');
+    });
+  });
 });

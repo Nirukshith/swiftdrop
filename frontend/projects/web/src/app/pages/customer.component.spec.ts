@@ -317,4 +317,79 @@ describe('CustomerComponent', () => {
   it('should execute signOut without error', () => {
     expect(() => component.signOut()).not.toThrow();
   });
+
+  it('logo keeps the customer signed in and returns to My Deliveries', () => {
+    component.activeTab.set('settings');
+    fixture.detectChanges();
+    const logo = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('#customer-home-link')!;
+
+    expect(logo.getAttribute('href')).toBe('/customer');
+    logo.click();
+
+    expect(component.activeTab()).toBe('deliveries');
+  });
+
+  describe('profile menu', () => {
+    const el = () => fixture.nativeElement as HTMLElement;
+    const openMenu = () => {
+      el().querySelector<HTMLButtonElement>('#profile-menu-btn')!.click();
+      fixture.detectChanges();
+    };
+
+    it('clicking the name opens a menu with Settings and Log out', () => {
+      fixture.detectChanges();
+      expect(el().querySelector('#profile-menu-panel')).toBeNull();
+
+      openMenu();
+
+      expect(el().querySelector('#profile-menu-btn')!.getAttribute('aria-expanded')).toBe('true');
+      expect(el().querySelector('#profile-menu-settings')!.textContent).toContain('Settings');
+      expect(el().querySelector('#profile-menu-logout')!.textContent).toContain('Log out');
+    });
+
+    it('Settings opens the settings panel and closes the menu', () => {
+      fixture.detectChanges();
+      openMenu();
+
+      el().querySelector<HTMLButtonElement>('#profile-menu-settings')!.click();
+      fixture.detectChanges();
+
+      expect(component.activeTab()).toBe('settings');
+      expect(el().querySelector('#profile-menu-panel')).toBeNull();
+      expect(el().querySelector('#settings-panel')).not.toBeNull();
+      expect(el().querySelector('#settings-password-link')!.getAttribute('href')).toBe('/forgot-password');
+    });
+
+    it('Manage address book in settings switches to the address book', () => {
+      component.activeTab.set('settings');
+      fixture.detectChanges();
+
+      el().querySelector<HTMLButtonElement>('#settings-addresses-btn')!.click();
+
+      expect(component.activeTab()).toBe('addresses');
+    });
+
+    it('Log out closes the menu and signs out', () => {
+      fixture.detectChanges();
+      const signOut = jest.spyOn(component, 'signOut');
+      openMenu();
+
+      el().querySelector<HTMLButtonElement>('#profile-menu-logout')!.click();
+      fixture.detectChanges();
+
+      expect(signOut).toHaveBeenCalled();
+      expect(component.profileMenuOpen()).toBe(false);
+    });
+
+    it('closes on an outside click and on Escape', () => {
+      fixture.detectChanges();
+      openMenu();
+      document.body.click();
+      expect(component.profileMenuOpen()).toBe(false);
+
+      openMenu();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(component.profileMenuOpen()).toBe(false);
+    });
+  });
 });

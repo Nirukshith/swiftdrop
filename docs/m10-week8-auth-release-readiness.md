@@ -90,7 +90,7 @@ M10 maintains strict ownership boundaries while providing decoupled, contracted 
 
 ## 4. Environment Configuration Reference
 
-This section documents all environment variables used across the authentication ecosystem. **All values shown are safe placeholders or development defaults. Never commit production secrets.**
+This section documents all environment variables used across the authentication ecosystem. **Google OAuth credentials are required for live Google Login and must remain local-only. Never commit secrets.** See [`docs/google-oauth-local-setup.md`](google-oauth-local-setup.md) for the team setup.
 
 ### 4.1 Backend (`auth-service`) Environment Variables
 
@@ -104,9 +104,9 @@ This section documents all environment variables used across the authentication 
 | `SPRING_MAIL_HOST` | No | `mailpit` | SMTP server host for password reset emails. |
 | `SPRING_MAIL_PORT` | No | `1025` | SMTP port (Mailpit plain SMTP). |
 | `FRONTEND_BASE_URL` | Yes | `http://localhost:4200` | Base URL of the Angular frontend. |
-| `GOOGLE_CLIENT_ID` | Optional | `test-google-client-id` | OAuth 2.0 Client ID from Google Cloud Console. |
-| `GOOGLE_CLIENT_SECRET` | Optional (Secret) | `test-google-client-secret` | OAuth 2.0 Client Secret from Google Cloud Console. |
-| `GOOGLE_REDIRECT_URI` | Yes | `http://localhost/api/v1/auth/oauth2/callback/google` | Authorized redirect URI registered with Google. |
+| `GOOGLE_CLIENT_ID` | Yes for Google Login | *(local value)* | OAuth 2.0 Client ID from Google Cloud Console. |
+| `GOOGLE_CLIENT_SECRET` | Yes (Secret) for Google Login | *(local value)* | OAuth 2.0 Client Secret from Google Cloud Console. |
+| `GOOGLE_REDIRECT_URI` | Yes for Google Login | `http://localhost:8080/api/v1/auth/oauth2/callback/google` | Must exactly match a Google Cloud authorized redirect URI; use port `8081` for direct local auth-service development. |
 | `GOOGLE_FRONTEND_CALLBACK_URL` | Yes | `http://localhost:4200/auth/callback` | Angular frontend route for OAuth completion. |
 | `INTERNAL_NOTIFICATIONS_SERVICE_TOKEN` | Yes (Secret) | `swiftdrop-internal-notif-secret-2026` | Pre-shared token for `notifications-service`. |
 | `INTERNAL_MERCHANT_SERVICE_TOKEN` | Yes (Secret) | `swiftdrop-internal-merchant-secret-2026` | Pre-shared token for `merchant-service`. |
@@ -117,6 +117,7 @@ In `deploy/nginx/nginx.conf`:
 - **Public Routes Forwarded:** `/api/v1/auth/` proxies to `http://auth-service:8081`.
 - **JWKS Route Forwarded:** `/.well-known/jwks.json` proxies to `http://auth-service:8081/.well-known/jwks.json`.
 - **Internal Routes Blocked:** All requests matching `/internal/` are rejected at the gateway with `return 404;`, preventing external access to internal APIs.
+- **OAuth Callback:** The full Compose workflow uses `http://localhost:8080/api/v1/auth/oauth2/callback/google`; the Angular proxy/direct-auth workflow uses `http://localhost:8081/api/v1/auth/oauth2/callback/google`.
 
 ---
 

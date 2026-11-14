@@ -6,7 +6,6 @@ export const CUSTOMER_NAV: ShellNavItem[] = [
   { label: 'Dashboard', link: '/customer/dashboard' },
   { label: 'My parcels', link: '/customer/parcels' },
   { label: 'New delivery', link: '/customer', exact: true },
-  { label: 'AI Assistant', link: '/customer/assistant' },
 ];
 
 /** Readable message from a failed API call (uses the shared ErrorResponse when present). */

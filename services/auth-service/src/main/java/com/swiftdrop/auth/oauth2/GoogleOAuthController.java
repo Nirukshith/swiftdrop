@@ -71,6 +71,13 @@ public class GoogleOAuthController {
      */
     @GetMapping("/google")
     public ResponseEntity<Void> initiateGoogleLogin() {
+        if (!properties.isConfigured()) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Google OAuth is not configured. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI."
+            );
+        }
+
         String state = UUID.randomUUID().toString().replace("-", "") + "." + Instant.now().toEpochMilli();
 
         ResponseCookie stateCookie = ResponseCookie.from(STATE_COOKIE_NAME, state)

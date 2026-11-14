@@ -7,9 +7,9 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "swiftdrop.security.oauth2.google")
 public class GoogleOAuthProperties {
 
-    private String clientId = "test-google-client-id";
-    private String clientSecret = "test-google-client-secret";
-    private String redirectUri = "http://localhost/api/v1/auth/oauth2/callback/google";
+    private String clientId;
+    private String clientSecret;
+    private String redirectUri = "http://localhost:8081/api/v1/auth/oauth2/callback/google";
     private String authUrl = "https://accounts.google.com/o/oauth2/v2/auth";
     private String tokenUrl = "https://oauth2.googleapis.com/token";
     private String frontendCallbackUrl = "http://localhost:4200/auth/callback";
@@ -60,6 +60,14 @@ public class GoogleOAuthProperties {
 
     public void setFrontendCallbackUrl(String frontendCallbackUrl) {
         this.frontendCallbackUrl = frontendCallbackUrl;
+    }
+
+    public boolean isConfigured() {
+        return hasText(clientId) && hasText(clientSecret) && hasText(redirectUri);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }
 

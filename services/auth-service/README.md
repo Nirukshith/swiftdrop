@@ -111,6 +111,11 @@ mvn test -Dtest="AuthSecurityVerificationTest,Week7AuthSecurityVerificationTest,
 mvn spring-boot:run -pl services/auth-service -Dspring-boot.run.profiles=local
 ```
 
+The `local` profile creates enabled sample staff accounts when they do not already exist:
+`courier@swiftdrop.lk`, `dispatcher@swiftdrop.lk`, and `admin@swiftdrop.lk`, all using
+`Password123!`. This is development-only and never runs under the `docker` or production
+profiles. Admin-created staff accounts remain the normal provisioning path.
+
 ---
 
 ## 6. Environment Configuration Reference (M10 Release Readiness)
@@ -123,9 +128,9 @@ mvn spring-boot:run -pl services/auth-service -Dspring-boot.run.profiles=local
 | `SPRING_DATASOURCE_PASSWORD` | `swiftdrop_password` | Database password (Secret). |
 | `SPRING_KAFKA_BOOTSTRAP_SERVERS`| `kafka:9092` | Kafka broker bootstrap list for event dispatch. |
 | `FRONTEND_BASE_URL` | `http://localhost:4200` | Angular frontend base URL. |
-| `GOOGLE_CLIENT_ID` | `test-google-client-id` | Google OAuth 2.0 client ID. |
-| `GOOGLE_CLIENT_SECRET` | `test-google-client-secret` | Google OAuth 2.0 client secret (Secret). |
-| `GOOGLE_REDIRECT_URI` | `http://localhost/api/v1/auth/oauth2/callback/google` | OAuth redirect URI (Nginx gateway path). |
+| `GOOGLE_CLIENT_ID` | *(required)* | Google OAuth 2.0 client ID from the team development Web application. |
+| `GOOGLE_CLIENT_SECRET` | *(required, local only)* | Google OAuth 2.0 client secret. Never commit this value. |
+| `GOOGLE_REDIRECT_URI` | `http://localhost:8080/api/v1/auth/oauth2/callback/google` | Must exactly match a Google Cloud authorized redirect URI. Use port `8081` for direct local auth-service development. |
 | `GOOGLE_FRONTEND_CALLBACK_URL` | `http://localhost:4200/auth/callback` | Frontend callback route for session handoff. |
 | `INTERNAL_NOTIFICATIONS_SERVICE_TOKEN` | `swiftdrop-internal-notif-secret-2026` | Service token for `notifications-service` (Secret). |
 | `INTERNAL_MERCHANT_SERVICE_TOKEN` | `swiftdrop-internal-merchant-secret-2026` | Service token for `merchant-service` (Secret). |
