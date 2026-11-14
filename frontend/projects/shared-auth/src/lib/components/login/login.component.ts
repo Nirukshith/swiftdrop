@@ -344,8 +344,8 @@ import { AuthRole } from '../../models/auth.models';
       animation: bob 7s ease-in-out infinite;
       align-self: flex-start;
     }
-    .chip-2 { margin-left: 1.5rem; animation-delay: -2.3s; }
-    .chip-3 { margin-left: 0.5rem; animation-delay: -4.6s; }
+    .chip-2 { animation-delay: -2.3s; }
+    .chip-3 { animation-delay: -4.6s; }
     @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
     .chip-icon {
       width: 18px;

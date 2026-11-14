@@ -33,7 +33,7 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
         <!-- Left Column: Merchant Hero & Spoken Operations Chips -->
         <section class="hero-copy">
           <div class="hero-badge">
-            <span class="badge-dot"></span> SwiftDrop Merchant Onboarding
+            <span class="badge-dot"></span> SwiftDrop Merchant Partner Program
           </div>
 
           <h1 class="hero-headline">Scale your business deliveries with ease</h1>
@@ -59,11 +59,12 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
               <span>“Automated daily courier reconciliation”</span>
             </li>
             <li class="said-chip chip-3">
-              <svg class="chip-icon plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M12 2v8M8 6h8M12 14v8"/>
-                <circle cx="12" cy="12" r="2"/>
+              <svg class="chip-icon cash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <rect x="2" y="6" width="20" height="12" rx="2"/>
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M6 12h.01M18 12h.01"/>
               </svg>
-              <span>“API keys & webhook delivery events active”</span>
+              <span>“Daily sales settlements & island-wide COD”</span>
             </li>
           </ul>
 
@@ -85,10 +86,10 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
           <div class="merchant-card-shell">
             <ui-card
               title="Register your business"
-              subtitle="Submit your business details. An administrator must approve your account before API credentials are available."
+              subtitle="Submit your business details to unlock wholesale courier rates, bulk dispatch tools, and dedicated account support."
             >
               <div uiCardActions>
-                <span class="card-pill">Merchant Onboarding</span>
+                <span class="card-pill">Merchant Partnership</span>
               </div>
 
               @if (registration(); as result) {
@@ -99,8 +100,8 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
                   <p class="status-indicator">
                     Status: <ui-status-badge [status]="result.status" tone="warning" [label]="result.status" />
                   </p>
-                  <p class="approval-info">Once approved, an administrator will securely hand over your API client credentials. Store the secret safely; it is shown only once during approval.</p>
-                  <p class="approval-info">Your API client secret is separate from your sign-in password. After approval, use <a routerLink="/forgot-password" class="auth-link">Forgot password</a> with your registered email to set your sign-in password before opening the merchant portal.</p>
+                  <p class="approval-info">Our merchant team reviews and activates partnership accounts within 24 hours to enable discounted volume rates and priority courier scheduling.</p>
+                  <p class="approval-info">Your merchant portal access is separate from your sign-in password. After approval, use <a routerLink="/forgot-password" class="auth-link">Forgot password</a> with your registered email to set your sign-in password before opening the merchant portal.</p>
                   <div class="mt-6">
                     <ui-button routerLink="/login" [fullWidth]="true">Sign In</ui-button>
                   </div>
@@ -331,8 +332,8 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
       animation: bob 7s ease-in-out infinite;
       align-self: flex-start;
     }
-    .chip-2 { margin-left: 1.5rem; animation-delay: -2.3s; }
-    .chip-3 { margin-left: 0.5rem; animation-delay: -4.6s; }
+    .chip-2 { animation-delay: -2.3s; }
+    .chip-3 { animation-delay: -4.6s; }
     @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
     .chip-icon {
       width: 18px;
