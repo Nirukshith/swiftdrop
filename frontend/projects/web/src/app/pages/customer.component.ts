@@ -25,16 +25,13 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterModule, NotificationBellComponent],
   template: `
-    <div class="customer-canvas min-h-screen py-5 px-3 sm:px-6 flex justify-center items-start">
-      <!-- Main Dashboard App Card Window (Inspired by Reference) -->
-      <div
-        class="dashboard-window bg-white w-full max-w-7xl rounded-[32px] border border-[#eee7e0] shadow-[0_20px_60px_-15px_rgba(29,27,44,0.07)] flex flex-col md:flex-row overflow-hidden"
+    <!-- Full-Screen Customer Dashboard Layout -->
+    <div class="w-full min-h-screen flex flex-col md:flex-row bg-white">
+      <!-- Slim Left Sidebar Navigation Rail (Docked & Sticky) -->
+      <aside
+        class="w-full md:w-20 flex-shrink-0 flex md:flex-col items-center justify-between md:justify-start py-4 md:py-7 px-4 md:px-0 border-b md:border-b-0 md:border-r border-[#f0ebe5] bg-[#faf8f6] md:sticky md:top-0 md:h-screen md:space-y-7 z-20"
       >
-        <!-- Slim Left Sidebar Navigation Rail -->
-        <aside
-          class="w-full md:w-20 flex-shrink-0 flex md:flex-col items-center justify-between md:justify-start py-4 md:py-7 px-4 md:px-0 border-b md:border-b-0 md:border-r border-[#f0ebe5] bg-[#faf8f6]/70 md:space-y-7"
-        >
-          <!-- Brand Logo Icon -->
+        <!-- Brand Logo Icon -->
           <a
             routerLink="/"
             class="w-11 h-11 rounded-2xl bg-[#a53a26] text-white flex items-center justify-center shadow-md shadow-[#a53a26]/20 group cursor-pointer hover:scale-105 transition-transform"
@@ -135,8 +132,8 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
           </div>
         </aside>
 
-        <!-- Main Content Area -->
-        <main class="flex-1 p-5 sm:p-8 space-y-6 min-w-0 bg-white">
+      <!-- Main Content Area (Edge-to-Edge Full Screen) -->
+      <main class="flex-1 min-h-screen p-6 sm:p-8 lg:p-10 space-y-7 min-w-0 bg-white">
           <!-- Top Header: Search Bar & User Profile -->
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#f4efe9]">
             <!-- Search Input -->
@@ -1275,7 +1272,6 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
           </div>
           }
         </main>
-      </div>
     </div>
   `,
   styles: [
@@ -1291,12 +1287,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
         --disp: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
         display: block;
         font-family: var(--disp);
-      }
-      .customer-canvas {
-        background-color: #faf6f0;
-        background-image:
-          radial-gradient(circle at 10% 20%, rgba(242, 83, 58, 0.05) 0%, transparent 40%),
-          radial-gradient(circle at 90% 80%, rgba(165, 58, 38, 0.04) 0%, transparent 40%);
+        background-color: #ffffff;
       }
       .rail-icon-btn.rail-active {
         color: var(--terracotta);
@@ -1747,7 +1738,11 @@ export class CustomerComponent implements OnInit {
   }
 
   private apiErrorMessage(error: { error?: { message?: string }; message?: string }, fallback: string): string {
-    return error?.error?.message || error?.message || fallback;
+    const raw = error?.error?.message || error?.message;
+    if (raw && !raw.includes('Http failure during parsing')) {
+      return raw;
+    }
+    return fallback;
   }
 
   getStatusBadgeClass(status: ParcelStatus): string {
