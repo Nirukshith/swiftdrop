@@ -20,10 +20,8 @@ import { RouterLink } from '@angular/router';
         </div>
 
         <nav class="nav-links">
-          <a routerLink="/track" class="nav-link">Live Track</a>
-          <a routerLink="/merchant-registration" class="nav-link">Merchants</a>
-          <a routerLink="/login" class="nav-link">Sign In</a>
-          <a routerLink="/register" class="nav-pill">Get Started</a>
+          <a routerLink="/register" class="nav-link">Register</a>
+          <a routerLink="/login" class="nav-pill">Sign In</a>
         </nav>
       </header>
 

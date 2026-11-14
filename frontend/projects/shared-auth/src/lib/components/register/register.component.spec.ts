@@ -122,4 +122,43 @@ describe('RegisterComponent', () => {
     expect(component.errorMessage()).toContain('Too many registration attempts');
     expect(component.isLoading()).toBe(false);
   });
+
+  it('should render top bar with only Register and Sign In navigation links', () => {
+    const navLinks = fixture.nativeElement.querySelectorAll('.nav-links a');
+    expect(navLinks.length).toBe(2);
+    expect(navLinks[0].textContent.trim()).toBe('Register');
+    expect(navLinks[1].textContent.trim()).toBe('Sign In');
+  });
+
+  it('should default to CUSTOMER role and show the customer registration form', () => {
+    expect(component.selectedRole()).toBe('CUSTOMER');
+    const form = fixture.nativeElement.querySelector('form.auth-form');
+    expect(form).toBeTruthy();
+  });
+
+  it('should switch between the 4 user roles', () => {
+    const roleTabs = fixture.nativeElement.querySelectorAll('.role-tab');
+    expect(roleTabs.length).toBe(4);
+
+    // Switch to MERCHANT
+    component.selectRole('MERCHANT');
+    fixture.detectChanges();
+    expect(component.selectedRole()).toBe('MERCHANT');
+    expect(fixture.nativeElement.textContent).toContain('Merchant Partner');
+    expect(fixture.nativeElement.querySelector('a[href="/merchant-registration"]')).toBeTruthy();
+
+    // Switch to ADMIN
+    component.selectRole('ADMIN');
+    fixture.detectChanges();
+    expect(component.selectedRole()).toBe('ADMIN');
+    expect(fixture.nativeElement.textContent).toContain('Administrator Access');
+    expect(fixture.nativeElement.textContent).toContain('Internal Security Provisioning');
+
+    // Switch to DISPATCHER
+    component.selectRole('DISPATCHER');
+    fixture.detectChanges();
+    expect(component.selectedRole()).toBe('DISPATCHER');
+    expect(fixture.nativeElement.textContent).toContain('Dispatcher Access');
+    expect(fixture.nativeElement.textContent).toContain('Operations Dispatch Console');
+  });
 });

@@ -161,4 +161,40 @@ describe('LoginComponent', () => {
     expect(component.isLoading()).toBe(false);
     expect(component.errorMessage()).toContain('Unable to initiate Google sign-in');
   });
+
+  it('should render top bar with only Register and Sign In navigation links', () => {
+    const navLinks = fixture.nativeElement.querySelectorAll('.nav-links a');
+    expect(navLinks.length).toBe(2);
+    expect(navLinks[0].textContent.trim()).toBe('Register');
+    expect(navLinks[1].textContent.trim()).toBe('Sign In');
+  });
+
+  it('should support switching between 4 roles and pre-filling sample credentials', () => {
+    const roleTabs = fixture.nativeElement.querySelectorAll('.role-tab');
+    expect(roleTabs.length).toBe(4);
+
+    // Default is CUSTOMER
+    expect(component.selectedRole()).toBe('CUSTOMER');
+
+    // Switch to MERCHANT
+    component.selectRole('MERCHANT');
+    fixture.detectChanges();
+    expect(component.selectedRole()).toBe('MERCHANT');
+    component.useSampleCredentials('MERCHANT');
+    expect(component.loginForm.get('email')?.value).toBe('merchant@swiftdrop.lk');
+
+    // Switch to ADMIN
+    component.selectRole('ADMIN');
+    fixture.detectChanges();
+    expect(component.selectedRole()).toBe('ADMIN');
+    component.useSampleCredentials('ADMIN');
+    expect(component.loginForm.get('email')?.value).toBe('admin@swiftdrop.lk');
+
+    // Switch to DISPATCHER
+    component.selectRole('DISPATCHER');
+    fixture.detectChanges();
+    expect(component.selectedRole()).toBe('DISPATCHER');
+    component.useSampleCredentials('DISPATCHER');
+    expect(component.loginForm.get('email')?.value).toBe('dispatcher@swiftdrop.lk');
+  });
 });

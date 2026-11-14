@@ -1,8 +1,9 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { AuthRole } from '../../models/auth.models';
 
 @Component({
   selector: 'lib-login',
@@ -21,24 +22,22 @@ import { AuthService } from '../../services/auth.service';
         </div>
 
         <nav class="nav-links">
-          <a routerLink="/track" class="nav-link">Live Track</a>
-          <a routerLink="/merchant-registration" class="nav-link">Merchants</a>
-          <a routerLink="/register" class="nav-pill">Get Started</a>
+          <a routerLink="/register" class="nav-link">Register</a>
+          <a routerLink="/login" class="nav-pill">Sign In</a>
         </nav>
       </header>
 
       <main class="hero-grid">
-        <!-- Left Column: Spoken Headlines and Floating Chips (YumLog style) -->
+        <!-- Left Column: Hero & Spoken Chips -->
         <section class="hero-copy">
           <div class="hero-badge">
             <span class="badge-dot"></span> Next-Gen Parcel Delivery
           </div>
 
-          <h1 class="hero-headline">The parcel delivery you can talk&nbsp;to</h1>
+          <h1 class="hero-headline">The parcel delivery you can talk to</h1>
 
           <p class="hero-lede">
-            Say “two parcels to Kandy with priority handling”, and dispatch is scheduled.
-            SwiftDrop calculates dynamic rates, assigns couriers in real time, and tracks every stop.
+            Sign in to manage doorstep parcels, track real-time dispatches, and coordinate logistics across Sri Lanka.
           </p>
 
           <ul class="said-chips" aria-label="Spoken delivery commands">
@@ -80,13 +79,36 @@ import { AuthService } from '../../services/auth.service';
           </div>
         </section>
 
-        <!-- Right Column: Tactile YumLog White Card -->
+        <!-- Right Column: Tactile YumLog Auth Card with 4-Role Selector -->
         <section class="auth-card-wrap">
           <div class="auth-card">
             <div class="card-header">
-              <span class="card-pill">Secure Sign In</span>
+              <span class="card-pill">{{ currentRoleMeta().label }} Sign In</span>
               <h2>Welcome back</h2>
-              <p>Log in to access your parcels, dispatch queue, and account</p>
+              <p>{{ currentRoleMeta().desc }}</p>
+            </div>
+
+            <!-- 4-User Role Selector -->
+            <div class="role-selector" role="tablist" aria-label="Select User Role">
+              @for (r of roles; track r.id) {
+                <button
+                  type="button"
+                  class="role-tab"
+                  [class.active]="selectedRole() === r.id"
+                  (click)="selectRole(r.id)"
+                  role="tab"
+                  [attr.aria-selected]="selectedRole() === r.id"
+                >
+                  <span class="role-icon">{{ r.icon }}</span>
+                  <span class="role-name">{{ r.label }}</span>
+                </button>
+              }
+            </div>
+
+            <div class="sample-hint-row">
+              <button type="button" class="sample-link" (click)="useSampleCredentials(selectedRole())">
+                ⚡ Fill sample {{ currentRoleMeta().label }} credentials
+              </button>
             </div>
 
             @if (errorMessage()) {
@@ -105,7 +127,7 @@ import { AuthService } from '../../services/auth.service';
                   id="email"
                   type="email"
                   formControlName="email"
-                  placeholder="name@swiftdrop.lk"
+                  [placeholder]="currentRoleMeta().placeholder"
                   [class.invalid]="isFieldInvalid('email')"
                   autocomplete="email"
                 />
@@ -140,7 +162,7 @@ import { AuthService } from '../../services/auth.service';
                 @if (isLoading()) {
                   <span class="spinner"></span> Signing in...
                 } @else {
-                  Sign in
+                  Sign in as {{ currentRoleMeta().label }}
                 }
               </button>
             </form>
@@ -165,8 +187,7 @@ import { AuthService } from '../../services/auth.service';
             </button>
 
             <div class="auth-footer">
-              <p>Don't have an account? <a routerLink="/register">Create one</a></p>
-              <p class="merchant-note">Merchant partner? <a routerLink="/merchant-registration">Register business</a></p>
+              <p>Don't have an account? <a routerLink="/register">Register now</a></p>
             </div>
           </div>
         </section>
@@ -354,14 +375,14 @@ import { AuthService } from '../../services/auth.service';
     }
     .auth-card {
       width: 100%;
-      max-width: 440px;
-      padding: 2.75rem 2.25rem;
+      max-width: 480px;
+      padding: 2.5rem 2.25rem;
       background: #fff;
       color: var(--ink);
       border-radius: 28px;
       box-shadow: 0 24px 60px -15px rgba(29,27,44,0.35), 0 8px 24px -6px rgba(0,0,0,0.2);
     }
-    .card-header { margin-bottom: 2rem; text-align: left; }
+    .card-header { margin-bottom: 1.25rem; text-align: left; }
     .card-pill {
       display: inline-block;
       padding: 0.25rem 0.75rem;
@@ -372,7 +393,7 @@ import { AuthService } from '../../services/auth.service';
       color: var(--terracotta);
       background: rgba(165,58,38,0.08);
       border-radius: 9999px;
-      margin-bottom: 0.75rem;
+      margin-bottom: 0.6rem;
     }
     .card-header h2 {
       font-family: var(--disp);
@@ -380,7 +401,7 @@ import { AuthService } from '../../services/auth.service';
       font-weight: 900;
       color: var(--ink);
       letter-spacing: -0.025em;
-      margin: 0 0 0.5rem;
+      margin: 0 0 0.4rem;
     }
     .card-header p {
       font-size: 0.9rem;
@@ -388,6 +409,53 @@ import { AuthService } from '../../services/auth.service';
       line-height: 1.45;
       margin: 0;
     }
+    /* 4-Role Segmented Selector */
+    .role-selector {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.25rem;
+      background: #f1f5f9;
+      padding: 0.25rem;
+      border-radius: 9999px;
+      margin-bottom: 0.85rem;
+    }
+    .role-tab {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.3rem;
+      padding: 0.5rem 0.2rem;
+      border: none;
+      border-radius: 9999px;
+      background: transparent;
+      color: var(--ink-3);
+      font-size: 0.78rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .role-tab:hover { color: var(--ink); }
+    .role-tab.active {
+      background: #fff;
+      color: var(--ink);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .role-icon { font-size: 0.85rem; }
+    .sample-hint-row {
+      margin-bottom: 1.25rem;
+      text-align: right;
+    }
+    .sample-link {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--terracotta);
+      cursor: pointer;
+      text-decoration: underline;
+    }
+    .sample-link:hover { color: #000; }
     .error-banner {
       display: flex;
       align-items: center;
@@ -535,20 +603,16 @@ import { AuthService } from '../../services/auth.service';
       cursor: not-allowed;
     }
     .auth-footer {
-      margin-top: 2rem;
+      margin-top: 1.75rem;
       text-align: center;
       font-size: 0.875rem;
       color: var(--ink-3);
-      display: flex;
-      flex-direction: column;
-      gap: 0.4rem;
     }
     .auth-footer a {
       color: var(--terracotta);
       text-decoration: none;
       font-weight: 700;
     }
-    .merchant-note { font-size: 0.8125rem; }
     @media (max-width: 960px) {
       .yum-page { padding: 1.75rem 1.25rem 3rem; }
       .hero-grid { grid-template-columns: 1fr; gap: 2.75rem; }
@@ -564,21 +628,61 @@ import { AuthService } from '../../services/auth.service';
       .hero-headline { font-size: 2.1rem; }
       .said-chip { font-size: 0.825rem; padding: 0.65rem 1rem; }
       .auth-card { padding: 1.75rem 1.25rem; border-radius: 20px; }
+      .role-tab { font-size: 0.72rem; gap: 0.15rem; }
     }
   `]
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute, { optional: true });
 
   readonly isLoading = signal(false);
   readonly errorMessage = signal<string | null>(null);
+  readonly selectedRole = signal<AuthRole>('CUSTOMER');
+
+  ngOnInit(): void {
+    const roleParam = this.route?.snapshot.queryParamMap.get('role')?.toUpperCase();
+    if (roleParam && (roleParam === 'CUSTOMER' || roleParam === 'MERCHANT' || roleParam === 'ADMIN' || roleParam === 'DISPATCHER')) {
+      this.selectedRole.set(roleParam as AuthRole);
+    }
+  }
+
+  readonly roles = [
+    { id: 'CUSTOMER' as const, label: 'Customer', icon: '👤', placeholder: 'customer@swiftdrop.lk', target: '/customer', desc: 'Sign in to track and manage personal deliveries' },
+    { id: 'MERCHANT' as const, label: 'Merchant', icon: '🏪', placeholder: 'merchant@swiftdrop.lk', target: '/merchant', desc: 'Access merchant bulk orders, CSV tools, and API' },
+    { id: 'ADMIN' as const, label: 'Admin', icon: '🛡️', placeholder: 'admin@swiftdrop.lk', target: '/admin', desc: 'System user management, approvals, and audits' },
+    { id: 'DISPATCHER' as const, label: 'Dispatcher', icon: '⚡', placeholder: 'dispatcher@swiftdrop.lk', target: '/dispatch', desc: 'Courier dispatch queue, workload, and zone rates' },
+  ];
+
+  readonly currentRoleMeta = computed(() => {
+    return this.roles.find((r) => r.id === this.selectedRole()) ?? this.roles[0];
+  });
 
   readonly loginForm: FormGroup = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required]]
   });
+
+  selectRole(role: AuthRole): void {
+    this.selectedRole.set(role);
+    this.errorMessage.set(null);
+  }
+
+  useSampleCredentials(role: AuthRole): void {
+    const sampleEmails: Record<AuthRole, string> = {
+      CUSTOMER: 'customer@swiftdrop.lk',
+      MERCHANT: 'merchant@swiftdrop.lk',
+      ADMIN: 'admin@swiftdrop.lk',
+      DISPATCHER: 'dispatcher@swiftdrop.lk',
+    };
+    this.loginForm.patchValue({
+      email: sampleEmails[role],
+      password: 'Password123!'
+    });
+    this.loginForm.markAsDirty();
+  }
 
   onGoogleLogin(): void {
     this.errorMessage.set(null);
@@ -608,8 +712,8 @@ export class LoginComponent {
     this.authService.login(this.loginForm.value).subscribe({
       next: (response) => {
         this.isLoading.set(false);
-        const role = response.user.role?.toLowerCase();
-        const target = role ? `/${role}` : '/customer';
+        const role = response.user.role?.toLowerCase() || this.selectedRole().toLowerCase();
+        const target = role === 'dispatcher' ? '/dispatch' : `/${role}`;
         this.router.navigate([target]);
       },
       error: (err) => {

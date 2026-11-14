@@ -1,3 +1,5 @@
+export type AuthRole = 'CUSTOMER' | 'MERCHANT' | 'ADMIN' | 'DISPATCHER';
+
 export interface User {
   id: string;
   email: string;
