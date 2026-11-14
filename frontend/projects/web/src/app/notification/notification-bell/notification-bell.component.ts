@@ -3,6 +3,7 @@ import {
   OnInit,
   computed,
   inject,
+  input,
   signal,
   HostListener,
   ElementRef,
@@ -20,6 +21,13 @@ import { NotificationItem } from '../notification.model';
  * pagination (load more), loading indicators, error retry, and keyboard/click-outside
  * dismissals.
  */
+interface SidePanelPosition {
+  left: number;
+  top: number | null;
+  bottom: number | null;
+  maxHeight: number;
+}
+
 @Component({
   selector: 'app-notification-bell',
   standalone: true,
@@ -74,9 +82,17 @@ import { NotificationItem } from '../notification.model';
           id="notification-dropdown"
           role="dialog"
           aria-label="Notifications"
-          class="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl
+          class="w-80 sm:w-96 bg-white rounded-2xl shadow-xl
                  border border-slate-200 z-50 flex flex-col overflow-hidden
                  animate-fade-in"
+          [class.absolute]="placement() === 'below'"
+          [class.right-0]="placement() === 'below'"
+          [class.mt-2]="placement() === 'below'"
+          [class.fixed]="placement() === 'right'"
+          [style.left.px]="sidePosition()?.left"
+          [style.top.px]="sidePosition()?.top"
+          [style.bottom.px]="sidePosition()?.bottom"
+          [style.max-height.px]="sidePosition()?.maxHeight"
         >
           <!-- Header -->
           <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
@@ -126,7 +142,7 @@ import { NotificationItem } from '../notification.model';
           } @else {
             <!-- Notification list -->
             <ul
-              class="overflow-y-auto max-h-[360px] divide-y divide-slate-100"
+              class="overflow-y-auto max-h-[360px] min-h-0 divide-y divide-slate-100"
               role="list"
             >
               @for (item of allItems(); track item.id) {
@@ -200,7 +216,17 @@ export class NotificationBellComponent implements OnInit {
   private readonly notificationService = inject(NotificationService);
   private readonly el = inject(ElementRef);
 
+  /**
+   * Where the dropdown opens. 'below' (default) drops down and aligns to the bell's right edge,
+   * for top bars. 'right' opens beside the bell, for a narrow left sidebar where a panel aligned
+   * to the right edge would be pushed off the screen.
+   */
+  readonly placement = input<'below' | 'right'>('below');
+
   protected readonly isOpen = signal(false);
+
+  /** Screen position of the panel in 'right' placement; null in 'below' placement. */
+  protected readonly sidePosition = signal<SidePanelPosition | null>(null);
   protected readonly pageSize = 5;
   protected readonly currentPage = signal(0);
   protected readonly isLoadingMore = signal(false);
@@ -228,6 +254,9 @@ export class NotificationBellComponent implements OnInit {
 
   toggleDropdown(): void {
     const nextState = !this.isOpen();
+    if (nextState) {
+      this.positionSidePanel();
+    }
     this.isOpen.set(nextState);
     if (nextState) {
       this.currentPage.set(0);
@@ -271,6 +300,30 @@ export class NotificationBellComponent implements OnInit {
   }
 
   /** Close on Escape */
+  /**
+   * In 'right' placement the panel is fixed beside the bell, opening downward or upward (whichever
+   * side of the bell has more room) and capped to the space on that side, so it always stays on screen
+   * however tall the list is or wherever the bell sits in the sidebar.
+   */
+  @HostListener('window:resize')
+  positionSidePanel(): void {
+    if (this.placement() !== 'right') {
+      this.sidePosition.set(null);
+      return;
+    }
+    const bell = (this.el.nativeElement as HTMLElement).getBoundingClientRect();
+    const margin = 16;
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - bell.top - margin;
+    const spaceAbove = bell.bottom - margin;
+    const left = bell.right + 24;
+    this.sidePosition.set(
+      spaceBelow >= spaceAbove
+        ? { left, top: bell.top, bottom: null, maxHeight: spaceBelow }
+        : { left, top: null, bottom: viewportHeight - bell.bottom, maxHeight: spaceAbove },
+    );
+  }
+
   @HostListener('document:keydown.escape')
   onEscape(): void {
     this.isOpen.set(false);
