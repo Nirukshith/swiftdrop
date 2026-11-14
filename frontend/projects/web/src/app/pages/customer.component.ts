@@ -96,13 +96,13 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               }
             </button>
 
-            <!-- 4. Rounded Orange Plus Button (New Delivery Wizard) -->
+            <!-- 4. Plus Button (New Delivery Wizard) -->
             <button
               type="button"
               id="tab-wizard-btn"
               (click)="startNewDelivery()"
               [class.ring-2]="activeTab() === 'wizard'"
-              class="w-10 h-10 rounded-2xl bg-[#f2533a] hover:bg-[#d94129] text-white flex items-center justify-center shadow-md shadow-[#f2533a]/25 hover:scale-105 transition-all cursor-pointer"
+              class="w-10 h-10 rounded-2xl bg-[#a53a26] hover:bg-[#7e2615] text-white flex items-center justify-center shadow-md shadow-[#a53a26]/20 hover:scale-105 transition-all cursor-pointer"
               title="Book New Delivery"
             >
               <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -164,7 +164,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
 
               <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-[#faf8f6] border border-[#e8e2dc]">
                 <div
-                  class="w-8 h-8 rounded-full bg-[#f2533a] text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm"
+                  class="w-8 h-8 rounded-full bg-[#a53a26] text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm"
                 >
                   {{ customerInitials() }}
                 </div>
@@ -217,10 +217,10 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 Welcome back, {{ customerName() }}!
               </h1>
               <div
-                class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#fef7ee] border border-[#fde3c7] text-[#c45a12] text-xs font-bold shadow-sm"
+                class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#faf6f0] border border-[#a53a26]/20 text-[#a53a26] text-xs font-bold shadow-sm"
               >
                 <span>👋 Pro Tip:</span>
-                <span class="font-semibold text-[#8c3c04]">Setup your preferred delivery days &gt;</span>
+                <span class="font-semibold text-[#1d1b2c]">Setup your preferred delivery days &gt;</span>
               </div>
             </div>
 
@@ -248,14 +248,14 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                   <!-- 3D Isometric Parcels Graphic (Terracotta & White Cubes) -->
                   <div class="relative w-28 h-28 flex-shrink-0 -mt-2 -mr-1">
                     <svg class="w-full h-full drop-shadow-md" viewBox="0 0 160 140" fill="none">
-                      <!-- Orange/Terracotta Isometric Cube (Back/Higher) -->
+                      <!-- Terracotta Isometric Cube (Back/Higher) -->
                       <g transform="translate(68, 15)">
                         <!-- Top Face -->
-                        <polygon points="40,0 80,20 40,40 0,20" fill="#f2533a" />
+                        <polygon points="40,0 80,20 40,40 0,20" fill="#a53a26" />
                         <!-- Left Face -->
-                        <polygon points="0,20 40,40 40,84 0,64" fill="#c44730" />
+                        <polygon points="0,20 40,40 40,84 0,64" fill="#7e2615" />
                         <!-- Right Face -->
-                        <polygon points="40,40 80,20 80,64 40,84" fill="#a53a26" />
+                        <polygon points="40,40 80,20 80,64 40,84" fill="#5c1b0f" />
                       </g>
                       <!-- White/Sand Isometric Cube (Front/Lower) -->
                       <g transform="translate(15, 45)">
@@ -275,23 +275,23 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                   <button
                     type="button"
                     (click)="startNewDelivery()"
-                    class="px-5 py-2.5 rounded-full bg-[#f2533a] hover:bg-[#d94129] text-white font-bold text-xs transition-all shadow-sm hover:scale-[1.02] active:scale-95 cursor-pointer"
+                    class="px-5 py-2.5 rounded-full bg-[#a53a26] hover:bg-[#7e2615] text-white font-bold text-xs transition-all shadow-sm hover:scale-[1.02] active:scale-95 cursor-pointer"
                   >
                     Reschedule
                   </button>
                   <button
                     type="button"
                     (click)="activeTab.set('addresses')"
-                    class="px-5 py-2.5 rounded-full border border-[#f2533a] text-[#f2533a] hover:bg-[#faf6f0] font-bold text-xs transition-all cursor-pointer"
+                    class="px-5 py-2.5 rounded-full border border-[#a53a26] text-[#a53a26] hover:bg-[#faf6f0] font-bold text-xs transition-all cursor-pointer"
                   >
                     Manage Preferences
                   </button>
                 </div>
               </div>
 
-              <!-- Hero Card 2: Quick Tracking Card (Terracotta Gradient Card) -->
+              <!-- Hero Card 2: Quick Tracking Card (Matching Logo Terracotta #a53a26) -->
               <div
-                class="hero-track-card bg-gradient-to-br from-[#a53a26] via-[#c44730] to-[#f2533a] rounded-3xl p-6 sm:p-7 text-white shadow-md shadow-[#a53a26]/20 flex flex-col justify-between space-y-4"
+                class="hero-track-card bg-[#a53a26] rounded-3xl p-6 sm:p-7 text-white shadow-md shadow-[#a53a26]/20 flex flex-col justify-between space-y-4"
               >
                 <div>
                   <span class="text-[10px] font-black uppercase tracking-widest text-white/70 block mb-1">
@@ -399,7 +399,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                         <button
                           type="button"
                           (click)="viewParcelDetails(parcel)"
-                          class="text-[#f2533a] hover:underline font-bold text-xs cursor-pointer"
+                          class="text-[#a53a26] hover:text-[#7e2615] hover:underline font-bold text-xs cursor-pointer"
                         >
                           View details &gt;
                         </button>
@@ -415,7 +415,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 <button
                   type="button"
                   (click)="selectedStatusFilter.set(null); loadParcels()"
-                  class="text-[#f2533a] hover:underline cursor-pointer"
+                  class="text-[#a53a26] hover:text-[#7e2615] hover:underline cursor-pointer"
                 >
                   Show all &gt;
                 </button>
@@ -1279,7 +1279,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
       :host {
         --terracotta: #a53a26;
         --terracotta-dark: #7e2615;
-        --coral: #f2533a;
+        --coral: #a53a26;
         --ink: #1d1b2c;
         --ink-2: #3a384e;
         --ink-3: #6f6d85;
