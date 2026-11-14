@@ -36,7 +36,9 @@ export class App {
       cleanUrl === '/register' ||
       cleanUrl === '/merchant-registration' ||
       cleanUrl === '/forgot-password' ||
-      cleanUrl === '/reset-password'
+      cleanUrl === '/reset-password' ||
+      cleanUrl === '/customer' ||
+      cleanUrl.startsWith('/customer/')
     );
   }
 

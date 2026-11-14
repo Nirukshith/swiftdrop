@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { CustomerComponent } from './customer.component';
 import { CustomerAddress, CustomerParcel, QuoteResponse } from './customer/customer.model';
@@ -54,6 +55,7 @@ describe('CustomerComponent', () => {
       imports: [CustomerComponent],
       providers: [
         CustomerService,
+        provideRouter([]),
         provideHttpClient(),
         provideHttpClientTesting(),
       ],
