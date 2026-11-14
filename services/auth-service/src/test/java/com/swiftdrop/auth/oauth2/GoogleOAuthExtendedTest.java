@@ -67,7 +67,7 @@ class GoogleOAuthExtendedTest {
         properties = new GoogleOAuthProperties();
         properties.setClientId("test-google-client-id");
         properties.setClientSecret("test-google-client-secret");
-        properties.setRedirectUri("http://localhost/api/v1/auth/oauth2/callback/google");
+        properties.setRedirectUri("http://localhost:8081/api/v1/auth/oauth2/callback/google");
         properties.setAuthUrl("https://accounts.google.com/o/oauth2/v2/auth");
         properties.setTokenUrl("https://oauth2.googleapis.com/token");
         properties.setFrontendCallbackUrl("http://localhost:4200/auth/callback");
