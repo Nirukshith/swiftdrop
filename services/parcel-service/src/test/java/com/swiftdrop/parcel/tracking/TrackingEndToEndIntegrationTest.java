@@ -43,6 +43,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
@@ -355,7 +356,11 @@ class TrackingEndToEndIntegrationTest {
         Instant last = Instant.parse(timeline.get(2).get("occurredAt").asText());
         assertThat(last).isAfterOrEqualTo(first).isBefore(Instant.now().plusSeconds(5));
         assertThat(body.get("lastUpdatedAt").asText()).isEqualTo(timeline.get(2).get("occurredAt").asText());
-        assertThat(response.body()).doesNotContain("Temple Road", "Flat 2", "20000", "Galle Road", "+9477", "750",
+        List<String> fieldNames = new ArrayList<>();
+        body.fieldNames().forEachRemaining(fieldNames::add);
+        assertThat(fieldNames).containsExactlyInAnyOrder(
+                "trackingNumber", "status", "recipientNameMasked", "dropoffDistrict", "lastUpdatedAt", "timeline");
+        assertThat(response.body()).doesNotContain("Temple Road", "Flat 2", "20000", "Galle Road", "+9477",
                 "Gate code", "Sunil", OWNER, COURIER, parcel.getId());
     }
 
