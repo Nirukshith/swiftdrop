@@ -22,50 +22,52 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="max-w-7xl mx-auto space-y-6 pb-12">
+    <div class="customer-portal-wrap max-w-7xl mx-auto space-y-6 pb-16">
       <!-- Portal Header -->
       <div
-        class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4"
+        class="portal-header bg-white rounded-3xl p-6 sm:p-7 border border-[#e8e2dc] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5"
       >
-        <div>
-          <div class="flex items-center gap-3">
-            <span
-              class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-600 text-white font-bold text-lg shadow-sm shadow-indigo-200"
-            >
-              SD
-            </span>
-            <div>
-              <h1 class="text-2xl font-bold text-slate-900 tracking-tight">
-                Customer Delivery Portal
-              </h1>
-              <p class="text-xs text-slate-500 font-medium">
-                SwiftDrop Express Parcel Booking & Address Book
-              </p>
+        <div class="flex items-center gap-4">
+          <div
+            class="brand-badge w-12 h-12 rounded-2xl bg-[#a53a26] text-white flex items-center justify-center shadow-md shadow-[#a53a26]/20 flex-shrink-0"
+          >
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="portal-pill">Customer Portal</span>
+              <span class="text-xs font-semibold text-[#6f6d85]">Islandwide Delivery</span>
             </div>
+            <h1 class="portal-title text-2xl font-black text-[#1d1b2c] tracking-tight mt-0.5">
+              Express Parcel Booking
+            </h1>
           </div>
         </div>
 
-        <!-- Navigation Tabs -->
+        <!-- Navigation Tabs (Segmented Pill Style) -->
         <div
-          class="inline-flex rounded-xl bg-slate-100 p-1.5 border border-slate-200 text-sm font-semibold"
+          class="tab-pill-bar inline-flex rounded-full bg-[#f1f5f9] p-1.5 border border-[#e2e8f0]/80 text-sm font-bold"
         >
           <button
             type="button"
             id="tab-deliveries-btn"
             (click)="activeTab.set('deliveries')"
-            [class.bg-white]="activeTab() === 'deliveries'"
-            [class.shadow-sm]="activeTab() === 'deliveries'"
-            [class.text-indigo-600]="activeTab() === 'deliveries'"
-            [class.text-slate-600]="activeTab() !== 'deliveries'"
-            class="px-4 py-2 rounded-lg transition-all flex items-center gap-2"
+            [class.active]="activeTab() === 'deliveries'"
+            class="tab-pill px-5 py-2.5 rounded-full transition-all flex items-center gap-2 font-bold text-sm"
           >
-            <span>📦</span> My Deliveries
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+            <span>My Deliveries</span>
             <span
-              class="ml-1 text-xs px-2 py-0.5 rounded-full"
-              [class.bg-indigo-100]="activeTab() === 'deliveries'"
-              [class.text-indigo-700]="activeTab() === 'deliveries'"
-              [class.bg-slate-200]="activeTab() !== 'deliveries'"
-              [class.text-slate-600]="activeTab() !== 'deliveries'"
+              class="count-badge ml-1 text-xs px-2 py-0.5 rounded-full"
+              [class.active-badge]="activeTab() === 'deliveries'"
             >
               {{ parcels().length }}
             </span>
@@ -75,32 +77,31 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             type="button"
             id="tab-wizard-btn"
             (click)="activeTab.set('wizard')"
-            [class.bg-white]="activeTab() === 'wizard'"
-            [class.shadow-sm]="activeTab() === 'wizard'"
-            [class.text-indigo-600]="activeTab() === 'wizard'"
-            [class.text-slate-600]="activeTab() !== 'wizard'"
-            class="px-4 py-2 rounded-lg transition-all flex items-center gap-2"
+            [class.active]="activeTab() === 'wizard'"
+            class="tab-pill px-5 py-2.5 rounded-full transition-all flex items-center gap-2 font-bold text-sm"
           >
-            <span>✨</span> New Delivery
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>New Delivery</span>
           </button>
 
           <button
             type="button"
             id="tab-addresses-btn"
             (click)="activeTab.set('addresses')"
-            [class.bg-white]="activeTab() === 'addresses'"
-            [class.shadow-sm]="activeTab() === 'addresses'"
-            [class.text-indigo-600]="activeTab() === 'addresses'"
-            [class.text-slate-600]="activeTab() !== 'addresses'"
-            class="px-4 py-2 rounded-lg transition-all flex items-center gap-2"
+            [class.active]="activeTab() === 'addresses'"
+            class="tab-pill px-5 py-2.5 rounded-full transition-all flex items-center gap-2 font-bold text-sm"
           >
-            <span>📖</span> Address Book
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+            <span>Address Book</span>
             <span
-              class="ml-1 text-xs px-2 py-0.5 rounded-full"
-              [class.bg-indigo-100]="activeTab() === 'addresses'"
-              [class.text-indigo-700]="activeTab() === 'addresses'"
-              [class.bg-slate-200]="activeTab() !== 'addresses'"
-              [class.text-slate-600]="activeTab() !== 'addresses'"
+              class="count-badge ml-1 text-xs px-2 py-0.5 rounded-full"
+              [class.active-badge]="activeTab() === 'addresses'"
             >
               {{ addresses().length }}
             </span>
@@ -112,18 +113,26 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
       @if (notification()) {
       <div
         id="toast-notification"
-        class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl flex items-center justify-between text-sm shadow-sm transition-all"
+        class="toast-alert bg-[#faf6f0] border border-[#a53a26]/20 text-[#1d1b2c] px-5 py-3.5 rounded-2xl flex items-center justify-between text-sm shadow-sm transition-all"
       >
-        <div class="flex items-center gap-2 font-medium">
-          <span class="text-emerald-600 text-base">✓</span>
+        <div class="flex items-center gap-3 font-semibold">
+          <div class="w-7 h-7 rounded-full bg-[#a53a26]/10 text-[#a53a26] flex items-center justify-center flex-shrink-0">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
           <span>{{ notification() }}</span>
         </div>
         <button
           type="button"
           (click)="notification.set(null)"
-          class="text-emerald-600 hover:text-emerald-900 font-bold"
+          class="text-[#6f6d85] hover:text-[#1d1b2c] font-bold p-1 rounded-lg transition-colors"
+          aria-label="Dismiss notification"
         >
-          ✕
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
         </button>
       </div>
       }
@@ -135,21 +144,18 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
       <div class="space-y-6">
         <!-- Quick Filter & Actions -->
         <div
-          class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+          class="bg-white rounded-3xl p-5 border border-[#e8e2dc] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4"
         >
           <div class="flex flex-wrap items-center gap-2">
-            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider mr-1">
+            <span class="text-xs font-bold text-[#6f6d85] uppercase tracking-wider mr-1">
               Filter Status:
             </span>
-            @for (st of statusFilters; track st.value) {
+            @for (st of statusFilters; track $index) {
             <button
               type="button"
               (click)="selectedStatusFilter.set(st.value); selectedParcelPage.set(0); loadParcels()"
-              [class.bg-indigo-600]="selectedStatusFilter() === st.value"
-              [class.text-white]="selectedStatusFilter() === st.value"
-              [class.bg-slate-100]="selectedStatusFilter() !== st.value"
-              [class.text-slate-600]="selectedStatusFilter() !== st.value"
-              class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:bg-slate-200"
+              [class.filter-active]="selectedStatusFilter() === st.value"
+              class="filter-pill px-4 py-2 rounded-full text-xs font-bold transition-all"
             >
               {{ st.label }}
             </button>
@@ -159,18 +165,22 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
           <button
             type="button"
             (click)="startNewDelivery()"
-            class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
+            class="action-pill-btn inline-flex items-center gap-2 px-5 py-2.5 bg-[#1d1b2c] hover:bg-black text-white text-sm font-bold rounded-full shadow-sm transition-all"
           >
-            <span>+</span> Book Delivery
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Book Delivery</span>
           </button>
         </div>
 
         <!-- Parcels Table / Card List -->
-        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div class="bg-white rounded-3xl border border-[#e8e2dc] shadow-sm overflow-hidden">
           <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm text-slate-600">
+            <table class="w-full text-left text-sm text-[#1d1b2c]">
               <thead
-                class="bg-slate-50/75 border-b border-slate-200 text-xs font-bold text-slate-700 uppercase tracking-wider"
+                class="bg-[#faf8f6] border-b border-[#eee7e0] text-xs font-bold text-[#6f6d85] uppercase tracking-wider"
               >
                 <tr>
                   <th class="px-6 py-4">Tracking Number</th>
@@ -182,50 +192,61 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                   <th class="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-slate-100 font-medium">
+              <tbody class="divide-y divide-[#f2ede8] font-medium">
                 @if (parcels().length === 0) {
                 <tr>
-                  <td colspan="7" class="px-6 py-12 text-center text-slate-400">
-                    <p class="text-base font-semibold">No deliveries found</p>
-                    <p class="text-xs text-slate-400 mt-1">
+                  <td colspan="7" class="px-6 py-14 text-center">
+                    <div class="w-12 h-12 rounded-2xl bg-[#faf6f0] text-[#a53a26] flex items-center justify-center mx-auto mb-3">
+                      <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                        <line x1="12" y1="22.08" x2="12" y2="12"/>
+                      </svg>
+                    </div>
+                    <p class="text-base font-bold text-[#1d1b2c]">No deliveries found</p>
+                    <p class="text-xs text-[#6f6d85] mt-1 font-medium">
                       Use the New Delivery Wizard to send your first parcel!
                     </p>
                   </td>
                 </tr>
                 } @for (parcel of parcels(); track parcel.id) {
-                <tr class="hover:bg-slate-50/60 transition-colors">
-                  <td class="px-6 py-4 font-mono font-bold text-indigo-600 text-xs">
-                    {{ parcel.trackingNumber }}
+                <tr class="hover:bg-[#faf8f6]/80 transition-colors">
+                  <td class="px-6 py-4">
+                    <span class="font-mono font-bold text-xs px-2.5 py-1 rounded-lg bg-[#faf6f0] text-[#a53a26] border border-[#a53a26]/15">
+                      {{ parcel.trackingNumber }}
+                    </span>
                   </td>
                   <td class="px-6 py-4">
                     <span
-                      class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold"
+                      class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold"
                       [ngClass]="getStatusBadgeClass(parcel.status)"
                     >
                       {{ parcel.status }}
                     </span>
                   </td>
                   <td class="px-6 py-4">
-                    <div class="text-xs font-semibold text-slate-900">
-                      {{ parcel.pickupAddress.district }} → {{ parcel.dropoffAddress.district }}
+                    <div class="text-xs font-bold text-[#1d1b2c] flex items-center gap-1.5">
+                      <span>{{ parcel.pickupAddress.district }}</span>
+                      <span class="text-[#a53a26]">→</span>
+                      <span>{{ parcel.dropoffAddress.district }}</span>
                     </div>
-                    <div class="text-xs text-slate-400 truncate max-w-xs">
+                    <div class="text-xs text-[#6f6d85] truncate max-w-xs mt-0.5">
                       {{ parcel.dropoffAddress.line1 }}, {{ parcel.dropoffAddress.city }}
                     </div>
                   </td>
                   <td class="px-6 py-4">
-                    <div class="text-xs font-bold text-slate-800">
+                    <div class="text-xs font-bold text-[#1d1b2c]">
                       {{ parcel.recipientName }}
                     </div>
-                    <div class="text-xs text-slate-400">
+                    <div class="text-xs text-[#6f6d85]">
                       {{ parcel.recipientPhone }}
                     </div>
                   </td>
-                  <td class="px-6 py-4 text-xs text-slate-700">
+                  <td class="px-6 py-4 text-xs font-semibold text-[#1d1b2c]">
                     {{ parcel.weightKg }} kg ·
-                    <span class="font-semibold">{{ parcel.size }}</span>
+                    <span class="text-[#a53a26] font-bold">{{ parcel.size }}</span>
                   </td>
-                  <td class="px-6 py-4 font-bold text-slate-900 text-sm">
+                  <td class="px-6 py-4 font-black text-[#1d1b2c] text-sm font-mono">
                     Rs. {{ parcel.fee.toFixed(2) }}
                   </td>
                   <td class="px-6 py-4 text-right">
@@ -233,12 +254,12 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                     <button
                       type="button"
                       (click)="cancelParcel(parcel.id)"
-                      class="px-3 py-1 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg text-xs font-semibold border border-rose-200 transition-colors"
+                      class="px-3.5 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-full text-xs font-bold border border-rose-200 transition-colors"
                     >
                       Cancel
                     </button>
                     } @else {
-                    <span class="text-xs text-slate-400">Immutable</span>
+                    <span class="text-xs font-semibold text-[#a09eaf]">Immutable</span>
                     }
                   </td>
                 </tr>
@@ -247,8 +268,8 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             </table>
           </div>
           @if (parcelPage().totalPages > 1) {
-          <div class="flex items-center justify-between border-t border-slate-100 px-6 py-4">
-            <span class="text-xs font-semibold text-slate-500">
+          <div class="flex items-center justify-between border-t border-[#eee7e0] px-6 py-4 bg-[#faf8f6]/50">
+            <span class="text-xs font-bold text-[#6f6d85]">
               Page {{ parcelPage().page + 1 }} of {{ parcelPage().totalPages }}
             </span>
             <div class="flex items-center gap-2">
@@ -256,7 +277,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 type="button"
                 (click)="changeParcelPage(parcelPage().page - 1)"
                 [disabled]="parcelPage().page === 0"
-                class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 disabled:opacity-40"
+                class="px-4 py-1.5 rounded-full text-xs font-bold border border-[#e2e8f0] bg-white text-[#1d1b2c] hover:bg-[#f1f5f9] disabled:opacity-40 transition-all"
               >
                 Previous
               </button>
@@ -264,7 +285,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 type="button"
                 (click)="changeParcelPage(parcelPage().page + 1)"
                 [disabled]="parcelPage().page >= parcelPage().totalPages - 1"
-                class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 disabled:opacity-40"
+                class="px-4 py-1.5 rounded-full text-xs font-bold border border-[#e2e8f0] bg-white text-[#1d1b2c] hover:bg-[#f1f5f9] disabled:opacity-40 transition-all"
               >
                 Next
               </button>
@@ -279,18 +300,30 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
       <!-- TAB 2: NEW DELIVERY WIZARD                                        -->
       <!-- ================================================================= -->
       @if (activeTab() === 'wizard') {
-      <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 sm:p-8 space-y-8">
+      <div class="bg-white rounded-3xl border border-[#e8e2dc] shadow-sm p-6 sm:p-8 space-y-8">
         <!-- Wizard Progress Bar -->
-        <div class="space-y-2">
-          <div class="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <span [class.text-indigo-600]="wizardStep() >= 1">1. Route & Addresses</span>
-            <span [class.text-indigo-600]="wizardStep() >= 2">2. Parcel & Recipient</span>
-            <span [class.text-indigo-600]="wizardStep() >= 3">3. Fee Preview</span>
-            <span [class.text-indigo-600]="wizardStep() >= 4">4. Confirmation</span>
+        <div class="wizard-stepper space-y-3">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-bold text-[#6f6d85]">
+            <div class="step-label flex items-center gap-2" [class.step-active]="wizardStep() >= 1">
+              <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black" [class.num-active]="wizardStep() >= 1">1</span>
+              <span>Route & Addresses</span>
+            </div>
+            <div class="step-label flex items-center gap-2" [class.step-active]="wizardStep() >= 2">
+              <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black" [class.num-active]="wizardStep() >= 2">2</span>
+              <span>Parcel & Contact</span>
+            </div>
+            <div class="step-label flex items-center gap-2" [class.step-active]="wizardStep() >= 3">
+              <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black" [class.num-active]="wizardStep() >= 3">3</span>
+              <span>Instant Quote</span>
+            </div>
+            <div class="step-label flex items-center gap-2" [class.step-active]="wizardStep() >= 4">
+              <span class="step-num w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black" [class.num-active]="wizardStep() >= 4">4</span>
+              <span>Confirmation</span>
+            </div>
           </div>
-          <div class="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+          <div class="h-2 w-full bg-[#f1f5f9] rounded-full overflow-hidden">
             <div
-              class="h-full bg-indigo-600 transition-all duration-300"
+              class="h-full bg-[#a53a26] transition-all duration-300 rounded-full"
               [style.width.%]="(wizardStep() / 4) * 100"
             ></div>
           </div>
@@ -299,19 +332,20 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
         <!-- STEP 1: ROUTE & ADDRESSES -->
         @if (wizardStep() === 1) {
         <div class="space-y-6">
-          <div class="border-b border-slate-100 pb-4">
-            <h2 class="text-lg font-bold text-slate-900">Step 1: Origin & Destination</h2>
-            <p class="text-xs text-slate-500 mt-1">
-              Specify pickup and delivery addresses. Sri Lanka district selection enforces ADR 002.
+          <div class="border-b border-[#eee7e0] pb-4">
+            <span class="card-pill">Step 1 of 4</span>
+            <h2 class="text-xl font-black text-[#1d1b2c] tracking-tight mt-1">Origin & Destination</h2>
+            <p class="text-xs text-[#6f6d85] mt-1 font-medium">
+              Specify pickup origin and delivery dropoff. Sri Lanka district routing enforces ADR 002.
             </p>
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- Pickup Address -->
-            <div class="space-y-4 p-5 rounded-2xl bg-slate-50/70 border border-slate-200/60">
+            <div class="space-y-4 p-6 rounded-2xl bg-[#faf8f6] border border-[#eee7e0]">
               <div class="flex items-center justify-between">
-                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                  <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs">
+                <h3 class="text-sm font-black text-[#1d1b2c] flex items-center gap-2">
+                  <span class="w-7 h-7 rounded-xl bg-[#a53a26] text-white flex items-center justify-center text-xs font-black">
                     A
                   </span>
                   Pickup Origin (Sender)
@@ -319,7 +353,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 @if (addresses().length > 0) {
                 <select
                   (change)="selectSavedAddress('pickup', $any($event.target).value)"
-                  class="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1 font-semibold text-indigo-600"
+                  class="text-xs bg-white border border-[#e2e8f0] rounded-xl px-3 py-1.5 font-bold text-[#a53a26] shadow-sm focus:outline-none focus:ring-2 focus:ring-[#a53a26]/20"
                 >
                   <option value="">Quick fill from Address Book...</option>
                   @for (a of addresses(); track a.id) {
@@ -329,56 +363,56 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 }
               </div>
 
-              <div class="space-y-3 text-xs font-semibold text-slate-700">
+              <div class="space-y-3.5 text-xs font-bold text-[#1d1b2c]">
                 <div>
-                  <label class="block mb-1">Street Address Line 1 *</label>
+                  <label class="block mb-1 text-[#3a384e]">Street Address Line 1 *</label>
                   <input
                     type="text"
                     id="pickup-line1"
                     [(ngModel)]="wizardData.pickupAddress.line1"
                     placeholder="e.g. 142 Havelock Road"
-                    class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                   />
                 </div>
 
                 <div>
-                  <label class="block mb-1">Street Address Line 2 (Optional)</label>
+                  <label class="block mb-1 text-[#3a384e]">Street Address Line 2 (Optional)</label>
                   <input
                     type="text"
                     [(ngModel)]="wizardData.pickupAddress.line2"
                     placeholder="Apartment, suite, unit, etc."
-                    class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                   />
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">
                   <div>
-                    <label class="block mb-1">City *</label>
+                    <label class="block mb-1 text-[#3a384e]">City *</label>
                     <input
                       type="text"
                       [(ngModel)]="wizardData.pickupAddress.city"
                       placeholder="e.g. Colombo 05"
-                      class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                     />
                   </div>
                   <div>
-                    <label class="block mb-1">Postal Code *</label>
+                    <label class="block mb-1 text-[#3a384e]">Postal Code *</label>
                     <input
                       type="text"
                       [(ngModel)]="wizardData.pickupAddress.postalCode"
                       placeholder="e.g. 00500"
-                      class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label class="block mb-1">District (ADR 002) *</label>
+                  <label class="block mb-1 text-[#3a384e]">District (ADR 002) *</label>
                   <select
                     id="pickup-district"
                     [(ngModel)]="wizardData.pickupAddress.district"
                     (change)="updateFeePreview()"
-                    class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-bold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                   >
                     @for (d of districts; track d) {
                     <option [value]="d">{{ d }}</option>
@@ -389,10 +423,10 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             </div>
 
             <!-- Dropoff Address -->
-            <div class="space-y-4 p-5 rounded-2xl bg-slate-50/70 border border-slate-200/60">
+            <div class="space-y-4 p-6 rounded-2xl bg-[#faf8f6] border border-[#eee7e0]">
               <div class="flex items-center justify-between">
-                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                  <span class="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs">
+                <h3 class="text-sm font-black text-[#1d1b2c] flex items-center gap-2">
+                  <span class="w-7 h-7 rounded-xl bg-[#2e7d32] text-white flex items-center justify-center text-xs font-black">
                     B
                   </span>
                   Dropoff Destination (Recipient)
@@ -400,7 +434,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 @if (addresses().length > 0) {
                 <select
                   (change)="selectSavedAddress('dropoff', $any($event.target).value)"
-                  class="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1 font-semibold text-indigo-600"
+                  class="text-xs bg-white border border-[#e2e8f0] rounded-xl px-3 py-1.5 font-bold text-[#a53a26] shadow-sm focus:outline-none focus:ring-2 focus:ring-[#a53a26]/20"
                 >
                   <option value="">Quick fill from Address Book...</option>
                   @for (a of addresses(); track a.id) {
@@ -410,56 +444,56 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 }
               </div>
 
-              <div class="space-y-3 text-xs font-semibold text-slate-700">
+              <div class="space-y-3.5 text-xs font-bold text-[#1d1b2c]">
                 <div>
-                  <label class="block mb-1">Street Address Line 1 *</label>
+                  <label class="block mb-1 text-[#3a384e]">Street Address Line 1 *</label>
                   <input
                     type="text"
                     id="dropoff-line1"
                     [(ngModel)]="wizardData.dropoffAddress.line1"
                     placeholder="e.g. 88 Kandy Road"
-                    class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                   />
                 </div>
 
                 <div>
-                  <label class="block mb-1">Street Address Line 2 (Optional)</label>
+                  <label class="block mb-1 text-[#3a384e]">Street Address Line 2 (Optional)</label>
                   <input
                     type="text"
                     [(ngModel)]="wizardData.dropoffAddress.line2"
                     placeholder="Apartment, building, gate, etc."
-                    class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                   />
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">
                   <div>
-                    <label class="block mb-1">City *</label>
+                    <label class="block mb-1 text-[#3a384e]">City *</label>
                     <input
                       type="text"
                       [(ngModel)]="wizardData.dropoffAddress.city"
                       placeholder="e.g. Kadugannawa"
-                      class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                     />
                   </div>
                   <div>
-                    <label class="block mb-1">Postal Code *</label>
+                    <label class="block mb-1 text-[#3a384e]">Postal Code *</label>
                     <input
                       type="text"
                       [(ngModel)]="wizardData.dropoffAddress.postalCode"
                       placeholder="e.g. 20300"
-                      class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label class="block mb-1">District (ADR 002) *</label>
+                  <label class="block mb-1 text-[#3a384e]">District (ADR 002) *</label>
                   <select
                     id="dropoff-district"
                     [(ngModel)]="wizardData.dropoffAddress.district"
                     (change)="updateFeePreview()"
-                    class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-bold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                   >
                     @for (d of districts; track d) {
                     <option [value]="d">{{ d }}</option>
@@ -476,7 +510,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               id="wizard-step1-next"
               (click)="goToStep(2)"
               [disabled]="!isStep1Valid()"
-              class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-sm transition-all"
+              class="action-pill-btn px-7 py-3 bg-[#1d1b2c] hover:bg-black disabled:opacity-40 text-white font-bold text-sm rounded-full shadow-sm transition-all"
             >
               Continue to Parcel Details →
             </button>
@@ -487,41 +521,40 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
         <!-- STEP 2: PARCEL DETAILS -->
         @if (wizardStep() === 2) {
         <div class="space-y-6">
-          <div class="border-b border-slate-100 pb-4">
-            <h2 class="text-lg font-bold text-slate-900">Step 2: Package & Recipient Info</h2>
-            <p class="text-xs text-slate-500 mt-1">
-              Select tier, weight, and enter recipient contact numbers for courier coordination.
+          <div class="border-b border-[#eee7e0] pb-4">
+            <span class="card-pill">Step 2 of 4</span>
+            <h2 class="text-xl font-black text-[#1d1b2c] tracking-tight mt-1">Package & Recipient Info</h2>
+            <p class="text-xs text-[#6f6d85] mt-1 font-medium">
+              Select package size tier, weight, and enter recipient contact numbers for courier coordination.
             </p>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <!-- Package Spec -->
-            <div class="space-y-4">
+            <div class="space-y-5">
               <div>
-                <label class="block text-xs font-bold text-slate-700 mb-2">Package Size Tier *</label>
+                <label class="block text-xs font-bold text-[#1d1b2c] mb-2.5">Package Size Tier *</label>
                 <div class="grid grid-cols-3 gap-3">
                   @for (tier of sizeTiers; track tier.size) {
                   <button
                     type="button"
                     (click)="wizardData.size = tier.size; updateFeePreview()"
-                    [class.border-indigo-600]="wizardData.size === tier.size"
-                    [class.bg-indigo-50/50]="wizardData.size === tier.size"
-                    [class.ring-2]="wizardData.size === tier.size"
-                    [class.ring-indigo-500/20]="wizardData.size === tier.size"
-                    class="p-3 text-left border rounded-xl transition-all"
+                    [class.size-tier-active]="wizardData.size === tier.size"
+                    class="size-tier-card p-3.5 text-left border border-[#e2e8f0] rounded-2xl bg-white hover:border-[#a53a26]/50 transition-all cursor-pointer"
                   >
-                    <div class="font-bold text-xs text-slate-900">{{ tier.label }}</div>
-                    <div class="text-[10px] text-slate-500 mt-1">{{ tier.desc }}</div>
-                    <div class="text-[10px] font-bold text-indigo-600 mt-2">{{ tier.surcharge }}</div>
+                    <div class="font-black text-xs text-[#1d1b2c]">{{ tier.label }}</div>
+                    <div class="text-[10px] text-[#6f6d85] mt-1 leading-snug">{{ tier.desc }}</div>
+                    <div class="text-[10px] font-bold text-[#a53a26] mt-2.5">{{ tier.surcharge }}</div>
                   </button>
                   }
                 </div>
               </div>
 
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">
-                  Weight (kg): <span class="text-indigo-600">{{ wizardData.weightKg }} kg</span>
-                </label>
+              <div class="p-4 rounded-2xl bg-[#faf8f6] border border-[#eee7e0] space-y-2">
+                <div class="flex items-center justify-between text-xs font-bold text-[#1d1b2c]">
+                  <span>Package Weight:</span>
+                  <span class="text-[#a53a26] font-mono text-sm">{{ wizardData.weightKg }} kg</span>
+                </div>
                 <input
                   type="range"
                   min="0.1"
@@ -529,9 +562,9 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                   step="0.1"
                   [(ngModel)]="wizardData.weightKg"
                   (input)="updateFeePreview()"
-                  class="w-full accent-indigo-600"
+                  class="w-full accent-[#a53a26]"
                 />
-                <div class="flex justify-between text-[10px] text-slate-400 font-bold">
+                <div class="flex justify-between text-[10px] text-[#6f6d85] font-bold">
                   <span>0.1 kg</span>
                   <span>25 kg</span>
                   <span>50 kg</span>
@@ -540,36 +573,36 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             </div>
 
             <!-- Recipient Spec -->
-            <div class="space-y-3 text-xs font-semibold text-slate-700">
+            <div class="space-y-3.5 text-xs font-bold text-[#1d1b2c]">
               <div>
-                <label class="block mb-1">Recipient Full Name *</label>
+                <label class="block mb-1 text-[#3a384e]">Recipient Full Name *</label>
                 <input
                   type="text"
                   id="recipient-name"
                   [(ngModel)]="wizardData.recipientName"
                   placeholder="e.g. Sunil Silva"
-                  class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                 />
               </div>
 
               <div>
-                <label class="block mb-1">Recipient Mobile Phone *</label>
+                <label class="block mb-1 text-[#3a384e]">Recipient Mobile Phone *</label>
                 <input
                   type="text"
                   id="recipient-phone"
                   [(ngModel)]="wizardData.recipientPhone"
                   placeholder="e.g. +94771234567"
-                  class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                 />
               </div>
 
               <div>
-                <label class="block mb-1">Special Delivery Instructions (Optional)</label>
+                <label class="block mb-1 text-[#3a384e]">Special Delivery Instructions (Optional)</label>
                 <textarea
                   rows="2"
                   [(ngModel)]="wizardData.notes"
                   placeholder="e.g. Gate code #1234, ring bell twice"
-                  class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                 ></textarea>
               </div>
             </div>
@@ -579,7 +612,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             <button
               type="button"
               (click)="goToStep(1)"
-              class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-all"
+              class="px-5 py-2.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#1d1b2c] font-bold text-sm rounded-full transition-all"
             >
               ← Back
             </button>
@@ -588,7 +621,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               id="wizard-step2-next"
               (click)="goToStep(3)"
               [disabled]="!isStep2Valid()"
-              class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-sm transition-all"
+              class="action-pill-btn px-7 py-3 bg-[#1d1b2c] hover:bg-black disabled:opacity-40 text-white font-bold text-sm rounded-full shadow-sm transition-all"
             >
               Review Fee Preview →
             </button>
@@ -599,29 +632,35 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
         <!-- STEP 3: FEE PREVIEW -->
         @if (wizardStep() === 3) {
         <div class="space-y-6">
-          <div class="border-b border-slate-100 pb-4">
-            <h2 class="text-lg font-bold text-slate-900">Step 3: Instant Pricing Quote</h2>
-            <p class="text-xs text-slate-500 mt-1">
-              Guaranteed frozen fee calculated per ADR 003 formula before booking commitment.
+          <div class="border-b border-[#eee7e0] pb-4">
+            <span class="card-pill">Step 3 of 4</span>
+            <h2 class="text-xl font-black text-[#1d1b2c] tracking-tight mt-1">Instant Pricing Quote</h2>
+            <p class="text-xs text-[#6f6d85] mt-1 font-medium">
+              Guaranteed frozen delivery fee calculated via ADR 003 formula before booking commitment.
             </p>
           </div>
 
           @if (isLoadingQuote()) {
-          <div class="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-500 border-t-transparent"></div>
-            <p class="text-sm font-semibold text-slate-700">Calculating instant delivery fee quote from backend...</p>
+          <div class="p-10 text-center bg-[#faf8f6] rounded-3xl border border-[#eee7e0] space-y-3">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-[#a53a26] border-t-transparent"></div>
+            <p class="text-sm font-bold text-[#1d1b2c]">Calculating instant delivery fee quote from backend...</p>
           </div>
           } @else if (quoteError()) {
-          <div class="p-6 bg-rose-50 border border-rose-200 rounded-2xl space-y-3">
+          <div class="p-6 bg-rose-50 border border-rose-200 rounded-3xl space-y-3">
             <div class="flex items-center gap-2 text-rose-800 font-bold text-sm">
-              <span>⚠️</span> Quote Calculation Error
+              <svg class="w-4 h-4 text-rose-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span>Quote Calculation Notice</span>
             </div>
-            <p class="text-xs text-rose-700">{{ quoteError() }}</p>
+            <p class="text-xs text-rose-700 font-medium">{{ quoteError() }}</p>
             <button
               type="button"
               id="retry-quote-btn"
               (click)="updateFeePreview()"
-              class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-all"
+              class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-full transition-all"
             >
               Retry Quote
             </button>
@@ -629,32 +668,30 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
           } @else if (feePreview(); as quote) {
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
             <!-- Route Card -->
-            <div class="bg-slate-50/70 p-6 rounded-2xl border border-slate-200 space-y-4">
-              <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Delivery Route Overview
-              </h3>
+            <div class="bg-[#faf8f6] p-6 rounded-3xl border border-[#eee7e0] space-y-5">
+              <span class="card-pill">Route Overview</span>
 
               <div class="flex items-center gap-4">
                 <div class="flex flex-col items-center">
-                  <div class="w-3 h-3 rounded-full bg-indigo-600 ring-4 ring-indigo-100"></div>
-                  <div class="w-0.5 h-12 bg-slate-200 my-1"></div>
-                  <div class="w-3 h-3 rounded-full bg-emerald-600 ring-4 ring-emerald-100"></div>
+                  <div class="w-3.5 h-3.5 rounded-full bg-[#a53a26] ring-4 ring-[#a53a26]/20"></div>
+                  <div class="w-0.5 h-12 bg-[#e2e8f0] my-1"></div>
+                  <div class="w-3.5 h-3.5 rounded-full bg-[#2e7d32] ring-4 ring-[#2e7d32]/20"></div>
                 </div>
 
                 <div class="space-y-4 text-xs">
                   <div>
-                    <div class="font-bold text-slate-900 text-sm">
+                    <div class="font-black text-[#1d1b2c] text-sm">
                       {{ quote.pickupDistrict }} District
                     </div>
-                    <div class="text-slate-500">
+                    <div class="text-[#6f6d85] font-medium mt-0.5">
                       {{ wizardData.pickupAddress.line1 }}, {{ wizardData.pickupAddress.city }}
                     </div>
                   </div>
                   <div>
-                    <div class="font-bold text-slate-900 text-sm">
+                    <div class="font-black text-[#1d1b2c] text-sm">
                       {{ quote.dropoffDistrict }} District
                     </div>
-                    <div class="text-slate-500">
+                    <div class="text-[#6f6d85] font-medium mt-0.5">
                       {{ wizardData.dropoffAddress.line1 }}, {{ wizardData.dropoffAddress.city }}
                     </div>
                   </div>
@@ -662,43 +699,43 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               </div>
 
               @if (quote.pickupZone || quote.dropoffZone) {
-              <div class="pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs text-slate-600 font-medium">
+              <div class="pt-3 border-t border-[#eee7e0] flex items-center justify-between text-xs text-[#6f6d85] font-medium">
                 <span>Zone Routing:</span>
-                <span class="font-bold text-slate-800">
+                <span class="font-bold text-[#1d1b2c]">
                   {{ quote.pickupZone || quote.pickupDistrict }} → {{ quote.dropoffZone || quote.dropoffDistrict }}
                 </span>
               </div>
               }
             </div>
 
-            <!-- Price Breakdown Card -->
+            <!-- Price Breakdown Card (Tactile Dark Ink Card) -->
             <div
-              class="bg-indigo-900 text-white p-6 rounded-2xl shadow-xl shadow-indigo-900/10 space-y-5"
+              class="bg-[#1d1b2c] text-white p-6 sm:p-7 rounded-3xl shadow-xl shadow-[#1d1b2c]/20 space-y-5"
             >
               <div class="flex items-center justify-between">
-                <span class="text-xs font-semibold text-indigo-300 uppercase tracking-wider">
+                <span class="text-xs font-bold text-[#a09eaf] uppercase tracking-wider">
                   Price Calculation
                 </span>
-                <span class="text-xs font-bold bg-indigo-800 text-indigo-200 px-2.5 py-1 rounded-full">
+                <span class="text-xs font-bold bg-[#a53a26] text-white px-3 py-1 rounded-full">
                   ADR 003 Frozen
                 </span>
               </div>
 
-              <div class="space-y-2.5 text-xs">
-                <div class="flex justify-between text-indigo-200">
+              <div class="space-y-3 text-xs">
+                <div class="flex justify-between text-[#c4c2d4] font-medium">
                   <span>Drop-off Zone Base Fee</span>
-                  <span class="font-mono">{{ quote.currency }} {{ quote.breakdown.dropoffZoneBaseFee.toFixed(2) }}</span>
+                  <span class="font-mono text-white">{{ quote.currency }} {{ quote.breakdown.dropoffZoneBaseFee.toFixed(2) }}</span>
                 </div>
-                <div class="flex justify-between text-indigo-200">
+                <div class="flex justify-between text-[#c4c2d4] font-medium">
                   <span>Weight Band Charge ({{ quote.weightKg }} kg)</span>
-                  <span class="font-mono">{{ quote.currency }} {{ quote.breakdown.weightBandCharge.toFixed(2) }}</span>
+                  <span class="font-mono text-white">{{ quote.currency }} {{ quote.breakdown.weightBandCharge.toFixed(2) }}</span>
                 </div>
-                <div class="flex justify-between text-indigo-200">
+                <div class="flex justify-between text-[#c4c2d4] font-medium">
                   <span>Size Tier Charge ({{ quote.size }})</span>
-                  <span class="font-mono">{{ quote.currency }} {{ quote.breakdown.sizeCharge.toFixed(2) }}</span>
+                  <span class="font-mono text-white">{{ quote.currency }} {{ quote.breakdown.sizeCharge.toFixed(2) }}</span>
                 </div>
 
-                <div class="pt-4 border-t border-indigo-700/60 flex items-center justify-between">
+                <div class="pt-4 border-t border-white/10 flex items-center justify-between">
                   <span class="text-sm font-bold text-white">Total Delivery Fee</span>
                   <span id="wizard-total-fee" class="text-2xl font-black text-white font-mono">
                     {{ quote.currency }} {{ quote.totalFee.toFixed(2) }}
@@ -713,7 +750,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             <button
               type="button"
               (click)="goToStep(2)"
-              class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-all"
+              class="px-5 py-2.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#1d1b2c] font-bold text-sm rounded-full transition-all"
             >
               ← Back
             </button>
@@ -722,7 +759,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               id="wizard-step3-next"
               (click)="goToStep(4)"
               [disabled]="isLoadingQuote() || !feePreview() || !!quoteError()"
-              class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-sm transition-all"
+              class="action-pill-btn px-7 py-3 bg-[#1d1b2c] hover:bg-black disabled:opacity-40 text-white font-bold text-sm rounded-full shadow-sm transition-all"
             >
               Confirm Booking Details →
             </button>
@@ -734,56 +771,57 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
         @if (wizardStep() === 4) {
         <div class="space-y-6">
           @if (!orderConfirmed()) {
-          <div class="border-b border-slate-100 pb-4">
-            <h2 class="text-lg font-bold text-slate-900">Step 4: Review & Place Delivery Order</h2>
-            <p class="text-xs text-slate-500 mt-1">
-              Please inspect the final details below before issuing the parcel order.
+          <div class="border-b border-[#eee7e0] pb-4">
+            <span class="card-pill">Step 4 of 4</span>
+            <h2 class="text-xl font-black text-[#1d1b2c] tracking-tight mt-1">Review & Place Delivery Order</h2>
+            <p class="text-xs text-[#6f6d85] mt-1 font-medium">
+              Please inspect the final details below before issuing the parcel order to dispatch.
             </p>
           </div>
 
-          <div class="bg-slate-50/70 p-6 rounded-2xl border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+          <div class="bg-[#faf8f6] p-6 rounded-3xl border border-[#eee7e0] grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
             <div>
-              <span class="font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              <span class="font-bold text-[#6f6d85] uppercase tracking-wider block mb-1">
                 Pickup Address
               </span>
-              <p class="font-bold text-slate-800 text-sm">
+              <p class="font-black text-[#1d1b2c] text-sm">
                 {{ wizardData.pickupAddress.line1 }}
               </p>
-              <p class="text-slate-600">
+              <p class="text-[#6f6d85] font-medium mt-0.5">
                 {{ wizardData.pickupAddress.city }}, {{ wizardData.pickupAddress.district }} {{ wizardData.pickupAddress.postalCode }}
               </p>
             </div>
 
             <div>
-              <span class="font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              <span class="font-bold text-[#6f6d85] uppercase tracking-wider block mb-1">
                 Dropoff Address
               </span>
-              <p class="font-bold text-slate-800 text-sm">
+              <p class="font-black text-[#1d1b2c] text-sm">
                 {{ wizardData.dropoffAddress.line1 }}
               </p>
-              <p class="text-slate-600">
+              <p class="text-[#6f6d85] font-medium mt-0.5">
                 {{ wizardData.dropoffAddress.city }}, {{ wizardData.dropoffAddress.district }} {{ wizardData.dropoffAddress.postalCode }}
               </p>
             </div>
 
             <div>
-              <span class="font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              <span class="font-bold text-[#6f6d85] uppercase tracking-wider block mb-1">
                 Recipient Contact
               </span>
-              <p class="font-bold text-slate-800 text-sm">
+              <p class="font-black text-[#1d1b2c] text-sm">
                 {{ wizardData.recipientName }}
               </p>
-              <p class="text-slate-600">{{ wizardData.recipientPhone }}</p>
+              <p class="text-[#6f6d85] font-medium mt-0.5">{{ wizardData.recipientPhone }}</p>
             </div>
 
             <div>
-              <span class="font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              <span class="font-bold text-[#6f6d85] uppercase tracking-wider block mb-1">
                 Parcel Specifications & Fee
               </span>
-              <p class="font-bold text-slate-800 text-sm">
+              <p class="font-black text-[#1d1b2c] text-sm">
                 {{ wizardData.weightKg }} kg · {{ wizardData.size }}
               </p>
-              <p class="text-indigo-600 font-bold font-mono">
+              <p class="text-[#a53a26] font-black font-mono text-base mt-0.5">
                 {{ feePreview()?.currency || 'LKR' }} {{ feePreview()?.totalFee?.toFixed(2) }}
               </p>
             </div>
@@ -793,7 +831,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             <button
               type="button"
               (click)="goToStep(3)"
-              class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-all"
+              class="px-5 py-2.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#1d1b2c] font-bold text-sm rounded-full transition-all"
             >
               ← Back
             </button>
@@ -802,54 +840,59 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               id="confirm-booking-btn"
               (click)="submitDeliveryOrder()"
               [disabled]="isSubmitting() || !feePreview()"
-              class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2"
+              class="action-pill-btn px-8 py-3.5 bg-[#a53a26] hover:bg-[#7e2615] disabled:opacity-50 text-white font-bold text-sm rounded-full shadow-lg shadow-[#a53a26]/20 transition-all flex items-center gap-2"
             >
               @if (isSubmitting()) {
               <span>Placing Order...</span>
               } @else {
-              <span>✓ Confirm & Place Order</span>
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Confirm & Place Order</span>
               }
             </button>
           </div>
           } @else {
           <!-- Celebratory Order Success View -->
-          <div class="text-center py-10 space-y-4">
-            <div class="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-3xl mx-auto shadow-inner">
-              ✓
+          <div class="text-center py-10 space-y-5">
+            <div class="w-16 h-16 rounded-3xl bg-[#faf6f0] text-[#a53a26] border border-[#a53a26]/20 flex items-center justify-center mx-auto shadow-sm">
+              <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
             </div>
-            <h2 class="text-2xl font-black text-slate-900 tracking-tight">
+            <h2 class="text-2xl font-black text-[#1d1b2c] tracking-tight">
               Order Confirmed & Booked!
             </h2>
-            <p class="text-xs text-slate-500 max-w-md mx-auto">
+            <p class="text-xs text-[#6f6d85] max-w-md mx-auto font-medium">
               Your parcel delivery request has been registered in status CREATED and added to the dispatch queue.
             </p>
 
-            <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-6 max-w-sm mx-auto space-y-1">
-              <span class="text-xs font-semibold text-indigo-500 uppercase tracking-wider">
+            <div class="bg-[#faf6f0] border border-[#a53a26]/20 rounded-3xl p-6 max-w-sm mx-auto space-y-1.5 shadow-sm">
+              <span class="text-xs font-bold text-[#a53a26] uppercase tracking-wider">
                 Official Tracking Number
               </span>
-              <div id="confirmed-tracking-number" class="text-xl font-black text-indigo-700 font-mono tracking-wider">
+              <div id="confirmed-tracking-number" class="text-xl font-black text-[#1d1b2c] font-mono tracking-wider">
                 {{ confirmedParcel()?.trackingNumber }}
               </div>
               @if (confirmedParcel()?.id) {
-              <div id="confirmed-parcel-id" class="text-[10px] text-slate-400 font-mono">
+              <div id="confirmed-parcel-id" class="text-[10px] text-[#6f6d85] font-mono">
                 Order ID: {{ confirmedParcel()?.id }}
               </div>
               }
             </div>
 
-            <div class="flex items-center justify-center gap-3 pt-4">
+            <div class="flex items-center justify-center gap-3 pt-3">
               <button
                 type="button"
                 (click)="activeTab.set('deliveries')"
-                class="px-5 py-2.5 bg-indigo-600 text-white font-bold text-xs rounded-xl hover:bg-indigo-700 transition-all"
+                class="action-pill-btn px-6 py-2.5 bg-[#1d1b2c] text-white font-bold text-xs rounded-full hover:bg-black transition-all"
               >
                 View in My Deliveries
               </button>
               <button
                 type="button"
                 (click)="startNewDelivery()"
-                class="px-5 py-2.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-200 transition-all"
+                class="px-6 py-2.5 bg-[#f1f5f9] text-[#1d1b2c] font-bold text-xs rounded-full hover:bg-[#e2e8f0] transition-all"
               >
                 Send Another Parcel
               </button>
@@ -868,8 +911,8 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
       <div class="space-y-6">
         <div class="flex items-center justify-between">
           <div>
-            <h2 class="text-lg font-bold text-slate-900">Saved Address Book</h2>
-            <p class="text-xs text-slate-500">
+            <h2 class="text-xl font-black text-[#1d1b2c] tracking-tight">Saved Address Book</h2>
+            <p class="text-xs text-[#6f6d85] font-medium mt-0.5">
               Manage frequently used pickup and dropoff locations for one-click delivery booking.
             </p>
           </div>
@@ -877,9 +920,13 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             type="button"
             id="open-add-address-modal"
             (click)="openAddressModal()"
-            class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
+            class="action-pill-btn px-5 py-2.5 bg-[#1d1b2c] hover:bg-black text-white text-xs font-bold rounded-full shadow-sm transition-all flex items-center gap-1.5"
           >
-            + Add New Address
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Add New Address</span>
           </button>
         </div>
 
@@ -887,50 +934,50 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           @for (addr of addresses(); track addr.id) {
           <div
-            class="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all"
+            class="bg-white rounded-3xl p-6 border border-[#e8e2dc] shadow-sm flex flex-col justify-between space-y-4 hover:border-[#a53a26]/40 transition-all"
           >
-            <div class="space-y-2">
+            <div class="space-y-2.5">
               <div class="flex items-center justify-between">
-                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
+                <span class="text-xs font-bold px-3 py-1 rounded-full bg-[#f1f5f9] text-[#1d1b2c]">
                   {{ addr.label }}
                 </span>
                 @if (addr.isDefault) {
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#faf6f0] text-[#a53a26] border border-[#a53a26]/20">
                   Default
                 </span>
                 }
               </div>
 
-              <div class="text-sm font-bold text-slate-900">
+              <div class="text-sm font-black text-[#1d1b2c]">
                 {{ addr.line1 }}
               </div>
               @if (addr.line2) {
-              <div class="text-xs text-slate-500">
+              <div class="text-xs text-[#6f6d85]">
                 {{ addr.line2 }}
               </div>
               }
-              <div class="text-xs font-semibold text-slate-600">
+              <div class="text-xs font-semibold text-[#6f6d85]">
                 {{ addr.city }}, {{ addr.district }} {{ addr.postalCode }}
               </div>
             </div>
 
-            <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+            <div class="pt-3.5 border-t border-[#eee7e0] flex items-center justify-between text-xs">
               @if (!addr.isDefault) {
               <button
                 type="button"
                 (click)="setDefaultAddress(addr.id)"
-                class="text-indigo-600 hover:text-indigo-800 font-bold"
+                class="text-[#a53a26] hover:text-[#7e2615] font-bold"
               >
                 Set Default
               </button>
               } @else {
-              <span class="text-slate-400">Primary address</span>
+              <span class="text-[#a09eaf] font-semibold">Primary address</span>
               }
 
               <button
                 type="button"
                 (click)="openAddressModal(addr)"
-                class="text-indigo-600 hover:text-indigo-800 font-bold"
+                class="text-[#1d1b2c] hover:text-[#a53a26] font-bold"
               >
                 Edit
               </button>
@@ -952,86 +999,90 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
       <!-- Address Modal -->
       @if (showAddressModal()) {
       <div
-        class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        class="fixed inset-0 bg-[#1d1b2c]/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       >
         <div
-          class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150"
+          class="bg-white rounded-3xl border border-[#e8e2dc] shadow-2xl max-w-md w-full p-6 sm:p-7 space-y-4 animate-in fade-in zoom-in-95 duration-150"
         >
-          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 class="text-base font-bold text-slate-900">
+          <div class="flex items-center justify-between border-b border-[#eee7e0] pb-3.5">
+            <h3 class="text-lg font-black text-[#1d1b2c]">
               {{ editingAddressId() ? 'Edit Address' : 'Add New Address' }}
             </h3>
             <button
               type="button"
               (click)="showAddressModal.set(false)"
-              class="text-slate-400 hover:text-slate-600 font-bold"
+              class="text-[#6f6d85] hover:text-[#1d1b2c] font-bold p-1 rounded-lg"
+              aria-label="Close modal"
             >
-              ✕
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
             </button>
           </div>
 
-          <div class="space-y-3 text-xs font-semibold text-slate-700">
+          <div class="space-y-3.5 text-xs font-bold text-[#1d1b2c]">
             <div>
-              <label class="block mb-1">Label *</label>
+              <label class="block mb-1 text-[#3a384e]">Label *</label>
               <input
                 type="text"
                 id="modal-label"
                 [(ngModel)]="newAddressForm.label"
                 placeholder="e.g. Home, Office, Warehouse"
-                class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
               />
             </div>
 
             <div>
-              <label class="block mb-1">Street Address Line 1 *</label>
+              <label class="block mb-1 text-[#3a384e]">Street Address Line 1 *</label>
               <input
                 type="text"
                 id="modal-line1"
                 [(ngModel)]="newAddressForm.line1"
                 placeholder="e.g. 12 Flower Road"
-                class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
               />
             </div>
 
             <div>
-              <label class="block mb-1">Line 2 (Optional)</label>
+              <label class="block mb-1 text-[#3a384e]">Line 2 (Optional)</label>
               <input
                 type="text"
                 [(ngModel)]="newAddressForm.line2"
                 placeholder="Apartment, suite, etc."
-                class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
               />
             </div>
 
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block mb-1">City *</label>
+                <label class="block mb-1 text-[#3a384e]">City *</label>
                 <input
                   type="text"
                   id="modal-city"
                   [(ngModel)]="newAddressForm.city"
                   placeholder="e.g. Colombo 07"
-                  class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                 />
               </div>
               <div>
-                <label class="block mb-1">Postal Code *</label>
+                <label class="block mb-1 text-[#3a384e]">Postal Code *</label>
                 <input
                   type="text"
                   id="modal-postal-code"
                   [(ngModel)]="newAddressForm.postalCode"
                   placeholder="e.g. 00700"
-                  class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-semibold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
                 />
               </div>
             </div>
 
             <div>
-              <label class="block mb-1">District (ADR 002) *</label>
+              <label class="block mb-1 text-[#3a384e]">District (ADR 002) *</label>
               <select
                 id="modal-district"
                 [(ngModel)]="newAddressForm.district"
-                class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                class="w-full px-3.5 py-2.5 bg-white border border-[#e2e8f0] rounded-xl text-sm font-bold text-[#1d1b2c] focus:ring-2 focus:ring-[#a53a26]/20 focus:border-[#a53a26] focus:outline-none transition-all"
               >
                 @for (d of districts; track d) {
                 <option [value]="d">{{ d }}</option>
@@ -1039,24 +1090,24 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               </select>
             </div>
 
-            <div class="flex items-center gap-2 pt-2">
+            <div class="flex items-center gap-2.5 pt-2">
               <input
                 type="checkbox"
                 id="modal-is-default"
                 [(ngModel)]="newAddressForm.isDefault"
-                class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                class="rounded-lg border-[#e2e8f0] text-[#a53a26] focus:ring-[#a53a26] w-4 h-4 cursor-pointer"
               />
-              <label for="modal-is-default" class="text-xs text-slate-600 cursor-pointer">
+              <label for="modal-is-default" class="text-xs font-semibold text-[#3a384e] cursor-pointer">
                 Set as my default delivery address
               </label>
             </div>
           </div>
 
-          <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+          <div class="flex items-center justify-end gap-3 pt-4 border-t border-[#eee7e0]">
             <button
               type="button"
               (click)="showAddressModal.set(false)"
-              class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              class="px-5 py-2 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#1d1b2c] font-bold text-xs rounded-full transition-all"
             >
               Cancel
             </button>
@@ -1065,7 +1116,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
               id="save-address-btn"
               (click)="saveAddress()"
               [disabled]="!isAddressFormValid()"
-              class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-sm"
+              class="action-pill-btn px-6 py-2 bg-[#a53a26] hover:bg-[#7e2615] disabled:opacity-40 text-white font-bold text-xs rounded-full transition-all shadow-sm"
             >
               Save Address
             </button>
@@ -1075,6 +1126,107 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
       }
     </div>
   `,
+  styles: [
+    `
+      :host {
+        --terracotta: #a53a26;
+        --terracotta-dark: #7e2615;
+        --coral: #f2533a;
+        --ink: #1d1b2c;
+        --ink-2: #3a384e;
+        --ink-3: #6f6d85;
+        --sand: #faf6f0;
+        --disp: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+        display: block;
+        font-family: var(--disp);
+      }
+      .portal-title {
+        font-family: var(--disp);
+      }
+      .portal-pill {
+        display: inline-block;
+        padding: 0.2rem 0.65rem;
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--terracotta);
+        background: rgba(165, 58, 38, 0.08);
+        border-radius: 9999px;
+      }
+      .card-pill {
+        display: inline-block;
+        padding: 0.2rem 0.65rem;
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--terracotta);
+        background: rgba(165, 58, 38, 0.08);
+        border-radius: 9999px;
+      }
+      .tab-pill {
+        color: var(--ink-3);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+      }
+      .tab-pill:hover {
+        color: var(--ink);
+      }
+      .tab-pill.active {
+        background: #fff;
+        color: var(--ink);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+      .count-badge {
+        background: #e2e8f0;
+        color: var(--ink-3);
+        font-weight: 700;
+      }
+      .count-badge.active-badge {
+        background: rgba(165, 58, 38, 0.12);
+        color: var(--terracotta);
+      }
+      .filter-pill {
+        background: #f1f5f9;
+        color: var(--ink-3);
+        border: 1px solid transparent;
+        cursor: pointer;
+      }
+      .filter-pill:hover {
+        background: #e2e8f0;
+        color: var(--ink);
+      }
+      .filter-pill.filter-active {
+        background: var(--terracotta);
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(165, 58, 38, 0.25);
+      }
+      .action-pill-btn {
+        transition: all 0.2s ease;
+      }
+      .action-pill-btn:hover:not(:disabled) {
+        transform: translateY(-1px);
+      }
+      .size-tier-card.size-tier-active {
+        border-color: var(--terracotta);
+        background: #faf6f0;
+        box-shadow: 0 0 0 2px var(--terracotta);
+      }
+      .step-label.step-active {
+        color: var(--terracotta);
+      }
+      .step-num {
+        background: #e2e8f0;
+        color: var(--ink-3);
+      }
+      .step-num.num-active {
+        background: var(--terracotta);
+        color: #fff;
+      }
+    `,
+  ],
 })
 export class CustomerComponent implements OnInit {
   private customerService = inject(CustomerService);
@@ -1158,16 +1310,15 @@ export class CustomerComponent implements OnInit {
   }
 
   loadParcels(): void {
-    this.customerService.listParcels(
-      this.selectedStatusFilter() || undefined,
-      this.selectedParcelPage()
-    ).subscribe({
-      next: (page) => {
-        this.parcelPage.set(page);
-        this.parcels.set(page.content);
-      },
-      error: (err) => this.notification.set(this.apiErrorMessage(err, 'Unable to load parcels.')),
-    });
+    this.customerService
+      .listParcels(this.selectedStatusFilter() || undefined, this.selectedParcelPage())
+      .subscribe({
+        next: (page) => {
+          this.parcelPage.set(page);
+          this.parcels.set(page.content);
+        },
+        error: (err) => this.notification.set(this.apiErrorMessage(err, 'Unable to load parcels.')),
+      });
   }
 
   changeParcelPage(page: number): void {
