@@ -110,6 +110,20 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
             </button>
+
+            <!-- 5. Chat Sparkle Icon (AI Assistant) -->
+            <a
+              routerLink="/customer/assistant"
+              id="nav-assistant-link"
+              class="rail-icon-btn relative w-10 h-10 rounded-xl flex items-center justify-center text-[#6f6d85] hover:text-[#a53a26] hover:bg-white transition-all cursor-pointer no-underline"
+              title="AI Assistant"
+              aria-label="AI Assistant"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a8 8 0 0 1-11.6 7.14L4 20.5l1.36-4.6A8 8 0 1 1 21 12z"></path>
+                <path d="M12 8.5l.9 1.85 1.85.9-1.85.9L12 14l-.9-1.85-1.85-.9 1.85-.9z"></path>
+              </svg>
+            </a>
           </nav>
 
           <!-- Sidebar Footer Utilities -->
