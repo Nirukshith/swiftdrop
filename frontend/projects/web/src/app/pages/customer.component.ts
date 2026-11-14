@@ -267,17 +267,11 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses' | 'settings';
           <!-- ================================================================= -->
           @if (activeTab() === 'deliveries') {
           <div class="space-y-6">
-            <!-- Greeting & Pro-Tip Banner -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <!-- Greeting Banner -->
+            <div>
               <h1 class="text-2xl sm:text-3xl font-black text-[#1d1b2c] tracking-tight">
                 Welcome back, {{ customerName() }}!
               </h1>
-              <div
-                class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#faf6f0] border border-[#a53a26]/20 text-[#a53a26] text-xs font-bold shadow-sm"
-              >
-                <span>👋 Pro Tip:</span>
-                <span class="font-semibold text-[#1d1b2c]">Setup your preferred delivery days &gt;</span>
-              </div>
             </div>
 
             <!-- Two Hero Cards Grid -->
@@ -1628,7 +1622,6 @@ export class CustomerComponent implements OnInit {
   ngOnInit(): void {
     this.loadParcels();
     this.loadAddresses();
-    this.updateFeePreview();
   }
 
   loadParcels(): void {
