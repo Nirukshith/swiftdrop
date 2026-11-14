@@ -24,7 +24,7 @@ import { ParcelDetail } from './tracking.model';
 
 /**
  * Signed-in parcel detail with a live timeline (CU-04, CU-05; docs/tracking-design.md 3.5).
- * Styled to match the Nomu-inspired Customer Portal design and full-screen edge-to-edge layout.
+ * Styled with a 2-column side-by-side layout matching the Nomu Customer Portal design.
  */
 @Component({
   selector: 'app-parcel-detail',
@@ -135,37 +135,28 @@ import { ParcelDetail } from './tracking.model';
 
       <!-- Main Content Column -->
       <main class="flex-1 flex flex-col min-w-0 bg-[#ffffff] min-h-screen">
-        <!-- Top Navigation & Action Header -->
+        <!-- Top Navigation Header (Breadcrumb removed) -->
         <header
           class="w-full flex items-center justify-between py-4 px-4 sm:px-8 md:px-12 border-b border-[#f0ebe5] bg-white sticky top-0 z-10"
         >
-          <div class="flex items-center gap-4">
-            <!-- Back Button -->
-            <button
-              type="button"
-              (click)="goBack()"
-              class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-[#eee7e0] bg-[#faf8f6] hover:bg-[#f3ece4] text-[#1d1b2c] text-xs font-bold transition-all shadow-xs cursor-pointer group"
-              title="Back to Deliveries"
+          <!-- Back Button -->
+          <button
+            type="button"
+            (click)="goBack()"
+            class="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#eee7e0] bg-[#faf8f6] hover:bg-[#f3ece4] text-[#1d1b2c] text-xs font-bold transition-all shadow-xs cursor-pointer group"
+            title="Back to Deliveries"
+          >
+            <svg
+              class="w-4 h-4 text-[#a53a26] group-hover:-translate-x-0.5 transition-transform"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2.5"
             >
-              <svg
-                class="w-4 h-4 text-[#a53a26] group-hover:-translate-x-0.5 transition-transform"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                stroke-width="2.5"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-              <span>Back to Deliveries</span>
-            </button>
-
-            <!-- Breadcrumb Navigation -->
-            <div class="hidden sm:flex items-center gap-2 text-xs font-semibold text-[#6f6d85]">
-              <a routerLink="/customer" class="hover:text-[#a53a26] transition-colors">Deliveries</a>
-              <span>/</span>
-              <span class="text-[#1d1b2c] font-bold">Parcel details</span>
-            </div>
-          </div>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            <span>Back to Deliveries</span>
+          </button>
 
           <!-- User Profile Badge -->
           <div class="flex items-center gap-3">
@@ -181,7 +172,7 @@ import { ParcelDetail } from './tracking.model';
         </header>
 
         <!-- Page Content Body -->
-        <div class="flex-1 p-4 sm:p-8 md:p-12 max-w-5xl w-full mx-auto space-y-6">
+        <div class="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
           @switch (page()) {
             @case ('loading') {
               <div class="py-16 text-center">
@@ -214,103 +205,115 @@ import { ParcelDetail } from './tracking.model';
             }
             @default {
               @if (parcel(); as p) {
-                <!-- Parcel Details Summary Card -->
-                <div class="rounded-3xl border border-[#eee7e0] bg-[#faf8f6] p-6 sm:p-8 space-y-6 shadow-xs">
-                  <!-- Header: Tracking Number & Current Status -->
-                  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#eee7e0]">
-                    <div>
-                      <p class="text-xs font-bold uppercase tracking-wider text-[#a53a26]">Tracking Number</p>
-                      <h1
-                        class="text-2xl sm:text-3xl font-black text-[#1d1b2c] tracking-tight font-mono mt-1"
-                        data-testid="tracking-number"
-                      >
-                        {{ p.trackingNumber }}
-                      </h1>
-                    </div>
-                    @if (timeline.status(); as status) {
-                      <div>
-                        <ui-status-badge [status]="status" data-testid="current-status" />
+                <!-- Side-by-Side 2-Column Grid Layout -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  <!-- Left Column (7 cols): Tracking Details & Summary -->
+                  <div class="lg:col-span-7 space-y-6">
+                    <div class="rounded-3xl border border-[#eee7e0] bg-[#faf8f6] p-6 sm:p-7 space-y-6 shadow-xs">
+                      <!-- Header: Tracking Number & Current Status -->
+                      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-[#eee7e0]">
+                        <div>
+                          <p class="text-xs font-bold uppercase tracking-wider text-[#a53a26]">Tracking Number</p>
+                          <h1
+                            class="text-2xl sm:text-3xl font-black text-[#1d1b2c] tracking-tight font-mono mt-1"
+                            data-testid="tracking-number"
+                          >
+                            {{ p.trackingNumber }}
+                          </h1>
+                        </div>
+                        @if (timeline.status(); as status) {
+                          <div class="flex-shrink-0">
+                            <ui-status-badge [status]="status" data-testid="current-status" />
+                          </div>
+                        }
                       </div>
+
+                      <!-- Visual Delivery Route Card -->
+                      <div class="rounded-2xl bg-white border border-[#eee7e0] p-5 space-y-4 shadow-xs">
+                        <div class="text-[11px] font-bold uppercase tracking-wider text-[#6f6d85]">Delivery Route</div>
+                        <div class="relative pl-6 space-y-4">
+                          <!-- Vertical route line -->
+                          <div class="absolute left-2 top-2 bottom-2 w-0.5 bg-[#eee7e0]"></div>
+
+                          <!-- Origin / Pickup -->
+                          <div class="relative">
+                            <span class="absolute -left-6 top-1 w-3 h-3 rounded-full bg-[#a53a26] ring-4 ring-[#faf6f0]"></span>
+                            <div class="text-[11px] font-bold text-[#6f6d85] uppercase tracking-wide">Pickup Point</div>
+                            <p class="text-sm font-black text-[#1d1b2c] mt-0.5">
+                              {{ p.pickupAddress.line1 }}, {{ p.pickupAddress.city }}, {{ p.pickupAddress.district }}
+                            </p>
+                          </div>
+
+                          <!-- Destination / Dropoff -->
+                          <div class="relative pt-2">
+                            <span class="absolute -left-6 top-3 w-3 h-3 rounded-full bg-[#2e7d32] ring-4 ring-[#faf6f0]"></span>
+                            <div class="text-[11px] font-bold text-[#6f6d85] uppercase tracking-wide">Destination</div>
+                            <p class="text-sm font-black text-[#1d1b2c] mt-0.5">
+                              <span class="text-[#a53a26]">{{ p.recipientName }}</span> · {{ p.dropoffAddress.line1 }}, {{ p.dropoffAddress.city }}, {{ p.dropoffAddress.district }}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- 2-Stat Grid: Specs & Last Updated -->
+                      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold">
+                        <!-- Parcel Specs -->
+                        <div class="p-4 rounded-2xl bg-white border border-[#eee7e0] space-y-1 shadow-xs">
+                          <dt class="text-[#6f6d85] font-bold uppercase tracking-wider text-[11px]">Parcel</dt>
+                          <dd class="text-[#1d1b2c] font-black text-sm pt-0.5 leading-snug">
+                            {{ p.size }} · {{ p.weightKg }} kg · {{ p.fee | currency: 'LKR' : 'symbol' : '1.2-2' }}
+                          </dd>
+                        </div>
+
+                        <!-- Last Updated -->
+                        <div class="p-4 rounded-2xl bg-white border border-[#eee7e0] space-y-1 shadow-xs">
+                          <dt class="text-[#6f6d85] font-bold uppercase tracking-wider text-[11px]">Last update</dt>
+                          <dd class="text-[#1d1b2c] font-black text-sm pt-0.5 leading-snug" data-testid="last-updated">
+                            {{ timeline.lastUpdatedAt() | date: 'medium' }}
+                          </dd>
+                        </div>
+                      </dl>
+
+                      <!-- Receipt Button (if DELIVERED) -->
+                      @if (timeline.status() === 'DELIVERED') {
+                        <div class="pt-1">
+                          <app-receipt-button class="block" [parcelId]="p.id" [trackingNumber]="p.trackingNumber" />
+                        </div>
+                      }
+
+                      <!-- Live Stream Indicator Bar -->
+                      <app-live-indicator
+                        class="mt-4 border-t border-[#eee7e0] pt-4 block"
+                        [state]="stream()"
+                        (retry)="reconnect()"
+                      />
+                    </div>
+
+                    <!-- Rating Component (if DELIVERED) -->
+                    @if (timeline.status() === 'DELIVERED') {
+                      <app-parcel-rating class="block" [parcelId]="p.id" />
                     }
                   </div>
 
-                  <!-- Details 4-Column Grid -->
-                  <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-                    <!-- 1. From (Pickup) -->
-                    <div class="p-4 rounded-2xl bg-white border border-[#eee7e0] space-y-1.5 shadow-xs">
-                      <dt class="text-[#6f6d85] font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                        <span class="w-2 h-2 rounded-full bg-[#a53a26]"></span>
-                        From
-                      </dt>
-                      <dd class="text-[#1d1b2c] font-black text-sm leading-snug">
-                        {{ p.pickupAddress.line1 }}, {{ p.pickupAddress.city }}, {{ p.pickupAddress.district }}
-                      </dd>
-                    </div>
+                  <!-- Right Column (5 cols): Timeline Beside the Details -->
+                  <div class="lg:col-span-5 space-y-6">
+                    <div class="rounded-3xl border border-[#eee7e0] bg-[#faf8f6] p-6 sm:p-7 space-y-5 shadow-xs lg:sticky lg:top-24">
+                      <div class="flex items-center justify-between pb-3.5 border-b border-[#eee7e0]">
+                        <div>
+                          <h2 class="text-lg font-black text-[#1d1b2c] tracking-tight">Timeline</h2>
+                          <p class="text-xs text-[#6f6d85] font-semibold mt-0.5">Real-time status updates & parcel journey</p>
+                        </div>
+                      </div>
 
-                    <!-- 2. To (Recipient) -->
-                    <div class="p-4 rounded-2xl bg-white border border-[#eee7e0] space-y-1.5 shadow-xs">
-                      <dt class="text-[#6f6d85] font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                        <span class="w-2 h-2 rounded-full bg-[#2e7d32]"></span>
-                        To
-                      </dt>
-                      <dd class="text-[#1d1b2c] font-black text-sm leading-snug">
-                        {{ p.recipientName }} · {{ p.dropoffAddress.line1 }}, {{ p.dropoffAddress.city }}, {{ p.dropoffAddress.district }}
-                      </dd>
-                    </div>
-
-                    <!-- 3. Parcel Specs -->
-                    <div class="p-4 rounded-2xl bg-white border border-[#eee7e0] space-y-1.5 shadow-xs">
-                      <dt class="text-[#6f6d85] font-bold uppercase tracking-wider text-[11px]">Parcel</dt>
-                      <dd class="text-[#1d1b2c] font-black text-sm leading-snug">
-                        {{ p.size }} · {{ p.weightKg }} kg · {{ p.fee | currency: 'LKR' : 'symbol' : '1.2-2' }}
-                      </dd>
-                    </div>
-
-                    <!-- 4. Last Updated -->
-                    <div class="p-4 rounded-2xl bg-white border border-[#eee7e0] space-y-1.5 shadow-xs">
-                      <dt class="text-[#6f6d85] font-bold uppercase tracking-wider text-[11px]">Last update</dt>
-                      <dd class="text-[#1d1b2c] font-black text-sm leading-snug" data-testid="last-updated">
-                        {{ timeline.lastUpdatedAt() | date: 'medium' }}
-                      </dd>
-                    </div>
-                  </dl>
-
-                  <!-- Receipt Button (if DELIVERED) -->
-                  @if (timeline.status() === 'DELIVERED') {
-                    <div class="pt-2">
-                      <app-receipt-button class="block" [parcelId]="p.id" [trackingNumber]="p.trackingNumber" />
-                    </div>
-                  }
-
-                  <!-- Live Stream Indicator Bar -->
-                  <app-live-indicator
-                    class="mt-4 border-t border-[#eee7e0] pt-4 block"
-                    [state]="stream()"
-                    (retry)="reconnect()"
-                  />
-                </div>
-
-                <!-- Rating Component (if DELIVERED) -->
-                @if (timeline.status() === 'DELIVERED') {
-                  <app-parcel-rating class="block" [parcelId]="p.id" />
-                }
-
-                <!-- Delivery Timeline Card -->
-                <div class="rounded-3xl border border-[#eee7e0] bg-[#faf8f6] p-6 sm:p-8 space-y-6 shadow-xs">
-                  <div class="flex items-center justify-between pb-4 border-b border-[#eee7e0]">
-                    <div>
-                      <h2 class="text-lg font-black text-[#1d1b2c] tracking-tight">Timeline</h2>
-                      <p class="text-xs text-[#6f6d85] font-semibold mt-0.5">Real-time status updates and parcel journey history</p>
+                      @if (timeline.isEmpty()) {
+                        <ui-empty-state title="No updates yet" message="Updates appear here as soon as the parcel moves." />
+                      } @else {
+                        <div class="bg-white rounded-2xl p-5 border border-[#eee7e0] shadow-xs">
+                          <app-tracking-timeline [items]="timeline.items()" [status]="timeline.status()" />
+                        </div>
+                      }
                     </div>
                   </div>
-
-                  @if (timeline.isEmpty()) {
-                    <ui-empty-state title="No updates yet" message="Updates appear here as soon as the parcel moves." />
-                  } @else {
-                    <div class="bg-white rounded-2xl p-6 border border-[#eee7e0]">
-                      <app-tracking-timeline [items]="timeline.items()" [status]="timeline.status()" />
-                    </div>
-                  }
                 </div>
               }
             }
