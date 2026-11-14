@@ -12,6 +12,8 @@ import {
   FailedParcelsPage,
   PricingRule,
   PricingRuleRequest,
+  QuoteResponse,
+  ParcelSize,
   RequeueRequest,
   RequeueResponse,
   UnassignedParcelsPage,
@@ -142,6 +144,25 @@ export class DispatchService {
 
   public deletePricingRule(id: string): Observable<void> {
     return this.http.delete<void>(`/api/v1/admin/pricing-rules/${encodeURIComponent(id)}`);
+  }
+
+  /**
+   * Calculate a pricing quote via GET /api/v1/parcels/quote
+   * Invokes real backend quote calculation per ADR 003.
+   */
+  public calculateQuote(
+    pickupDistrict: string,
+    dropoffDistrict: string,
+    weightKg: number,
+    size: ParcelSize
+  ): Observable<QuoteResponse> {
+    const params = new HttpParams()
+      .set('pickupDistrict', pickupDistrict.trim())
+      .set('dropoffDistrict', dropoffDistrict.trim())
+      .set('weightKg', weightKg.toString())
+      .set('size', size);
+
+    return this.http.get<QuoteResponse>('/api/v1/parcels/quote', { params });
   }
 
   // -------------------------------------------------------------------------

@@ -57,6 +57,7 @@ describe('ReportsComponent', () => {
     expect(element.textContent).toContain('80%');
     expect(element.textContent).toContain('Daily delivery trend');
     expect(element.textContent).toContain('Success versus failure');
+    expect(element.querySelector('#daily-reports-table')).toBeTruthy();
   });
 
   it('renders the empty state when the selected range contains only zero rows', () => {

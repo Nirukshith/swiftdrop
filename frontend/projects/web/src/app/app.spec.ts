@@ -75,6 +75,8 @@ describe('App', () => {
 
     expect(compiled.textContent).toContain('Admin');
     expect(compiled.textContent).toContain('Staff Management');
+    expect(compiled.textContent).toContain('Merchant Approval');
+    expect(compiled.textContent).toContain('Reports');
     expect(compiled.textContent).not.toContain('Dispatch');
     expect(compiled.textContent).not.toContain('Zones');
     expect(compiled.textContent).not.toContain('Pricing');

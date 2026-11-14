@@ -129,4 +129,50 @@ describe('DispatchZonesComponent', () => {
     expect(component.zoneForm.get('name')?.value).toBe('');
     expect(component.zoneForm.get('districts')?.value).toEqual([]);
   });
+
+  it('should display success feedback banner after adding a zone', () => {
+    component.zoneForm.setValue({
+      name: 'GALLE_COAST',
+      districts: ['Galle'],
+      served: true,
+      baseFeeLkr: 500,
+    });
+    component.saveZone();
+
+    const createReq = httpMock.expectOne('/api/v1/admin/zones');
+    createReq.flush({ id: '10', name: 'GALLE_COAST', districts: ['Galle'], served: true, baseFeeLkr: 500 });
+    httpMock.expectOne('/api/v1/admin/zones').flush([]);
+    fixture.detectChanges();
+
+    expect(component.successMessage()).toContain('GALLE_COAST');
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('#zone-success-banner')?.textContent).toContain('GALLE_COAST');
+  });
+
+  it('should display success feedback banner after deleting a zone', () => {
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    const zoneToDelete: any = { id: '1', name: 'COLOMBO' };
+    component.removeZone(zoneToDelete);
+
+    const delReq = httpMock.expectOne('/api/v1/admin/zones/1');
+    expect(delReq.request.method).toBe('DELETE');
+    delReq.flush(null);
+    httpMock.expectOne('/api/v1/admin/zones').flush([]);
+    fixture.detectChanges();
+
+    expect(component.successMessage()).toContain('COLOMBO');
+    expect(component.successMessage()).toContain('deleted successfully');
+  });
+
+  it('should prevent duplicate zone submissions while save is in progress', () => {
+    component.isSaving.set(true);
+    component.zoneForm.setValue({
+      name: 'DUPLICATE_ZONE',
+      districts: ['Colombo'],
+      served: true,
+      baseFeeLkr: 500,
+    });
+    component.saveZone();
+    httpMock.expectNone('/api/v1/admin/zones');
+  });
 });

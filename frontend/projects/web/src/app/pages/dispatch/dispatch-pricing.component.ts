@@ -12,7 +12,7 @@ import {
 import { RouterLink } from '@angular/router';
 import { ButtonComponent, CardComponent } from 'ui';
 import { DispatchService } from './dispatch.service';
-import { PricingRule } from './dispatch.model';
+import { CANONICAL_DISTRICTS, ParcelSize, PricingRule, QuoteResponse } from './dispatch.model';
 
 const weightBandBoundsValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
   if (control.get('kind')?.value !== 'WEIGHT_BAND') {
@@ -111,6 +111,26 @@ const weightBandBoundsValidator: ValidatorFn = (control: AbstractControl): Valid
           </a>
         </div>
       </div>
+
+      <!-- Success Feedback Banner -->
+      @if (successMessage(); as msg) {
+        <div
+          id="pricing-success-banner"
+          class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 flex items-center justify-between shadow-sm"
+        >
+          <div class="flex items-center gap-2">
+            <span>✅</span>
+            <span>{{ msg }}</span>
+          </div>
+          <button
+            type="button"
+            class="text-xs font-bold text-emerald-700 hover:text-emerald-900 cursor-pointer"
+            (click)="successMessage.set(null)"
+          >
+            ✕
+          </button>
+        </div>
+      }
 
       <!-- Main Pricing Grid -->
       <div id="pricing" class="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
@@ -232,23 +252,191 @@ const weightBandBoundsValidator: ValidatorFn = (control: AbstractControl): Valid
             <ui-button
               id="add-pricing-submit-btn"
               type="submit"
-              [disabled]="pricingForm.invalid"
+              [disabled]="pricingForm.invalid || isSaving()"
             >
-              {{ editingRuleId ? 'Save changes' : 'Add pricing rule' }}
+              {{ isSaving() ? 'Saving...' : (editingRuleId ? 'Save changes' : 'Add pricing rule') }}
             </ui-button>
           </form>
         </ui-card>
       </div>
+
+      <!-- Try a Quote Live Fee Calculator (M5 Requirement) -->
+      <ui-card title="Try a Quote calculator" id="quote-calculator">
+        <div class="space-y-6">
+          <p class="text-sm text-slate-500">
+            Calculate estimated parcel delivery fees in real time using the backend pricing engine (ADR 003 formula: Drop-off Zone Base Fee + Weight Band Charge + Size Charge).
+          </p>
+
+          <form [formGroup]="quoteForm" (ngSubmit)="calculateQuote()" class="grid gap-4 md:grid-cols-4 items-end">
+            <div>
+              <label class="block text-sm font-medium text-slate-700">
+                Pickup District
+                <select
+                  id="quote-pickup-select"
+                  formControlName="pickupDistrict"
+                  class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                >
+                  @for (district of canonicalDistricts; track district) {
+                    <option [value]="district">{{ district }}</option>
+                  }
+                </select>
+              </label>
+              @if (quoteForm.get('pickupDistrict')?.invalid && quoteForm.get('pickupDistrict')?.touched) {
+                <p class="mt-1 text-xs text-rose-600 font-medium">Pickup district is required</p>
+              }
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-700">
+                Drop-off District
+                <select
+                  id="quote-dropoff-select"
+                  formControlName="dropoffDistrict"
+                  class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                >
+                  @for (district of canonicalDistricts; track district) {
+                    <option [value]="district">{{ district }}</option>
+                  }
+                </select>
+              </label>
+              @if (quoteForm.get('dropoffDistrict')?.invalid && quoteForm.get('dropoffDistrict')?.touched) {
+                <p class="mt-1 text-xs text-rose-600 font-medium">Drop-off district is required</p>
+              }
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-700">
+                Weight (kg)
+                <input
+                  id="quote-weight-input"
+                  type="number"
+                  step="any"
+                  min="0.0001"
+                  formControlName="weightKg"
+                  placeholder="e.g. 2.5"
+                  class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </label>
+              @if (quoteForm.get('weightKg')?.invalid && quoteForm.get('weightKg')?.touched) {
+                <p class="mt-1 text-xs text-rose-600 font-medium">Weight must be greater than 0</p>
+              }
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-700">
+                Size Category
+                <select
+                  id="quote-size-select"
+                  formControlName="size"
+                  class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                >
+                  <option value="SMALL">SMALL</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="LARGE">LARGE</option>
+                </select>
+              </label>
+              @if (quoteForm.get('size')?.invalid && quoteForm.get('size')?.touched) {
+                <p class="mt-1 text-xs text-rose-600 font-medium">Size is required</p>
+              }
+            </div>
+
+            <div class="md:col-span-4 flex items-center gap-3">
+              <ui-button
+                id="quote-calculate-btn"
+                type="submit"
+                [disabled]="quoteForm.invalid || isCalculatingQuote()"
+              >
+                {{ isCalculatingQuote() ? 'Calculating quote...' : 'Calculate Quote' }}
+              </ui-button>
+              <button
+                type="button"
+                id="quote-clear-btn"
+                class="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 text-sm font-semibold transition-colors cursor-pointer"
+                (click)="clearQuote()"
+              >
+                Clear
+              </button>
+            </div>
+          </form>
+
+          @if (quoteError()) {
+            <div id="quote-error" class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+              {{ quoteError() }}
+            </div>
+          }
+
+          @if (quoteResult(); as result) {
+            <div id="quote-result" class="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-violet-50/40 p-5 space-y-4">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-200/60 pb-3">
+                <div>
+                  <p class="text-xs uppercase font-bold text-indigo-600 tracking-wider">Estimated Delivery Quote</p>
+                  <div class="flex items-center gap-2 mt-1">
+                    <span id="quote-total-fee" class="text-2xl font-black text-slate-900">
+                      {{ result.currency || 'LKR' }} {{ result.totalFee | number: '1.2-2' }}
+                    </span>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                      Calculated via Backend
+                    </span>
+                  </div>
+                </div>
+                @if (result.pickupZone || result.dropoffZone) {
+                  <div class="text-right">
+                    <span class="text-xs text-slate-500 font-medium">Route Coverage</span>
+                    <p class="text-sm font-bold text-slate-800">
+                      {{ result.pickupZone || 'Zone' }} to {{ result.dropoffZone || 'Zone' }}
+                    </p>
+                  </div>
+                }
+              </div>
+
+              <div class="grid gap-3 sm:grid-cols-3">
+                <div class="p-3.5 rounded-xl bg-white/80 border border-slate-200/80 shadow-xs">
+                  <span class="text-xs font-semibold text-slate-500 block">Drop-off Base Fee</span>
+                  <span id="quote-base-fee" class="text-base font-bold text-slate-900 mt-1 block">
+                    {{ result.currency || 'LKR' }} {{ result.breakdown.dropoffZoneBaseFee | number: '1.2-2' }}
+                  </span>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-white/80 border border-slate-200/80 shadow-xs">
+                  <span class="text-xs font-semibold text-slate-500 block">Weight Band Charge</span>
+                  <span id="quote-weight-fee" class="text-base font-bold text-slate-900 mt-1 block">
+                    {{ result.currency || 'LKR' }} {{ result.breakdown.weightBandCharge | number: '1.2-2' }}
+                  </span>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-white/80 border border-slate-200/80 shadow-xs">
+                  <span class="text-xs font-semibold text-slate-500 block">Size Charge</span>
+                  <span id="quote-size-fee" class="text-base font-bold text-slate-900 mt-1 block">
+                    {{ result.currency || 'LKR' }} {{ result.breakdown.sizeCharge | number: '1.2-2' }}
+                  </span>
+                </div>
+              </div>
+
+              <p class="text-xs text-slate-500 italic">
+                Formula per ADR 003: Fee = Drop-off Zone Base Fee ({{ result.currency || 'LKR' }} {{ result.breakdown.dropoffZoneBaseFee }}) + Weight Band Charge ({{ result.currency || 'LKR' }} {{ result.breakdown.weightBandCharge }}) + Size Charge ({{ result.currency || 'LKR' }} {{ result.breakdown.sizeCharge }}).
+              </p>
+            </div>
+          }
+        </div>
+      </ui-card>
     </div>
   `,
 })
 export class DispatchPricingComponent {
   readonly dispatchService = inject(DispatchService);
   readonly mutationError = signal<string | null>(null);
+  readonly successMessage = signal<string | null>(null);
+  readonly isSaving = signal<boolean>(false);
   readonly pricingRules = signal<PricingRule[]>([]);
   editingRuleId: string | null = null;
 
+  readonly canonicalDistricts = CANONICAL_DISTRICTS;
+  readonly quoteResult = signal<QuoteResponse | null>(null);
+  readonly isCalculatingQuote = signal<boolean>(false);
+  readonly quoteError = signal<string | null>(null);
+
   readonly pricingForm: FormGroup;
+  readonly quoteForm: FormGroup;
 
   constructor(private readonly formBuilder: FormBuilder) {
     this.pricingForm = this.formBuilder.nonNullable.group({
@@ -259,8 +447,17 @@ export class DispatchPricingComponent {
       chargeLkr: [0, [Validators.required, Validators.min(0)]],
       active: [true],
     }, { validators: weightBandBoundsValidator });
+
+    this.quoteForm = this.formBuilder.nonNullable.group({
+      pickupDistrict: ['Colombo', [Validators.required]],
+      dropoffDistrict: ['Kandy', [Validators.required]],
+      weightKg: [1.0, [Validators.required, Validators.min(0.0001)]],
+      size: ['MEDIUM' as ParcelSize, [Validators.required]],
+    });
+
     this.loadPricingRules();
   }
+
   private loadPricingRules(): void {
     this.dispatchService.listPricingRules().subscribe({
       next: (rules) => this.pricingRules.set(rules),
@@ -269,34 +466,49 @@ export class DispatchPricingComponent {
   }
 
   savePricingRule(): void {
-    if (this.pricingForm.invalid) {
+    if (this.pricingForm.invalid || this.isSaving()) {
       this.pricingForm.markAllAsTouched();
       return;
     }
     this.mutationError.set(null);
+    this.isSaving.set(true);
     const raw = this.pricingForm.getRawValue();
     const request = raw.kind === 'SIZE'
       ? { kind: raw.kind, key: raw.key, chargeLkr: raw.chargeLkr, active: raw.active }
       : raw;
-    const operation = this.editingRuleId
-      ? this.dispatchService.updatePricingRule(this.editingRuleId, request)
+    const isEditing = !!this.editingRuleId;
+    const ruleKey = request.key;
+
+    const operation = isEditing
+      ? this.dispatchService.updatePricingRule(this.editingRuleId!, request)
       : this.dispatchService.createPricingRule(request);
+
     operation.subscribe({
       next: () => {
         this.editingRuleId = null;
+        this.isSaving.set(false);
+        this.successMessage.set(
+          isEditing
+            ? `Pricing rule "${ruleKey}" updated successfully.`
+            : `Pricing rule "${ruleKey}" created successfully.`
+        );
         this.pricingForm.reset({
           kind: 'SIZE', key: '', minimumWeightKg: 0, maximumWeightKg: 0, chargeLkr: 0, active: true,
         });
         this.loadPricingRules();
       },
-      error: (error) => this.mutationError.set(
-        error?.error?.message || error?.message || 'Unable to save the pricing rule.'
-      ),
+      error: (error) => {
+        this.isSaving.set(false);
+        this.mutationError.set(
+          error?.error?.message || error?.message || 'Unable to save the pricing rule.'
+        );
+      },
     });
   }
 
   editPricingRule(rule: PricingRule): void {
     this.editingRuleId = rule.id;
+    this.mutationError.set(null);
     this.pricingForm.setValue({
       kind: rule.kind,
       key: rule.key,
@@ -311,11 +523,61 @@ export class DispatchPricingComponent {
     if (!window.confirm(`Delete pricing rule ${rule.key}?`)) {
       return;
     }
+    this.mutationError.set(null);
     this.dispatchService.deletePricingRule(rule.id).subscribe({
-      next: () => this.loadPricingRules(),
+      next: () => {
+        this.successMessage.set(`Pricing rule "${rule.key}" deleted successfully.`);
+        this.loadPricingRules();
+      },
       error: (error) => this.mutationError.set(
         error?.error?.message || error?.message || 'Unable to delete the pricing rule.'
       ),
     });
+  }
+
+  calculateQuote(): void {
+    if (this.quoteForm.invalid || this.isCalculatingQuote()) {
+      this.quoteForm.markAllAsTouched();
+      return;
+    }
+
+    const { pickupDistrict, dropoffDistrict, weightKg, size } = this.quoteForm.getRawValue();
+    this.isCalculatingQuote.set(true);
+    this.quoteError.set(null);
+    this.quoteResult.set(null);
+
+    this.dispatchService.calculateQuote(pickupDistrict, dropoffDistrict, Number(weightKg), size).subscribe({
+      next: (result) => {
+        this.isCalculatingQuote.set(false);
+        if (!result || typeof result.totalFee !== 'number' || !result.breakdown) {
+          this.quoteError.set('Pricing engine returned an incomplete quote response.');
+          return;
+        }
+        this.quoteResult.set(result);
+      },
+      error: (error) => {
+        this.isCalculatingQuote.set(false);
+        if (error?.status === 422) {
+          this.quoteError.set(`Pickup district "${pickupDistrict}" is not an active served area.`);
+        } else if (error?.status === 404) {
+          this.quoteError.set(error?.error?.message || 'Pricing rule or district not found in active configuration.');
+        } else {
+          this.quoteError.set(error?.error?.message || error?.message || 'Failed to calculate quote from pricing engine.');
+        }
+      },
+    });
+  }
+
+  clearQuote(): void {
+    this.quoteResult.set(null);
+    this.quoteError.set(null);
+    this.quoteForm.reset({
+      pickupDistrict: 'Colombo',
+      dropoffDistrict: 'Kandy',
+      weightKg: 1.0,
+      size: 'MEDIUM',
+    });
+    this.quoteForm.markAsPristine();
+    this.quoteForm.markAsUntouched();
   }
 }

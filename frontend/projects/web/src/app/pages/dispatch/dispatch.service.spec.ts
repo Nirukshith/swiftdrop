@@ -451,4 +451,39 @@ describe('DispatchService (Real API Integration)', () => {
       workloadRefresh.flush([]);
     });
   });
+
+  describe('calculateQuote (GET /api/v1/parcels/quote)', () => {
+    it('should query pricing quote with correct query parameters and return breakdown', () => {
+      const mockQuote = {
+        currency: 'LKR',
+        totalFee: 700,
+        breakdown: {
+          dropoffZoneBaseFee: 300,
+          weightBandCharge: 200,
+          sizeCharge: 200,
+        },
+        pickupZone: 'Western',
+        dropoffZone: 'Central',
+      };
+
+      let result: any;
+      service.calculateQuote('Colombo', 'Kandy', 1.5, 'SMALL').subscribe((res) => {
+        result = res;
+      });
+
+      const req = httpMock.expectOne((r) =>
+        r.url === '/api/v1/parcels/quote' &&
+        r.params.get('pickupDistrict') === 'Colombo' &&
+        r.params.get('dropoffDistrict') === 'Kandy' &&
+        r.params.get('weightKg') === '1.5' &&
+        r.params.get('size') === 'SMALL'
+      );
+      expect(req.request.method).toBe('GET');
+      req.flush(mockQuote);
+
+      expect(result).toEqual(mockQuote);
+      expect(result.totalFee).toBe(700);
+      expect(result.breakdown.dropoffZoneBaseFee).toBe(300);
+    });
+  });
 });

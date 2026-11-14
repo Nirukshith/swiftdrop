@@ -167,3 +167,54 @@ export interface CreateStaffPayload {
   phoneNumber: string;
   role: 'COURIER' | 'DISPATCHER';
 }
+
+export type ParcelSize = 'SMALL' | 'MEDIUM' | 'LARGE';
+
+export interface QuoteBreakdown {
+  dropoffZoneBaseFee: number;
+  weightBandCharge: number;
+  sizeCharge: number;
+}
+
+export interface QuoteResponse {
+  currency: string;
+  totalFee: number;
+  breakdown: QuoteBreakdown;
+  pickupZone?: string;
+  dropoffZone?: string;
+}
+
+export interface QuoteQuery {
+  pickupDistrict: string;
+  dropoffDistrict: string;
+  weightKg: number;
+  size: ParcelSize;
+}
+
+export const CANONICAL_DISTRICTS: string[] = [
+  'Ampara',
+  'Anuradhapura',
+  'Badulla',
+  'Batticaloa',
+  'Colombo',
+  'Galle',
+  'Gampaha',
+  'Hambantota',
+  'Jaffna',
+  'Kalutara',
+  'Kandy',
+  'Kegalle',
+  'Kilinochchi',
+  'Kurunegala',
+  'Mannar',
+  'Matale',
+  'Matara',
+  'Monaragala',
+  'Mullaitivu',
+  'Nuwara Eliya',
+  'Polonnaruwa',
+  'Puttalam',
+  'Ratnapura',
+  'Trincomalee',
+  'Vavuniya',
+];
