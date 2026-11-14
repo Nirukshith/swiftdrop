@@ -158,7 +158,7 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPRING_MAIL_HOST: mailpit
       SPRING_MAIL_PORT: 1025
-      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:4200}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:8080}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8080/api/v1/auth/oauth2/callback/google}
@@ -261,6 +261,9 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-swiftdrop_password}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWKS_URL: http://auth-service:8081/.well-known/jwks.json
+      SERVICES_AUTH_BASE_URL: http://auth-service:8081
+      SERVICES_PARCEL_BASE_URL: http://parcel-service:8082
+      SERVICES_OPERATIONS_BASE_URL: http://operations-service:8083
       INTERNAL_NOTIFICATIONS_SERVICE_TOKEN: ${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:-swiftdrop-internal-notif-secret-2026}
       INTERNAL_MERCHANT_SERVICE_TOKEN: ${INTERNAL_MERCHANT_SERVICE_TOKEN:-swiftdrop-internal-merchant-secret-2026}
       INTERNAL_PRICING_SERVICE_TOKEN: ${INTERNAL_PRICING_SERVICE_TOKEN:-swiftdrop-internal-pricing-secret-2026}
