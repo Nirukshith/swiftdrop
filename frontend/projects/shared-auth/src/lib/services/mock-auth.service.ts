@@ -75,7 +75,7 @@ export class MockAuthService {
       (k) => MOCK_USERS[k].email.toLowerCase() === credentials.email.toLowerCase()
     );
 
-    if (emailKey && credentials.password === 'P@ssword123!') {
+    if (emailKey && credentials.password === 'Password123!') {
       const user = MOCK_USERS[emailKey];
       const token = `mock-jwt-token-${user.role.toLowerCase()}-${Date.now()}`;
       this._accessToken.set(token);

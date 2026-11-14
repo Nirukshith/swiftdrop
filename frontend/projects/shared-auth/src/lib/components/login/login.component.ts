@@ -89,7 +89,7 @@ import { AuthRole } from '../../models/auth.models';
               <p>{{ currentRoleMeta().desc }}</p>
             </div>
 
-            <!-- 4-User Role Selector -->
+            <!-- Role Selector -->
             <div class="role-selector" role="tablist" aria-label="Select User Role">
               @for (r of roles; track r.id) {
                 <button
@@ -409,10 +409,10 @@ import { AuthRole } from '../../models/auth.models';
       line-height: 1.45;
       margin: 0;
     }
-    /* 4-Role Segmented Selector */
+    /* Role Segmented Selector */
     .role-selector {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 0.25rem;
       background: #f1f5f9;
       padding: 0.25rem;
@@ -643,7 +643,7 @@ export class LoginComponent implements OnInit {
 
   ngOnInit(): void {
     const roleParam = this.route?.snapshot.queryParamMap.get('role')?.toUpperCase();
-    if (roleParam && (roleParam === 'CUSTOMER' || roleParam === 'MERCHANT' || roleParam === 'ADMIN' || roleParam === 'DISPATCHER')) {
+    if (roleParam && (roleParam === 'CUSTOMER' || roleParam === 'MERCHANT' || roleParam === 'ADMIN' || roleParam === 'DISPATCHER' || roleParam === 'COURIER')) {
       this.selectedRole.set(roleParam as AuthRole);
     }
   }
@@ -653,6 +653,7 @@ export class LoginComponent implements OnInit {
     { id: 'MERCHANT' as const, label: 'Merchant', placeholder: 'merchant@swiftdrop.lk', target: '/merchant', desc: 'Access merchant bulk orders, CSV tools, and API' },
     { id: 'ADMIN' as const, label: 'Admin', placeholder: 'admin@swiftdrop.lk', target: '/admin', desc: 'System user management, approvals, and audits' },
     { id: 'DISPATCHER' as const, label: 'Dispatcher', placeholder: 'dispatcher@swiftdrop.lk', target: '/dispatch', desc: 'Courier dispatch queue, workload, and zone rates' },
+    { id: 'COURIER' as const, label: 'Courier', placeholder: 'courier@swiftdrop.lk', target: '/courier', desc: 'View assigned deliveries and update delivery status' },
   ];
 
   readonly currentRoleMeta = computed(() => {
@@ -675,6 +676,7 @@ export class LoginComponent implements OnInit {
       MERCHANT: 'merchant@swiftdrop.lk',
       ADMIN: 'admin@swiftdrop.lk',
       DISPATCHER: 'dispatcher@swiftdrop.lk',
+      COURIER: 'courier@swiftdrop.lk',
     };
     this.loginForm.patchValue({
       email: sampleEmails[role],
