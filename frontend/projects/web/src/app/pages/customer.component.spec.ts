@@ -318,6 +318,17 @@ describe('CustomerComponent', () => {
     expect(() => component.signOut()).not.toThrow();
   });
 
+  it('logo keeps the customer signed in and returns to My Deliveries', () => {
+    component.activeTab.set('settings');
+    fixture.detectChanges();
+    const logo = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('#customer-home-link')!;
+
+    expect(logo.getAttribute('href')).toBe('/customer');
+    logo.click();
+
+    expect(component.activeTab()).toBe('deliveries');
+  });
+
   describe('profile menu', () => {
     const el = () => fixture.nativeElement as HTMLElement;
     const openMenu = () => {

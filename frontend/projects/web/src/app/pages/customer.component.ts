@@ -33,7 +33,9 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses' | 'settings';
       >
         <!-- Brand Logo Icon -->
           <a
-            routerLink="/"
+            routerLink="/customer"
+            id="customer-home-link"
+            (click)="activeTab.set('deliveries')"
             class="w-11 h-11 rounded-2xl bg-[#a53a26] text-white flex items-center justify-center shadow-md shadow-[#a53a26]/20 group cursor-pointer hover:scale-105 transition-transform"
             title="SwiftDrop Home"
           >
