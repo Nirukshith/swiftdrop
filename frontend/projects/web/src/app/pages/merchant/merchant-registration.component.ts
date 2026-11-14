@@ -23,8 +23,9 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
         </div>
 
         <nav class="nav-links">
-          <a routerLink="/register" class="nav-link">Register</a>
-          <a routerLink="/login" class="nav-pill">Sign In</a>
+          <a routerLink="/register" class="nav-link">Customer</a>
+          <a routerLink="/merchant-registration" class="nav-pill">Merchant</a>
+          <a routerLink="/login" class="nav-link">Sign In</a>
         </nav>
       </header>
 

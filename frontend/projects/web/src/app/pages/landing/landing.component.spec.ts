@@ -39,6 +39,15 @@ describe('LandingComponent', () => {
     expect(loginLinks.length).toBeGreaterThan(0);
   });
 
+  it('renders Customer, Merchant, and Sign In navigation links in header', () => {
+    const compiled = fixture.nativeElement as HTMLElement;
+    const navLinks = compiled.querySelectorAll('.nav-links a');
+    expect(navLinks.length).toBe(3);
+    expect(navLinks[0].textContent.trim()).toBe('Customer');
+    expect(navLinks[1].textContent.trim()).toBe('Merchant');
+    expect(navLinks[2].textContent.trim()).toBe('Sign In');
+  });
+
   it('renders spoken chips and feature bento cards', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     const chips = compiled.querySelectorAll('.said-chip');

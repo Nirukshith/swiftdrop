@@ -1,9 +1,8 @@
-import { Component, inject, signal, computed, OnInit } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
-import { AuthRole } from '../../models/auth.models';
 
 @Component({
   selector: 'lib-register',
@@ -22,46 +21,49 @@ import { AuthRole } from '../../models/auth.models';
         </a>
 
         <nav class="nav-links">
-          <a routerLink="/register" class="nav-pill">Register</a>
+          <a routerLink="/register" class="nav-pill">Customer</a>
+          <a routerLink="/merchant-registration" class="nav-link">Merchant</a>
           <a routerLink="/login" class="nav-link">Sign In</a>
         </nav>
       </header>
 
       <main class="hero-grid">
-        <!-- Left Column: Hero Copy & Spoken Chips -->
+        <!-- Left Column: Customer Hero Copy & Spoken Chips -->
         <section class="hero-copy">
           <div class="hero-badge">
-            <span class="badge-dot"></span> {{ currentRoleMeta().heroBadge }}
+            <span class="badge-dot"></span> SwiftDrop Customer Registration
           </div>
 
-          <h1 class="hero-headline">{{ currentRoleMeta().headline }}</h1>
+          <h1 class="hero-headline">Create your customer account</h1>
 
-          <p class="hero-lede">{{ currentRoleMeta().lede }}</p>
+          <p class="hero-lede">
+            Sign up in seconds to schedule door-to-door deliveries, monitor parcels in real time, and enjoy automated doorstep collections.
+          </p>
 
-          <ul class="said-chips" aria-label="Role highlights">
-            @for (text of currentRoleMeta().chips; track $index; let idx = $index) {
-              <li class="said-chip" [class.chip-2]="idx === 1" [class.chip-3]="idx === 2">
-                @if (idx === 0) {
-                  <svg class="chip-icon mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                    <line x1="12" y1="19" x2="12" y2="22"/>
-                  </svg>
-                } @else if (idx === 1) {
-                  <svg class="chip-icon parcel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                    <line x1="12" y1="22.08" x2="12" y2="12"/>
-                  </svg>
-                } @else {
-                  <svg class="chip-icon check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                    <polyline points="22 4 12 14.01 9 11.01"/>
-                  </svg>
-                }
-                <span>{{ text }}</span>
-              </li>
-            }
+          <ul class="said-chips" aria-label="Customer quick commands">
+            <li class="said-chip chip-1">
+              <svg class="chip-icon mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="22"/>
+              </svg>
+              <span>“Send a care package to Galle today”</span>
+            </li>
+            <li class="said-chip chip-2">
+              <svg class="chip-icon parcel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+              <span>“Track my delivery in real time”</span>
+            </li>
+            <li class="said-chip chip-3">
+              <svg class="chip-icon check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+              <span>“Doorstep pickup confirmed”</span>
+            </li>
           </ul>
 
           <div class="hero-store-row">
@@ -77,197 +79,98 @@ import { AuthRole } from '../../models/auth.models';
           </div>
         </section>
 
-        <!-- Right Column: Tactile White Card with 4-Role Selector -->
+        <!-- Right Column: Tactile Customer Signup White Card -->
         <section class="auth-card-wrap">
           <div class="auth-card">
             <div class="card-header">
-              <span class="card-pill">{{ currentRoleMeta().label }} {{ selectedRole() === 'CUSTOMER' ? 'Registration' : 'Access' }}</span>
-              <h2>{{ currentRoleMeta().cardTitle }}</h2>
-              <p>{{ currentRoleMeta().cardSubtitle }}</p>
+              <span class="card-pill">Customer Signup</span>
+              <h2>Join SwiftDrop</h2>
+              <p>Enter your details to create your delivery account</p>
             </div>
 
-            <!-- 4-User Role Selector (clean pill style, no emojis) -->
-            <div class="role-selector" role="tablist" aria-label="Select User Role">
-              @for (r of roles; track r.id) {
-                <button
-                  type="button"
-                  class="role-tab"
-                  [class.active]="selectedRole() === r.id"
-                  (click)="selectRole(r.id)"
-                  role="tab"
-                  [attr.aria-selected]="selectedRole() === r.id"
-                >
-                  <span class="role-name">{{ r.label }}</span>
-                </button>
-              }
-            </div>
-
-            @if (selectedRole() === 'CUSTOMER') {
-              @if (errorMessage()) {
-                <div class="error-banner" role="alert">
-                  <svg class="error-icon" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                  </svg>
-                  <span>{{ errorMessage() }}</span>
-                </div>
-              }
-
-              <form [formGroup]="registerForm" (ngSubmit)="onSubmit()" class="auth-form">
-                <div class="form-group">
-                  <label for="fullName">Full Name</label>
-                  <input
-                    id="fullName"
-                    type="text"
-                    formControlName="fullName"
-                    placeholder="Kasun Perera"
-                    [class.invalid]="isFieldInvalid('fullName')"
-                    autocomplete="name"
-                  />
-                  @if (isFieldInvalid('fullName')) {
-                    <span class="field-error">Full name is required</span>
-                  }
-                </div>
-
-                <div class="form-group">
-                  <label for="email">Email address</label>
-                  <input
-                    id="email"
-                    type="email"
-                    formControlName="email"
-                    placeholder="you@example.com"
-                    [class.invalid]="isFieldInvalid('email')"
-                    autocomplete="email"
-                  />
-                  @if (isFieldInvalid('email')) {
-                    <span class="field-error">Please enter a valid email address</span>
-                  }
-                </div>
-
-                <div class="form-group">
-                  <label for="phoneNumber">Phone Number (optional)</label>
-                  <input
-                    id="phoneNumber"
-                    type="tel"
-                    formControlName="phoneNumber"
-                    placeholder="+94771234567"
-                    autocomplete="tel"
-                  />
-                </div>
-
-                <div class="form-group">
-                  <label for="password">Password</label>
-                  <input
-                    id="password"
-                    type="password"
-                    formControlName="password"
-                    placeholder="At least 8 characters"
-                    [class.invalid]="isFieldInvalid('password')"
-                    autocomplete="new-password"
-                  />
-                  @if (isFieldInvalid('password')) {
-                    <span class="field-error">Password must be at least 8 characters</span>
-                  }
-                </div>
-
-                <button
-                  type="submit"
-                  class="submit-btn"
-                  [disabled]="registerForm.invalid || isLoading()"
-                >
-                  @if (isLoading()) {
-                    <span class="spinner"></span> Creating account...
-                  } @else {
-                    Create Account
-                  }
-                </button>
-              </form>
-
-              <div class="auth-footer">
-                <p>Already have an account? <a routerLink="/login" [queryParams]="{ role: 'CUSTOMER' }">Sign in</a></p>
-              </div>
-            } @else if (selectedRole() === 'MERCHANT') {
-              <div class="role-info-card">
-                <div class="info-item">
-                  <div class="info-bullet"></div>
-                  <div>
-                    <strong>Verified Business Accounts</strong>
-                    <p>Register your merchant entity for bulk discounts and automated door-to-door courier dispatch.</p>
-                  </div>
-                </div>
-                <div class="info-item">
-                  <div class="info-bullet"></div>
-                  <div>
-                    <strong>Bulk CSV & API Automation</strong>
-                    <p>Upload multi-parcel CSV manifests or integrate your store with SwiftDrop REST webhooks.</p>
-                  </div>
-                </div>
-                <div class="info-item">
-                  <div class="info-bullet"></div>
-                  <div>
-                    <strong>Admin Review & Secure Keys</strong>
-                    <p>Accounts are verified by an administrator before API secrets and credentials are issued.</p>
-                  </div>
-                </div>
-              </div>
-
-              <a routerLink="/merchant-registration" class="submit-btn role-btn-link">
-                Proceed to Merchant Registration &rarr;
-              </a>
-
-              <div class="auth-footer">
-                <p>Already registered? <a routerLink="/login" [queryParams]="{ role: 'MERCHANT' }">Sign in as Merchant</a></p>
-              </div>
-            } @else if (selectedRole() === 'ADMIN') {
-              <div class="role-info-card">
-                <div class="info-item">
-                  <div class="info-bullet"></div>
-                  <div>
-                    <strong>Internal Security Provisioning</strong>
-                    <p>Administrator accounts are provisioned internally by IT security operations. Public self-registration is disabled.</p>
-                  </div>
-                </div>
-                <div class="info-item">
-                  <div class="info-bullet"></div>
-                  <div>
-                    <strong>Platform Governance</strong>
-                    <p>Authorized admins manage system users, approve merchant businesses, and audit security events.</p>
-                  </div>
-                </div>
-              </div>
-
-              <a routerLink="/login" [queryParams]="{ role: 'ADMIN' }" class="submit-btn role-btn-link">
-                Sign In as Administrator &rarr;
-              </a>
-
-              <div class="auth-footer">
-                <p>Need admin credentials? <span class="help-text">Contact your IT security department.</span></p>
-              </div>
-            } @else if (selectedRole() === 'DISPATCHER') {
-              <div class="role-info-card">
-                <div class="info-item">
-                  <div class="info-bullet"></div>
-                  <div>
-                    <strong>Operations Dispatch Console</strong>
-                    <p>Dispatcher accounts are assigned and activated by operations management. Sign in with your operational credentials.</p>
-                  </div>
-                </div>
-                <div class="info-item">
-                  <div class="info-bullet"></div>
-                  <div>
-                    <strong>Courier Fleet & Zone Balancing</strong>
-                    <p>Coordinate active couriers, balance delivery zones, and manage parcel dispatch queues.</p>
-                  </div>
-                </div>
-              </div>
-
-              <a routerLink="/login" [queryParams]="{ role: 'DISPATCHER' }" class="submit-btn role-btn-link">
-                Sign In as Dispatcher &rarr;
-              </a>
-
-              <div class="auth-footer">
-                <p>Assigned to dispatch? <span class="help-text">Contact your operations supervisor.</span></p>
+            @if (errorMessage()) {
+              <div class="error-banner" role="alert">
+                <svg class="error-icon" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                <span>{{ errorMessage() }}</span>
               </div>
             }
+
+            <form [formGroup]="registerForm" (ngSubmit)="onSubmit()" class="auth-form">
+              <div class="form-group">
+                <label for="fullName">Full Name</label>
+                <input
+                  id="fullName"
+                  type="text"
+                  formControlName="fullName"
+                  placeholder="Kasun Perera"
+                  [class.invalid]="isFieldInvalid('fullName')"
+                  autocomplete="name"
+                />
+                @if (isFieldInvalid('fullName')) {
+                  <span class="field-error">Full name is required</span>
+                }
+              </div>
+
+              <div class="form-group">
+                <label for="email">Email address</label>
+                <input
+                  id="email"
+                  type="email"
+                  formControlName="email"
+                  placeholder="you@example.com"
+                  [class.invalid]="isFieldInvalid('email')"
+                  autocomplete="email"
+                />
+                @if (isFieldInvalid('email')) {
+                  <span class="field-error">Please enter a valid email address</span>
+                }
+              </div>
+
+              <div class="form-group">
+                <label for="phoneNumber">Phone Number (optional)</label>
+                <input
+                  id="phoneNumber"
+                  type="tel"
+                  formControlName="phoneNumber"
+                  placeholder="+94771234567"
+                  autocomplete="tel"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="password">Password</label>
+                <input
+                  id="password"
+                  type="password"
+                  formControlName="password"
+                  placeholder="At least 8 characters"
+                  [class.invalid]="isFieldInvalid('password')"
+                  autocomplete="new-password"
+                />
+                @if (isFieldInvalid('password')) {
+                  <span class="field-error">Password must be at least 8 characters</span>
+                }
+              </div>
+
+              <button
+                type="submit"
+                class="submit-btn"
+                [disabled]="registerForm.invalid || isLoading()"
+              >
+                @if (isLoading()) {
+                  <span class="spinner"></span> Creating account...
+                } @else {
+                  Create Account
+                }
+              </button>
+            </form>
+
+            <div class="auth-footer">
+              <p>Already have an account? <a routerLink="/login">Sign in</a></p>
+              <p class="merchant-note">Merchant partner? <a routerLink="/merchant-registration">Register business</a></p>
+            </div>
           </div>
         </section>
       </main>
@@ -455,13 +358,13 @@ import { AuthRole } from '../../models/auth.models';
     .auth-card {
       width: 100%;
       max-width: 480px;
-      padding: 2.5rem 2.25rem;
+      padding: 2.75rem 2.25rem;
       background: #fff;
       color: var(--ink);
       border-radius: 28px;
       box-shadow: 0 24px 60px -15px rgba(29,27,44,0.35), 0 8px 24px -6px rgba(0,0,0,0.2);
     }
-    .card-header { margin-bottom: 1.5rem; text-align: left; }
+    .card-header { margin-bottom: 2rem; text-align: left; }
     .card-pill {
       display: inline-block;
       padding: 0.25rem 0.75rem;
@@ -487,84 +390,6 @@ import { AuthRole } from '../../models/auth.models';
       color: var(--ink-3);
       line-height: 1.45;
       margin: 0;
-    }
-    .role-selector {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      background: #f1f5f9;
-      padding: 0.35rem;
-      border-radius: 9999px;
-      gap: 0.25rem;
-      margin-bottom: 1.5rem;
-    }
-    .role-tab {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0.65rem 0.5rem;
-      border: none;
-      background: transparent;
-      border-radius: 9999px;
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: var(--ink-3);
-      cursor: pointer;
-      transition: all 0.2s ease;
-      font-family: inherit;
-    }
-    .role-tab:hover { color: var(--ink); }
-    .role-tab.active {
-      background: #fff;
-      color: var(--ink);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    .role-info-card {
-      display: flex;
-      flex-direction: column;
-      gap: 0.85rem;
-      background: #f8fafc;
-      border: 1.5px solid #e2e8f0;
-      border-radius: 18px;
-      padding: 1.25rem;
-      margin-bottom: 1.5rem;
-    }
-    .info-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.75rem;
-      font-size: 0.875rem;
-      line-height: 1.4;
-    }
-    .info-item strong {
-      display: block;
-      color: var(--ink);
-      font-weight: 700;
-      margin-bottom: 0.15rem;
-    }
-    .info-item p {
-      margin: 0;
-      color: var(--ink-3);
-      font-size: 0.8125rem;
-    }
-    .info-bullet {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--terracotta);
-      margin-top: 0.35rem;
-      flex-shrink: 0;
-    }
-    .role-btn-link {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-decoration: none;
-      width: 100%;
-      text-align: center;
-    }
-    .help-text {
-      color: var(--ink);
-      font-weight: 600;
     }
     .error-banner {
       display: flex;
@@ -640,7 +465,6 @@ import { AuthRole } from '../../models/auth.models';
       gap: 0.5rem;
       box-shadow: 0 10px 25px -8px rgba(29,27,44,0.4);
       transition: all 0.2s ease;
-      box-sizing: border-box;
     }
     .submit-btn:disabled {
       opacity: 0.5;
@@ -658,10 +482,13 @@ import { AuthRole } from '../../models/auth.models';
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     .auth-footer {
-      margin-top: 1.75rem;
+      margin-top: 2rem;
       text-align: center;
       font-size: 0.875rem;
       color: var(--ink-3);
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
     }
     .auth-footer a {
       color: var(--terracotta);
@@ -669,6 +496,7 @@ import { AuthRole } from '../../models/auth.models';
       font-weight: 700;
     }
     .auth-footer a:hover { text-decoration: underline; }
+    .merchant-note { font-size: 0.8125rem; }
     @media (max-width: 960px) {
       .yum-page { padding: 1.75rem 1.25rem 3rem; }
       .hero-grid { grid-template-columns: 1fr; gap: 2.75rem; }
@@ -684,82 +512,16 @@ import { AuthRole } from '../../models/auth.models';
       .hero-headline { font-size: 2.1rem; }
       .said-chip { font-size: 0.825rem; padding: 0.65rem 1rem; }
       .auth-card { padding: 1.75rem 1.25rem; border-radius: 20px; }
-      .role-tab { font-size: 0.72rem; }
     }
   `]
 })
-export class RegisterComponent implements OnInit {
+export class RegisterComponent {
   private readonly fb = inject(FormBuilder);
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
-  private readonly route = inject(ActivatedRoute, { optional: true });
 
   readonly isLoading = signal(false);
   readonly errorMessage = signal<string | null>(null);
-  readonly selectedRole = signal<AuthRole>('CUSTOMER');
-
-  readonly roles = [
-    {
-      id: 'CUSTOMER' as const,
-      label: 'Customer',
-      heroBadge: 'SwiftDrop Member Registration',
-      headline: 'Create your customer account',
-      lede: 'Sign up in seconds to schedule door-to-door deliveries, monitor parcels in real time, and enjoy automated doorstep collections.',
-      cardTitle: 'Join SwiftDrop',
-      cardSubtitle: 'Enter your details to create your delivery account',
-      chips: [
-        '“Send a care package to Galle today”',
-        '“Track my delivery in real time”',
-        '“Doorstep pickup confirmed”'
-      ]
-    },
-    {
-      id: 'MERCHANT' as const,
-      label: 'Merchant',
-      heroBadge: 'SwiftDrop Merchant Onboarding',
-      headline: 'Scale your business deliveries',
-      lede: 'Partner with SwiftDrop to automate multi-parcel dispatches, access bulk CSV tooling, and track merchant deliveries across Sri Lanka.',
-      cardTitle: 'Merchant Partner',
-      cardSubtitle: 'Scale your e-commerce logistics and fulfillment',
-      chips: [
-        '“Bulk dispatch 50 orders to Western Province”',
-        '“Automated daily courier reconciliation”',
-        '“API keys & webhook delivery events active”'
-      ]
-    },
-    {
-      id: 'ADMIN' as const,
-      label: 'Admin',
-      heroBadge: 'Internal Administration',
-      headline: 'System security & governance',
-      lede: 'Manage platform users, approve merchant partner accounts, configure system zones, and review compliance audit trails.',
-      cardTitle: 'Administrator Access',
-      cardSubtitle: 'Internal security and platform provisioning',
-      chips: [
-        '“Audit system security logs”',
-        '“Approve merchant onboarding requests”',
-        '“Manage role-based permissions”'
-      ]
-    },
-    {
-      id: 'DISPATCHER' as const,
-      label: 'Dispatcher',
-      heroBadge: 'Operations & Dispatch',
-      headline: 'Real-time courier dispatch',
-      lede: 'Assign delivery queues, balance regional courier capacity, manage parcel transit states, and ensure delivery SLA targets.',
-      cardTitle: 'Dispatcher Access',
-      cardSubtitle: 'Operations console and courier management',
-      chips: [
-        '“Assign courier to urgent parcel”',
-        '“Live zone capacity rebalancing”',
-        '“Update parcel status to Out for Delivery”'
-      ]
-    }
-  ];
-
-  readonly currentRoleMeta = computed(() => {
-    return this.roles.find((r) => r.id === this.selectedRole()) ?? this.roles[0];
-  });
 
   readonly registerForm: FormGroup = this.fb.group({
     fullName: ['', [Validators.required]],
@@ -767,18 +529,6 @@ export class RegisterComponent implements OnInit {
     phoneNumber: [''],
     password: ['', [Validators.required, Validators.minLength(8), Validators.maxLength(128)]]
   });
-
-  ngOnInit(): void {
-    const roleParam = this.route?.snapshot.queryParamMap.get('role')?.toUpperCase();
-    if (roleParam && (roleParam === 'CUSTOMER' || roleParam === 'MERCHANT' || roleParam === 'ADMIN' || roleParam === 'DISPATCHER')) {
-      this.selectedRole.set(roleParam as AuthRole);
-    }
-  }
-
-  selectRole(role: AuthRole): void {
-    this.selectedRole.set(role);
-    this.errorMessage.set(null);
-  }
 
   isFieldInvalid(fieldName: string): boolean {
     const field = this.registerForm.get(fieldName);

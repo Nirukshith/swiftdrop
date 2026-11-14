@@ -162,11 +162,12 @@ describe('LoginComponent', () => {
     expect(component.errorMessage()).toContain('Unable to initiate Google sign-in');
   });
 
-  it('should render top bar with only Register and Sign In navigation links', () => {
+  it('should render top bar with Customer, Merchant, and Sign In navigation links', () => {
     const navLinks = fixture.nativeElement.querySelectorAll('.nav-links a');
-    expect(navLinks.length).toBe(2);
-    expect(navLinks[0].textContent.trim()).toBe('Register');
-    expect(navLinks[1].textContent.trim()).toBe('Sign In');
+    expect(navLinks.length).toBe(3);
+    expect(navLinks[0].textContent.trim()).toBe('Customer');
+    expect(navLinks[1].textContent.trim()).toBe('Merchant');
+    expect(navLinks[2].textContent.trim()).toBe('Sign In');
   });
 
   it('should support switching between 4 roles and pre-filling sample credentials', () => {

@@ -22,7 +22,8 @@ import { AuthRole } from '../../models/auth.models';
         </div>
 
         <nav class="nav-links">
-          <a routerLink="/register" class="nav-link">Register</a>
+          <a routerLink="/register" class="nav-link">Customer</a>
+          <a routerLink="/merchant-registration" class="nav-link">Merchant</a>
           <a routerLink="/login" class="nav-pill">Sign In</a>
         </nav>
       </header>
@@ -186,7 +187,7 @@ import { AuthRole } from '../../models/auth.models';
             </button>
 
             <div class="auth-footer">
-              <p>Don't have an account? <a routerLink="/register">Register now</a></p>
+              <p>Don't have an account? <a routerLink="/register">Customer signup</a> or <a routerLink="/merchant-registration">Merchant partner</a></p>
             </div>
           </div>
         </section>
