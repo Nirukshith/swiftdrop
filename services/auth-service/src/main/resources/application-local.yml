@@ -18,3 +18,5 @@ swiftdrop:
       courier-email: ${SWIFTDROP_SAMPLE_COURIER_EMAIL:courier@swiftdrop.lk}
       dispatcher-email: ${SWIFTDROP_SAMPLE_DISPATCHER_EMAIL:dispatcher@swiftdrop.lk}
       admin-email: ${SWIFTDROP_SAMPLE_ADMIN_EMAIL:admin@swiftdrop.lk}
+      customer-email: ${SWIFTDROP_SAMPLE_CUSTOMER_EMAIL:customer@swiftdrop.lk}
+      merchant-email: ${SWIFTDROP_SAMPLE_MERCHANT_EMAIL:merchant@swiftdrop.lk}

@@ -141,14 +141,37 @@ import { AuthRole } from '../../models/auth.models';
                   <label for="password">Password</label>
                   <a routerLink="/forgot-password" class="forgot-password-link">Forgot?</a>
                 </div>
-                <input
-                  id="password"
-                  type="password"
-                  formControlName="password"
-                  placeholder="••••••••••••"
-                  [class.invalid]="isFieldInvalid('password')"
-                  autocomplete="current-password"
-                />
+                <div class="password-input-wrap">
+                  <input
+                    id="password"
+                    [type]="showPassword() ? 'text' : 'password'"
+                    formControlName="password"
+                    placeholder="••••••••••••"
+                    [class.invalid]="isFieldInvalid('password')"
+                    autocomplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    class="password-toggle"
+                    style="border: 0; background: none; cursor: pointer; padding: 0; color: var(--ink-3);"
+                    [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+                    [attr.aria-pressed]="showPassword()"
+                    (click)="togglePasswordVisibility()"
+                  >
+                    @if (showPassword()) {
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/>
+                        <circle cx="12" cy="12" r="2.5"/>
+                      </svg>
+                    } @else {
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/>
+                        <circle cx="12" cy="12" r="2.5"/>
+                        <path d="m3 3 18 18"/>
+                      </svg>
+                    }
+                  </button>
+                </div>
                 @if (isFieldInvalid('password')) {
                   <span class="field-error">Password is required</span>
                 }
@@ -510,6 +533,19 @@ import { AuthRole } from '../../models/auth.models';
       font-size: 0.95rem;
       transition: all 0.2s ease;
     }
+    .password-input-wrap {
+      position: relative;
+    }
+    .password-input-wrap input {
+      width: 100%;
+      padding-right: 3.25rem;
+    }
+    .password-toggle {
+      position: absolute;
+      right: 0.85rem;
+      bottom: 50%;
+      transform: translateY(50%);
+    }
     .form-group input:focus {
       outline: none;
       background: #fff;
@@ -640,6 +676,7 @@ export class LoginComponent implements OnInit {
   readonly isLoading = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly selectedRole = signal<AuthRole>('CUSTOMER');
+  readonly showPassword = signal(false);
 
   ngOnInit(): void {
     const roleParam = this.route?.snapshot.queryParamMap.get('role')?.toUpperCase();
@@ -668,6 +705,10 @@ export class LoginComponent implements OnInit {
   selectRole(role: AuthRole): void {
     this.selectedRole.set(role);
     this.errorMessage.set(null);
+  }
+
+  togglePasswordVisibility(): void {
+    this.showPassword.update((visible) => !visible);
   }
 
   useSampleCredentials(role: AuthRole): void {

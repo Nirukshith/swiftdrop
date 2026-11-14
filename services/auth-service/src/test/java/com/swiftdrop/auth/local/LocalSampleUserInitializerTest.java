@@ -35,14 +35,16 @@ class LocalSampleUserInitializerTest {
                 "Password123!",
                 "courier@swiftdrop.lk",
                 "dispatcher@swiftdrop.lk",
-                "admin@swiftdrop.lk"
+                "admin@swiftdrop.lk",
+                "customer@swiftdrop.lk",
+                "merchant@swiftdrop.lk"
         ).run();
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository, org.mockito.Mockito.times(3)).save(captor.capture());
-        assertEquals(3, captor.getAllValues().size());
+        verify(userRepository, org.mockito.Mockito.times(5)).save(captor.capture());
+        assertEquals(5, captor.getAllValues().size());
         assertEquals(
-                java.util.Set.of("COURIER", "DISPATCHER", "ADMIN"),
+                java.util.Set.of("COURIER", "DISPATCHER", "ADMIN", "CUSTOMER", "MERCHANT"),
                 captor.getAllValues().stream().map(User::getRole).collect(java.util.stream.Collectors.toSet())
         );
         org.junit.jupiter.api.Assertions.assertTrue(captor.getAllValues().stream().allMatch(User::isEnabled));
@@ -53,6 +55,8 @@ class LocalSampleUserInitializerTest {
         when(userRepository.existsByEmailIgnoreCase("courier@swiftdrop.lk")).thenReturn(true);
         when(userRepository.existsByEmailIgnoreCase("dispatcher@swiftdrop.lk")).thenReturn(true);
         when(userRepository.existsByEmailIgnoreCase("admin@swiftdrop.lk")).thenReturn(true);
+        when(userRepository.existsByEmailIgnoreCase("customer@swiftdrop.lk")).thenReturn(true);
+        when(userRepository.existsByEmailIgnoreCase("merchant@swiftdrop.lk")).thenReturn(true);
 
         new LocalSampleUserInitializer(
                 userRepository,
@@ -61,7 +65,9 @@ class LocalSampleUserInitializerTest {
                 "Password123!",
                 "courier@swiftdrop.lk",
                 "dispatcher@swiftdrop.lk",
-                "admin@swiftdrop.lk"
+                "admin@swiftdrop.lk",
+                "customer@swiftdrop.lk",
+                "merchant@swiftdrop.lk"
         ).run();
 
         verify(userRepository, never()).save(org.mockito.ArgumentMatchers.any(User.class));
