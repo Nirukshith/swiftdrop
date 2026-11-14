@@ -13,14 +13,14 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
   template: `
     <div class="yum-page">
       <header class="top-bar">
-        <div class="brand">
+        <a routerLink="/" class="brand">
           <svg class="brand-icon" viewBox="0 0 32 32" fill="none">
             <rect width="32" height="32" rx="10" fill="#ffffff" />
             <path d="M8 12L16 7L24 12V22L16 27L8 22V12Z" fill="#a53a26" />
             <path d="M16 7V27M8 12L24 22M24 12L8 22" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" />
           </svg>
           <span class="brand-text">SwiftDrop</span>
-        </div>
+        </a>
 
         <nav class="nav-links">
           <a routerLink="/register" class="nav-link">Customer</a>
@@ -36,7 +36,7 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
             <span class="badge-dot"></span> SwiftDrop Merchant Onboarding
           </div>
 
-          <h1 class="hero-headline">Scale your business deliveries with&nbsp;ease</h1>
+          <h1 class="hero-headline">Scale your business deliveries with ease</h1>
 
           <p class="hero-lede">
             Join thousands of e-commerce brands automating parcel fulfillment, daily courier dispatch, and live status updates across Sri Lanka.
@@ -80,7 +80,7 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
           </div>
         </section>
 
-        <!-- Right Column: Tactile White Card with UI Kit Components -->
+        <!-- Right Column: Tactile White Card Styled like Login Page -->
         <section class="auth-card-wrap">
           <div class="merchant-card-shell">
             <ui-card
@@ -88,84 +88,92 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
               subtitle="Submit your business details. An administrator must approve your account before API credentials are available."
             >
               <div uiCardActions>
-                <span class="card-pill">SwiftDrop partners</span>
+                <span class="card-pill">Merchant Onboarding</span>
               </div>
 
               @if (registration(); as result) {
-                <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-6" role="status">
-                  <p class="text-sm font-semibold text-emerald-800">Registration received</p>
-                  <h2 class="mt-1 text-xl font-bold text-slate-900">{{ result.businessName }}</h2>
-                  <p class="mt-2 text-sm text-slate-700">{{ result.message }}</p>
-                  <p class="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-amber-800">
+                <div class="success-box" role="status">
+                  <span class="success-badge">Registration received</span>
+                  <h2 class="success-title">{{ result.businessName }}</h2>
+                  <p class="success-msg">{{ result.message }}</p>
+                  <p class="status-indicator">
                     Status: <ui-status-badge [status]="result.status" tone="warning" [label]="result.status" />
                   </p>
-                  <p class="mt-4 text-sm text-slate-600">Once approved, an administrator will securely hand over your API client credentials. Store the secret safely; it is shown only once during approval.</p>
-                  <p class="mt-4 text-sm text-slate-600">Your API client secret is separate from your sign-in password. After approval, use <a routerLink="/forgot-password" class="font-bold text-[#a53a26] underline">Forgot password</a> with your registered email to set your sign-in password before opening the merchant portal.</p>
-                  <div class="mt-5">
-                    <ui-button routerLink="/login">Sign in</ui-button>
+                  <p class="approval-info">Once approved, an administrator will securely hand over your API client credentials. Store the secret safely; it is shown only once during approval.</p>
+                  <p class="approval-info">Your API client secret is separate from your sign-in password. After approval, use <a routerLink="/forgot-password" class="auth-link">Forgot password</a> with your registered email to set your sign-in password before opening the merchant portal.</p>
+                  <div class="mt-6">
+                    <ui-button routerLink="/login" [fullWidth]="true">Sign In</ui-button>
                   </div>
                 </div>
               } @else {
                 @if (errorMessage()) {
-                  <div role="alert" class="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">{{ errorMessage() }}</div>
+                  <div role="alert" class="error-banner">
+                    <svg class="error-icon" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>{{ errorMessage() }}</span>
+                  </div>
                 }
 
-                <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4">
-                  <div class="grid gap-4 sm:grid-cols-2">
-                    <div class="sm:col-span-2">
-                      <ui-input
-                        inputId="businessName"
-                        label="Business name"
-                        formControlName="businessName"
-                        autocomplete="organization"
-                        [messages]="{ required: 'Enter a business name (up to 200 characters).', maxlength: 'Enter a business name (up to 200 characters).' }"
-                      />
-                    </div>
-                    <div>
-                      <ui-input
-                        inputId="contactName"
-                        label="Contact name"
-                        formControlName="contactName"
-                        autocomplete="name"
-                        [messages]="{ required: 'Enter a contact name (up to 200 characters).', maxlength: 'Enter a contact name (up to 200 characters).' }"
-                      />
-                    </div>
-                    <div>
-                      <ui-input
-                        inputId="phoneNumber"
-                        label="Phone number"
-                        type="tel"
-                        formControlName="phoneNumber"
-                        placeholder="+94771234567"
-                        autocomplete="tel"
-                        [messages]="{ required: 'Use 10–14 digits, optionally starting with +.', pattern: 'Use 10–14 digits, optionally starting with +.' }"
-                      />
-                    </div>
-                    <div class="sm:col-span-2">
-                      <ui-input
-                        inputId="email"
-                        label="Business email"
-                        type="email"
-                        formControlName="email"
-                        autocomplete="email"
-                        [messages]="{ required: 'Enter a valid email address.', email: 'Enter a valid email address.' }"
-                      />
-                    </div>
-                    <div class="sm:col-span-2">
-                      <ui-input
-                        inputId="businessRegistrationNumber"
-                        label="Business registration number (optional)"
-                        formControlName="businessRegistrationNumber"
-                      />
-                    </div>
+                <form [formGroup]="form" (ngSubmit)="submit()" class="auth-form">
+                  <div class="form-stack">
+                    <ui-input
+                      inputId="businessName"
+                      label="Business name"
+                      formControlName="businessName"
+                      placeholder="e.g. Ceylon Spices Co."
+                      autocomplete="organization"
+                      [messages]="{ required: 'Enter a business name (up to 200 characters).', maxlength: 'Enter a business name (up to 200 characters).' }"
+                    />
+
+                    <ui-input
+                      inputId="contactName"
+                      label="Contact name"
+                      formControlName="contactName"
+                      placeholder="e.g. Kasun Perera"
+                      autocomplete="name"
+                      [messages]="{ required: 'Enter a contact name (up to 200 characters).', maxlength: 'Enter a contact name (up to 200 characters).' }"
+                    />
+
+                    <ui-input
+                      inputId="phoneNumber"
+                      label="Phone number"
+                      type="tel"
+                      formControlName="phoneNumber"
+                      placeholder="+94771234567"
+                      autocomplete="tel"
+                      [messages]="{ required: 'Use 10–14 digits, optionally starting with +.', pattern: 'Use 10–14 digits, optionally starting with +.' }"
+                    />
+
+                    <ui-input
+                      inputId="email"
+                      label="Business email"
+                      type="email"
+                      formControlName="email"
+                      placeholder="merchant@example.com"
+                      autocomplete="email"
+                      [messages]="{ required: 'Enter a valid email address.', email: 'Enter a valid email address.' }"
+                    />
+
+                    <ui-input
+                      inputId="businessRegistrationNumber"
+                      label="Business registration number (optional)"
+                      formControlName="businessRegistrationNumber"
+                      placeholder="e.g. PV-123456"
+                    />
                   </div>
-                  <div class="flex flex-col justify-between gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center">
-                    <p class="text-xs text-slate-500">Your account stays pending until administrator approval.</p>
-                    <ui-button type="submit" [disabled]="form.invalid || isSubmitting()" [loading]="isSubmitting()">
+
+                  <div class="submit-wrap">
+                    <ui-button type="submit" [disabled]="form.invalid || isSubmitting()" [loading]="isSubmitting()" [fullWidth]="true">
                       {{ isSubmitting() ? 'Submitting…' : 'Submit registration' }}
                     </ui-button>
                   </div>
                 </form>
+
+                <div class="auth-footer">
+                  <p>Already approved? <a routerLink="/login">Sign in</a></p>
+                  <p class="customer-note">Looking for personal delivery? <a routerLink="/register">Customer signup</a></p>
+                </div>
               }
             </ui-card>
           </div>
@@ -253,7 +261,7 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
       max-width: 1200px;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: 1.05fr 0.95fr;
+      grid-template-columns: 1fr 1fr;
       align-items: center;
       gap: 4rem;
     }
@@ -354,14 +362,40 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
     }
     .merchant-card-shell {
       width: 100%;
-      max-width: 520px;
+      max-width: 500px;
     }
-    :host ::ng-deep .merchant-card-shell ui-card > div {
+    :host ::ng-deep .merchant-card-shell ui-card > section {
       border-radius: 28px !important;
-      padding: 2.25rem 2rem !important;
+      padding: 2.75rem 2.25rem !important;
       box-shadow: 0 24px 60px -15px rgba(29,27,44,0.35), 0 8px 24px -6px rgba(0,0,0,0.2) !important;
       background: #ffffff !important;
       border: none !important;
+      color: var(--ink) !important;
+    }
+    :host ::ng-deep .merchant-card-shell ui-card header {
+      border-bottom: none !important;
+      padding: 0 0 1.5rem 0 !important;
+      display: flex !important;
+      flex-direction: column-reverse !important;
+      align-items: flex-start !important;
+      gap: 0.5rem !important;
+    }
+    :host ::ng-deep .merchant-card-shell ui-card header h2 {
+      font-family: var(--disp) !important;
+      font-size: 1.85rem !important;
+      font-weight: 900 !important;
+      color: var(--ink) !important;
+      letter-spacing: -0.025em !important;
+      margin: 0.25rem 0 !important;
+    }
+    :host ::ng-deep .merchant-card-shell ui-card header p {
+      font-size: 0.9rem !important;
+      color: var(--ink-3) !important;
+      line-height: 1.45 !important;
+      margin: 0 !important;
+    }
+    :host ::ng-deep .merchant-card-shell ui-card > section > div {
+      padding: 0 !important;
     }
     .card-pill {
       display: inline-block;
@@ -373,6 +407,145 @@ import { MerchantRegistrationResponse } from './merchant-registration.model';
       color: var(--terracotta);
       background: rgba(165,58,38,0.08);
       border-radius: 9999px;
+    }
+    .form-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 1.15rem;
+    }
+    :host ::ng-deep ui-input label {
+      font-size: 0.875rem !important;
+      font-weight: 700 !important;
+      color: var(--ink) !important;
+      margin-bottom: 0.35rem !important;
+      display: block !important;
+    }
+    :host ::ng-deep ui-input input {
+      padding: 0.85rem 1.1rem !important;
+      border-radius: 14px !important;
+      border: 1.5px solid #e2e8f0 !important;
+      background: #f8fafc !important;
+      color: var(--ink) !important;
+      font-size: 0.95rem !important;
+      transition: all 0.2s ease !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    :host ::ng-deep ui-input input:focus {
+      outline: none !important;
+      background: #ffffff !important;
+      border-color: var(--terracotta) !important;
+      box-shadow: 0 0 0 4px rgba(165,58,38,0.15) !important;
+    }
+    :host ::ng-deep ui-button button {
+      width: 100% !important;
+      height: 50px !important;
+      border-radius: 9999px !important;
+      background: var(--ink) !important;
+      color: #ffffff !important;
+      font-size: 1rem !important;
+      font-weight: 700 !important;
+      border: none !important;
+      box-shadow: 0 10px 25px -8px rgba(29,27,44,0.4) !important;
+      transition: all 0.2s ease !important;
+      cursor: pointer !important;
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
+    }
+    :host ::ng-deep ui-button button:hover:not(:disabled) {
+      background: #000000 !important;
+      transform: translateY(-1px) !important;
+    }
+    :host ::ng-deep ui-button button:disabled {
+      opacity: 0.5 !important;
+      cursor: not-allowed !important;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+    .submit-wrap {
+      margin-top: 1.5rem;
+    }
+    .auth-footer {
+      margin-top: 1.75rem;
+      text-align: center;
+      font-size: 0.875rem;
+      color: var(--ink-3);
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .auth-footer a {
+      color: var(--terracotta);
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .auth-footer a:hover { text-decoration: underline; }
+    .customer-note { font-size: 0.8125rem; }
+    .error-banner {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: #fef2f2;
+      border: 1.5px solid #fca5a5;
+      color: #991b1b;
+      padding: 0.85rem 1rem;
+      border-radius: 14px;
+      margin-bottom: 1.5rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+    .error-icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      color: #dc2626;
+    }
+    .success-box {
+      border-radius: 20px;
+      border: 1.5px solid #a7f3d0;
+      background: #ecfdf5;
+      padding: 1.75rem;
+      color: #064e3b;
+    }
+    .success-badge {
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #047857;
+    }
+    .success-title {
+      font-family: var(--disp);
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: #064e3b;
+      margin: 0.5rem 0;
+    }
+    .success-msg {
+      font-size: 0.9rem;
+      color: #047857;
+      margin-bottom: 1rem;
+    }
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8125rem;
+      font-weight: 700;
+      color: #92400e;
+      margin-bottom: 1rem;
+    }
+    .approval-info {
+      font-size: 0.85rem;
+      color: #065f46;
+      line-height: 1.5;
+      margin: 0.75rem 0;
+    }
+    .auth-link {
+      font-weight: 700;
+      color: var(--terracotta);
+      text-decoration: underline;
     }
     @media (max-width: 960px) {
       .yum-page { padding: 1.75rem 1.25rem 3rem; }
