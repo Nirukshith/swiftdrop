@@ -129,20 +129,6 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses' | 'settings';
           <!-- Sidebar Footer Utilities -->
           <div class="hidden md:flex flex-col items-center gap-3 pt-4 md:!mt-4 border-t border-[#f0ebe5]/60">
             <app-notification-bell></app-notification-bell>
-
-            <button
-              type="button"
-              id="customer-signout-btn"
-              (click)="signOut()"
-              class="w-9 h-9 rounded-xl flex items-center justify-center text-[#6f6d85] hover:text-[#a53a26] hover:bg-white transition-colors cursor-pointer"
-              title="Sign Out"
-            >
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16 17 21 12 16 7"></polyline>
-                <line x1="21" y1="12" x2="9" y2="12"></line>
-              </svg>
-            </button>
           </div>
         </aside>
 
