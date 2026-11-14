@@ -52,11 +52,11 @@ import { CourierService } from './courier/courier.service';
             href="/courier/profile"
             (click)="$event.preventDefault(); navigateTo('/courier/profile')"
             class="rail-icon-btn relative w-10 h-10 rounded-xl flex items-center justify-center text-[#a53a26] bg-white shadow-2xs transition-all cursor-pointer no-underline"
-            title="Profile & Availability"
+            title="Profile & Settings"
           >
             <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-              <circle cx="12" cy="7" r="4"></circle>
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
             <span class="hidden md:block absolute -right-[1px] top-2 bottom-2 w-1 bg-[#a53a26] rounded-l-full"></span>
           </a>
@@ -110,7 +110,7 @@ import { CourierService } from './courier/courier.service';
 
       <!-- Main Content Area (Edge-to-Edge Full Screen) -->
       <main class="flex-1 min-h-screen p-6 sm:p-8 lg:p-10 space-y-7 min-w-0 bg-white">
-        <!-- Top Header: Search Bar & User Profile (Matching Customer Portal) -->
+        <!-- Top Header: Search Bar & User Profile Dropdown (Matching Customer Portal) -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-[#f4efe9]">
           <!-- Quick search / back link -->
           <div class="relative flex-1 max-w-lg">
@@ -132,46 +132,86 @@ import { CourierService } from './courier/courier.service';
             />
           </div>
 
-          <!-- User Profile & Sign Out -->
-          <div class="flex items-center gap-3 self-end sm:self-auto">
-            <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-[#faf8f6] border border-[#e8e2dc]">
-              <div
+          <!-- User Profile Dropdown (Matching Customer Portal) -->
+          <div class="relative flex items-center gap-3 self-end sm:self-auto">
+            <button
+              type="button"
+              id="profile-menu-btn"
+              (click)="toggleProfileMenu()"
+              aria-haspopup="menu"
+              [attr.aria-expanded]="profileMenuOpen()"
+              class="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-[#faf8f6] border border-[#e8e2dc] hover:border-[#a53a26]/40 transition-colors cursor-pointer"
+            >
+              <span
                 class="w-8 h-8 rounded-full bg-[#a53a26] text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm"
               >
                 {{ courierInitials() }}
+              </span>
+              <span class="text-xs font-bold text-[#1d1b2c]">{{ courierDisplayName() }}</span>
+              <svg
+                class="w-3.5 h-3.5 text-[#6f6d85] transition-transform"
+                [class.rotate-180]="profileMenuOpen()"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+
+            <div
+              *ngIf="profileMenuOpen()"
+              role="menu"
+              id="profile-menu-panel"
+              class="absolute right-0 top-full mt-2 w-56 rounded-2xl bg-white border border-[#e8e2dc] shadow-lg shadow-[#1d1b2c]/5 py-2 z-30"
+            >
+              <div class="px-4 py-2 border-b border-[#f0ebe5]">
+                <p class="text-xs font-bold text-[#1d1b2c] truncate">{{ courierDisplayName() }}</p>
+                <p class="text-[11px] text-[#6f6d85] truncate">{{ courierEmail() }}</p>
               </div>
-              <div class="flex items-center gap-1 cursor-pointer" (click)="signOut()" title="Click to Sign Out">
-                <span class="text-xs font-bold text-[#1d1b2c]">{{ courierDisplayName() }}</span>
-                <svg class="w-3.5 h-3.5 text-[#6f6d85]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <polyline points="6 9 12 15 18 9"></polyline>
+              <button
+                type="button"
+                role="menuitem"
+                id="profile-menu-settings"
+                (click)="openSettings()"
+                class="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-[#1d1b2c] hover:bg-[#faf8f6] hover:text-[#a53a26] transition-colors cursor-pointer"
+              >
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                 </svg>
-              </div>
+                <span>Settings</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                id="profile-menu-logout"
+                (click)="logOutFromMenu()"
+                class="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-[#a53a26] hover:bg-[#faf8f6] transition-colors cursor-pointer"
+              >
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+                <span>Log out</span>
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- Page Content Section -->
-        <div class="max-w-4xl space-y-6">
-          <div class="bg-white rounded-3xl p-6 sm:p-7 border border-[#e8e2dc] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div class="flex items-center gap-4">
-              <div class="w-12 h-12 rounded-2xl bg-[#a53a26] text-white flex items-center justify-center shadow-md shadow-[#a53a26]/20 flex-shrink-0">
-                <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-              </div>
-              <div>
-                <span class="portal-pill">Courier Account</span>
-                <h1 class="portal-title text-2xl font-black text-[#1d1b2c] tracking-tight mt-0.5">
-                  Profile and Availability
-                </h1>
-                <p class="text-xs font-semibold text-[#6f6d85] mt-0.5">Keep the dispatch directory up to date.</p>
-              </div>
+        <!-- Premium Settings Panel (Identical Design to Customer Portal) -->
+        <div id="settings-panel" class="space-y-6 max-w-3xl">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <h2 class="text-xl font-black text-[#1d1b2c] tracking-tight">Settings</h2>
+              <p class="text-xs text-[#6f6d85] font-medium mt-0.5">Your account details and preferences.</p>
             </div>
             <a
               href="/courier"
               (click)="$event.preventDefault(); navigateTo('/courier')"
-              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-[#e8e2dc] hover:border-[#a53a26] text-xs font-bold text-[#6f6d85] hover:text-[#a53a26] transition-colors cursor-pointer self-start sm:self-auto"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-[#e8e2dc] hover:border-[#a53a26] text-xs font-bold text-[#6f6d85] hover:text-[#a53a26] transition-colors cursor-pointer"
             >
               ← Back to Run Sheet
             </a>
@@ -196,56 +236,119 @@ import { CourierService } from './courier/courier.service';
             Profile unavailable for this courier account.
           </div>
 
-          <div *ngIf="profile() as courier" class="rounded-3xl border border-[#eee7e0] bg-white p-7 sm:p-8 shadow-sm space-y-6">
-            <div class="flex items-start justify-between gap-4 border-b border-[#f4efe9] pb-5">
-              <div class="flex items-center gap-3.5">
-                <div class="w-12 h-12 rounded-2xl bg-[#faf6f0] text-[#a53a26] flex items-center justify-center text-xl font-black">
-                  👤
+          <ng-container *ngIf="profile() as courier">
+            <!-- 1. Account Card (Warm Sand #faf8f6 background, rounded-3xl, matching customer) -->
+            <section class="rounded-3xl border border-[#eee7e0] bg-[#faf8f6] p-6 space-y-4">
+              <h3 class="text-sm font-black text-[#1d1b2c]">Account</h3>
+              <div class="flex items-center gap-4">
+                <span class="w-12 h-12 flex-shrink-0 rounded-full bg-[#a53a26] text-white flex items-center justify-center font-bold text-sm uppercase shadow-sm">
+                  {{ courierInitials() }}
+                </span>
+                <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1 min-w-0 text-xs">
+                  <div>
+                    <dt class="text-[#6f6d85] font-medium">Full name</dt>
+                    <dd id="settings-name" class="font-bold text-[#1d1b2c] mt-0.5">{{ courier.name }}</dd>
+                  </div>
+                  <div class="min-w-0">
+                    <dt class="text-[#6f6d85] font-medium">Email</dt>
+                    <dd id="settings-email" class="font-bold text-[#1d1b2c] mt-0.5 truncate">{{ courierEmail() }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-[#6f6d85] font-medium">Account type</dt>
+                    <dd class="font-bold text-[#1d1b2c] mt-0.5">Courier</dd>
+                  </div>
+                </dl>
+              </div>
+            </section>
+
+            <!-- 2. Duty & Availability Section -->
+            <section class="rounded-3xl border border-[#eee7e0] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-sm font-black text-[#1d1b2c]">Duty & Availability</h3>
+                  <span
+                    class="rounded-full px-3 py-0.5 text-xs font-extrabold uppercase tracking-wider border"
+                    [class.bg-[#ecfdf5]]="courier.availability"
+                    [class.text-emerald-800]="courier.availability"
+                    [class.border-[#d1fae5]]="courier.availability"
+                    [class.bg-[#f1f5f9]]="!courier.availability"
+                    [class.text-[#6f6d85]]="!courier.availability"
+                    [class.border-[#e2e8f0]]="!courier.availability"
+                  >
+                    ● {{ courier.availability ? 'Available' : 'Unavailable' }}
+                  </span>
+                </div>
+                <p class="text-xs text-[#6f6d85] font-medium mt-1">
+                  {{ courier.availability ? 'You are active on duty and receiving assigned deliveries.' : 'You are currently off duty and marked unavailable for new dispatches.' }}
+                </p>
+                <p *ngIf="availabilityError()" class="text-xs text-rose-700 font-bold mt-1">{{ availabilityError() }}</p>
+              </div>
+              <button
+                type="button"
+                id="settings-availability-btn"
+                class="action-pill-btn px-6 py-2.5 rounded-full text-xs font-bold text-white transition-all cursor-pointer whitespace-nowrap shadow-sm disabled:opacity-40"
+                [class.bg-[#a53a26]]="courier.availability"
+                [class.hover:bg-[#7e2615]]="courier.availability"
+                [class.bg-emerald-600]="!courier.availability"
+                [class.hover:bg-emerald-700]="!courier.availability"
+                [disabled]="availabilityPending()"
+                (click)="toggleAvailability()"
+              >
+                {{ availabilityPending() ? 'Saving...' : ('Set ' + (courier.availability ? 'unavailable' : 'available')) }}
+              </button>
+            </section>
+
+            <!-- 3. Courier Details Section (Phone, Zone, Vehicle) -->
+            <section class="rounded-3xl border border-[#eee7e0] bg-[#faf8f6] p-6 space-y-4">
+              <h3 class="text-sm font-black text-[#1d1b2c]">Courier Details</h3>
+              <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <dt class="text-[#6f6d85] font-medium">Phone number</dt>
+                  <dd class="font-bold text-[#1d1b2c] mt-0.5">{{ courier.phone || 'Not provided' }}</dd>
                 </div>
                 <div>
-                  <h2 class="text-xl font-black text-[#1d1b2c]">{{ courier.name }}</h2>
-                  <p class="text-xs font-mono text-[#6f6d85] mt-0.5">{{ courier.userId }}</p>
+                  <dt class="text-[#6f6d85] font-medium">Assigned Zone</dt>
+                  <dd class="font-bold text-[#1d1b2c] mt-0.5">{{ courier.zone || 'Colombo' }}</dd>
                 </div>
+                <div>
+                  <dt class="text-[#6f6d85] font-medium">Vehicle</dt>
+                  <dd class="font-bold text-[#1d1b2c] mt-0.5">{{ courier.vehicle || 'MOTORBIKE' }}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <!-- 4. Password Section -->
+            <section class="rounded-3xl border border-[#eee7e0] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 class="text-sm font-black text-[#1d1b2c]">Password</h3>
+                <p class="text-xs text-[#6f6d85] font-medium mt-0.5">We will email you a secure link to set a new password.</p>
               </div>
-              <span
-                class="rounded-full px-3.5 py-1 text-xs font-extrabold tracking-wider uppercase border"
-                [class.bg-[#ecfdf5]]="courier.availability"
-                [class.text-emerald-800]="courier.availability"
-                [class.border-[#d1fae5]]="courier.availability"
-                [class.bg-[#f1f5f9]]="!courier.availability"
-                [class.text-[#6f6d85]]="!courier.availability"
-                [class.border-[#e2e8f0]]="!courier.availability"
+              <a
+                href="/forgot-password"
+                (click)="$event.preventDefault(); navigateTo('/forgot-password')"
+                id="settings-password-link"
+                class="px-5 py-2.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#1d1b2c] text-xs font-bold rounded-full transition-all no-underline whitespace-nowrap text-center cursor-pointer"
               >
-                ● {{ courier.availability ? 'Available' : 'Unavailable' }}
-              </span>
-            </div>
+                Change password
+              </a>
+            </section>
 
-            <dl class="grid gap-4 sm:grid-cols-3">
-              <div class="p-4 rounded-2xl bg-[#faf8f6] border border-[#e8e2dc]">
-                <dt class="text-[10px] font-bold uppercase tracking-wider text-[#a09eaf]">Phone</dt>
-                <dd class="mt-1 font-bold text-sm text-[#1d1b2c]">{{ courier.phone || 'Not provided' }}</dd>
+            <!-- 5. Sign Out Section -->
+            <section class="rounded-3xl border border-[#eee7e0] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 class="text-sm font-black text-[#1d1b2c]">Sign out</h3>
+                <p class="text-xs text-[#6f6d85] font-medium mt-0.5">Log out of SwiftDrop on this device.</p>
               </div>
-              <div class="p-4 rounded-2xl bg-[#faf8f6] border border-[#e8e2dc]">
-                <dt class="text-[10px] font-bold uppercase tracking-wider text-[#a09eaf]">Zone</dt>
-                <dd class="mt-1 font-bold text-sm text-[#1d1b2c]">{{ courier.zone || 'Not assigned' }}</dd>
-              </div>
-              <div class="p-4 rounded-2xl bg-[#faf8f6] border border-[#e8e2dc]">
-                <dt class="text-[10px] font-bold uppercase tracking-wider text-[#a09eaf]">Vehicle</dt>
-                <dd class="mt-1 font-bold text-sm text-[#1d1b2c]">{{ courier.vehicle || 'Not provided' }}</dd>
-              </div>
-            </dl>
-
-            <p *ngIf="availabilityError()" class="text-xs text-rose-700 font-bold">{{ availabilityError() }}</p>
-
-            <button
-              type="button"
-              class="action-pill-btn rounded-full bg-[#a53a26] hover:bg-[#7e2615] px-6 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md shadow-[#a53a26]/20 disabled:opacity-40 transition-all cursor-pointer"
-              [disabled]="availabilityPending()"
-              (click)="toggleAvailability()"
-            >
-              {{ availabilityPending() ? 'Saving...' : ('Set ' + (courier.availability ? 'unavailable' : 'available')) }}
-            </button>
-          </div>
+              <button
+                type="button"
+                id="settings-logout-btn"
+                (click)="signOut()"
+                class="px-5 py-2.5 bg-[#a53a26] hover:bg-[#7e2615] text-white text-xs font-bold rounded-full transition-all cursor-pointer whitespace-nowrap"
+              >
+                Log out
+              </button>
+            </section>
+          </ng-container>
         </div>
       </main>
     </div>
@@ -295,8 +398,16 @@ export class CourierProfileComponent {
   readonly error = signal<string | null>(null);
   readonly availabilityPending = signal(false);
   readonly availabilityError = signal<string | null>(null);
+  readonly profileMenuOpen = signal<boolean>(false);
 
-  readonly courierDisplayName = computed(() => this.profile()?.name || 'Sample Courier');
+  readonly courierDisplayName = computed(() => {
+    return this.authService?.currentUser()?.fullName || this.profile()?.name || 'Sample Courier';
+  });
+
+  readonly courierEmail = computed(() => {
+    return this.authService?.currentUser()?.email || 'courier@swiftdrop.lk';
+  });
+
   readonly courierInitials = computed(() => {
     const name = this.courierDisplayName();
     const parts = name.trim().split(/\s+/);
@@ -335,6 +446,19 @@ export class CourierProfileComponent {
       },
       complete: () => this.availabilityPending.set(false),
     });
+  }
+
+  toggleProfileMenu(): void {
+    this.profileMenuOpen.update((open) => !open);
+  }
+
+  openSettings(): void {
+    this.profileMenuOpen.set(false);
+  }
+
+  logOutFromMenu(): void {
+    this.profileMenuOpen.set(false);
+    this.signOut();
   }
 
   navigateTo(path: string): void {

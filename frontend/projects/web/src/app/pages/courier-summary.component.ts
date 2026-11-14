@@ -132,20 +132,71 @@ import { CourierService } from './courier/courier.service';
             />
           </div>
 
-          <!-- User Profile & Sign Out -->
-          <div class="flex items-center gap-3 self-end sm:self-auto">
-            <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-[#faf8f6] border border-[#e8e2dc]">
-              <div
+          <!-- User Profile Dropdown (Matching Customer Portal) -->
+          <div class="relative flex items-center gap-3 self-end sm:self-auto">
+            <button
+              type="button"
+              id="profile-menu-btn"
+              (click)="toggleProfileMenu()"
+              aria-haspopup="menu"
+              [attr.aria-expanded]="profileMenuOpen()"
+              class="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-[#faf8f6] border border-[#e8e2dc] hover:border-[#a53a26]/40 transition-colors cursor-pointer"
+            >
+              <span
                 class="w-8 h-8 rounded-full bg-[#a53a26] text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm"
               >
                 {{ courierInitials() }}
+              </span>
+              <span class="text-xs font-bold text-[#1d1b2c]">{{ courierDisplayName() }}</span>
+              <svg
+                class="w-3.5 h-3.5 text-[#6f6d85] transition-transform"
+                [class.rotate-180]="profileMenuOpen()"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+
+            <div
+              *ngIf="profileMenuOpen()"
+              role="menu"
+              id="profile-menu-panel"
+              class="absolute right-0 top-full mt-2 w-56 rounded-2xl bg-white border border-[#e8e2dc] shadow-lg shadow-[#1d1b2c]/5 py-2 z-30"
+            >
+              <div class="px-4 py-2 border-b border-[#f0ebe5]">
+                <p class="text-xs font-bold text-[#1d1b2c] truncate">{{ courierDisplayName() }}</p>
+                <p class="text-[11px] text-[#6f6d85] truncate">{{ courierEmail() }}</p>
               </div>
-              <div class="flex items-center gap-1 cursor-pointer" (click)="signOut()" title="Click to Sign Out">
-                <span class="text-xs font-bold text-[#1d1b2c]">{{ courierDisplayName() }}</span>
-                <svg class="w-3.5 h-3.5 text-[#6f6d85]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <polyline points="6 9 12 15 18 9"></polyline>
+              <button
+                type="button"
+                role="menuitem"
+                id="profile-menu-settings"
+                (click)="openSettings()"
+                class="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-[#1d1b2c] hover:bg-[#faf8f6] hover:text-[#a53a26] transition-colors cursor-pointer"
+              >
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                 </svg>
-              </div>
+                <span>Settings</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                id="profile-menu-logout"
+                (click)="logOutFromMenu()"
+                class="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-[#a53a26] hover:bg-[#faf8f6] transition-colors cursor-pointer"
+              >
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+                <span>Log out</span>
+              </button>
             </div>
           </div>
         </div>
@@ -314,9 +365,22 @@ export class CourierSummaryComponent {
   readonly selectedDate = signal('');
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
+  readonly profileMenuOpen = signal<boolean>(false);
 
-  readonly courierDisplayName = computed(() => 'Sample Courier');
-  readonly courierInitials = computed(() => 'SC');
+  readonly courierDisplayName = computed(() => {
+    return this.authService?.currentUser()?.fullName || 'Sample Courier';
+  });
+
+  readonly courierEmail = computed(() => {
+    return this.authService?.currentUser()?.email || 'courier@swiftdrop.lk';
+  });
+
+  readonly courierInitials = computed(() => {
+    const name = this.courierDisplayName();
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  });
 
   constructor() {
     this.load();
@@ -339,6 +403,20 @@ export class CourierSummaryComponent {
   selectDate(date: string): void {
     this.selectedDate.set(date);
     this.load();
+  }
+
+  toggleProfileMenu(): void {
+    this.profileMenuOpen.update((open) => !open);
+  }
+
+  openSettings(): void {
+    this.profileMenuOpen.set(false);
+    this.navigateTo('/courier/profile');
+  }
+
+  logOutFromMenu(): void {
+    this.profileMenuOpen.set(false);
+    this.signOut();
   }
 
   navigateTo(path: string): void {
