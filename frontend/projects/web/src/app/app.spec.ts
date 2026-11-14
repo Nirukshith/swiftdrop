@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
+import { of } from 'rxjs';
 import { App } from './app';
 import { routes } from './app.routes';
 
@@ -38,6 +39,7 @@ describe('App', () => {
   it('should render notification bell for customers only', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
+    jest.spyOn(app, 'isAuthPage').mockReturnValue(false);
     jest.spyOn(app.authService, 'hasRole').mockImplementation((role: string) => role === 'CUSTOMER');
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
@@ -66,6 +68,7 @@ describe('App', () => {
   it('should show admin links only when user has ADMIN role', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
+    jest.spyOn(app, 'isAuthPage').mockReturnValue(false);
     jest.spyOn(app.authService, 'hasRole').mockImplementation((role: string) => role === 'ADMIN');
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
@@ -80,6 +83,7 @@ describe('App', () => {
   it('should show dispatcher links only when user has DISPATCHER role', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
+    jest.spyOn(app, 'isAuthPage').mockReturnValue(false);
     jest.spyOn(app.authService, 'hasRole').mockImplementation((role: string) => role === 'DISPATCHER');
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
@@ -88,5 +92,38 @@ describe('App', () => {
     expect(compiled.textContent).toContain('Zones');
     expect(compiled.textContent).toContain('Pricing');
     expect(compiled.textContent).not.toContain('Staff Management');
+  });
+
+  it('should hide top bar navigation on auth routes (login, register, merchant-registration)', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    jest.spyOn(app, 'isAuthPage').mockReturnValue(true);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.querySelector('header')).toBeFalsy();
+  });
+
+  it('should show top bar navigation on non-auth signed-in routes', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    jest.spyOn(app, 'isAuthPage').mockReturnValue(false);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.querySelector('header')).toBeTruthy();
+  });
+
+  it('should call authService.logout() and redirect to landing page on logout', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    const router = TestBed.inject(Router);
+    const navigateSpy = jest.spyOn(router, 'navigate').mockResolvedValue(true);
+    const logoutSpy = jest.spyOn(app.authService, 'logout').mockReturnValue(of(undefined));
+
+    app.logout();
+
+    expect(logoutSpy).toHaveBeenCalled();
+    expect(navigateSpy).toHaveBeenCalledWith(['/']);
   });
 });

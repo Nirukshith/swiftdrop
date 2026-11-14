@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Router } from '@angular/router';
 import { Observable, tap, catchError, throwError, shareReplay, finalize, of, switchMap, map } from 'rxjs';
 import {
   AuthResponse,
@@ -28,6 +29,7 @@ import {
 })
 export class AuthService {
   private readonly http = inject(HttpClient);
+  private readonly router = inject(Router, { optional: true });
   private readonly baseUrl = '/api/v1/auth';
 
   // In-memory token storage (ADR 004)
@@ -190,9 +192,13 @@ export class AuthService {
     return this.http
       .post<void>(`${this.baseUrl}/logout`, {}, { withCredentials: true })
       .pipe(
-        tap(() => this.clearAuth()),
+        tap(() => {
+          this.clearAuth();
+          this.router?.navigate(['/']);
+        }),
         catchError((err) => {
           this.clearAuth();
+          this.router?.navigate(['/']);
           return throwError(() => err);
         })
       );
