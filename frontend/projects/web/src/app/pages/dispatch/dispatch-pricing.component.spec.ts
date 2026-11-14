@@ -168,6 +168,183 @@ describe('DispatchPricingComponent', () => {
     httpMock.expectNone('/api/v1/admin/pricing-rules');
   });
 
+  it('renders the Try a Quote calculator card and form controls', () => {
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('#quote-calculator')).toBeTruthy();
+    expect(compiled.querySelector('#quote-pickup-select')).toBeTruthy();
+    expect(compiled.querySelector('#quote-dropoff-select')).toBeTruthy();
+    expect(compiled.querySelector('#quote-weight-input')).toBeTruthy();
+    expect(compiled.querySelector('#quote-size-select')).toBeTruthy();
+    expect(compiled.querySelector('#quote-calculate-btn')).toBeTruthy();
+  });
+
+  it('validates quote input parameters and rejects zero weight', () => {
+    component.quoteForm.patchValue({ weightKg: 0 });
+    component.quoteForm.get('weightKg')?.markAsTouched();
+    fixture.detectChanges();
+
+    expect(component.quoteForm.invalid).toBe(true);
+
+    component.calculateQuote();
+    httpMock.expectNone((req) => req.url.includes('/api/v1/parcels/quote'));
+  });
+
+  it('calculates quote from backend and displays itemized breakdown', () => {
+    component.quoteForm.setValue({
+      pickupDistrict: 'Colombo',
+      dropoffDistrict: 'Kandy',
+      weightKg: 2.5,
+      size: 'MEDIUM',
+    });
+    fixture.detectChanges();
+
+    component.calculateQuote();
+
+    const quoteReq = httpMock.expectOne((req) =>
+      req.url === '/api/v1/parcels/quote' &&
+      req.params.get('pickupDistrict') === 'Colombo' &&
+      req.params.get('dropoffDistrict') === 'Kandy' &&
+      req.params.get('weightKg') === '2.5' &&
+      req.params.get('size') === 'MEDIUM'
+    );
+    expect(quoteReq.request.method).toBe('GET');
+
+    quoteReq.flush({
+      currency: 'LKR',
+      totalFee: 850,
+      breakdown: {
+        dropoffZoneBaseFee: 400,
+        weightBandCharge: 250,
+        sizeCharge: 200,
+      },
+      pickupZone: 'Western',
+      dropoffZone: 'Central',
+    });
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('#quote-result')).toBeTruthy();
+    expect(compiled.querySelector('#quote-total-fee')?.textContent).toContain('850');
+    expect(compiled.querySelector('#quote-base-fee')?.textContent).toContain('400');
+    expect(compiled.querySelector('#quote-weight-fee')?.textContent).toContain('250');
+    expect(compiled.querySelector('#quote-size-fee')?.textContent).toContain('200');
+    expect(compiled.textContent).toContain('Western to Central');
+  });
+
+  it('displays quote error when API call fails', () => {
+    component.quoteForm.setValue({
+      pickupDistrict: 'Mullaitivu',
+      dropoffDistrict: 'Colombo',
+      weightKg: 1.0,
+      size: 'SMALL',
+    });
+    fixture.detectChanges();
+
+    component.calculateQuote();
+
+    const quoteReq = httpMock.expectOne((req) => req.url === '/api/v1/parcels/quote');
+    quoteReq.flush({ message: 'Pickup district is not served' }, { status: 422, statusText: 'Unprocessable Entity' });
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('#quote-error')?.textContent).toContain('not an active served area');
+    expect(component.quoteResult()).toBeNull();
+  });
+
+  it('clears quote result when clear button is clicked', () => {
+    component.quoteResult.set({
+      currency: 'LKR',
+      totalFee: 850,
+      breakdown: { dropoffZoneBaseFee: 400, weightBandCharge: 250, sizeCharge: 200 },
+    });
+    fixture.detectChanges();
+
+    component.clearQuote();
+    fixture.detectChanges();
+
+    expect(component.quoteResult()).toBeNull();
+    expect(component.quoteError()).toBeNull();
+  });
+
+  it('displays success banner after creating a pricing rule', () => {
+    component.pricingForm.setValue({
+      kind: 'SIZE',
+      key: 'SMALL_RULE',
+      minimumWeightKg: 0,
+      maximumWeightKg: 0,
+      chargeLkr: 100,
+      active: true,
+    });
+    component.savePricingRule();
+
+    const postReq = httpMock.expectOne('/api/v1/admin/pricing-rules');
+    postReq.flush({ id: '99', kind: 'SIZE', key: 'SMALL_RULE', chargeLkr: 100, active: true });
+    httpMock.expectOne('/api/v1/admin/pricing-rules').flush([]);
+    fixture.detectChanges();
+
+    expect(component.successMessage()).toContain('SMALL_RULE');
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('#pricing-success-banner')?.textContent).toContain('SMALL_RULE');
+  });
+
+  it('displays success banner after deleting a pricing rule', () => {
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    const ruleToDelete: any = { id: '1', key: 'UP_TO_5KG' };
+    component.removePricingRule(ruleToDelete);
+
+    const delReq = httpMock.expectOne('/api/v1/admin/pricing-rules/1');
+    expect(delReq.request.method).toBe('DELETE');
+    delReq.flush(null);
+    httpMock.expectOne('/api/v1/admin/pricing-rules').flush([]);
+    fixture.detectChanges();
+
+    expect(component.successMessage()).toContain('deleted successfully');
+  });
+
+  it('accepts valid positive decimal weights and rejects negative or zero weights', () => {
+    component.quoteForm.patchValue({ weightKg: 0.05 });
+    expect(component.quoteForm.get('weightKg')?.valid).toBe(true);
+
+    component.quoteForm.patchValue({ weightKg: 0.001 });
+    expect(component.quoteForm.get('weightKg')?.valid).toBe(true);
+
+    component.quoteForm.patchValue({ weightKg: 0 });
+    expect(component.quoteForm.get('weightKg')?.valid).toBe(false);
+
+    component.quoteForm.patchValue({ weightKg: -1.5 });
+    expect(component.quoteForm.get('weightKg')?.valid).toBe(false);
+  });
+
+  it('prevents duplicate quote calculation calls while calculation is in progress', () => {
+    component.isCalculatingQuote.set(true);
+    component.calculateQuote();
+    httpMock.expectNone((req) => req.url.includes('/api/v1/parcels/quote'));
+  });
+
+  it('prevents duplicate pricing rule submissions while save is in progress', () => {
+    component.isSaving.set(true);
+    component.pricingForm.setValue({
+      kind: 'SIZE',
+      key: 'TEST_RULE',
+      minimumWeightKg: 0,
+      maximumWeightKg: 0,
+      chargeLkr: 100,
+      active: true,
+    });
+    component.savePricingRule();
+    httpMock.expectNone('/api/v1/admin/pricing-rules');
+  });
+
+  it('safely handles missing or unexpected quote breakdown data and sets error message', () => {
+    component.calculateQuote();
+    const req = httpMock.expectOne((r) => r.url === '/api/v1/parcels/quote');
+    req.flush({ totalFee: 500 }); // missing breakdown
+    fixture.detectChanges();
+
+    expect(component.quoteResult()).toBeNull();
+    expect(component.quoteError()).toContain('incomplete quote response');
+  });
+
   function setWeightBand(minimumWeightKg: number, maximumWeightKg: number): void {
     component.pricingForm.setValue({
       kind: 'WEIGHT_BAND',

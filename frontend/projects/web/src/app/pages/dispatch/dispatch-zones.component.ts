@@ -4,7 +4,7 @@ import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { RouterLink } from '@angular/router';
 import { ButtonComponent, CardComponent } from 'ui';
 import { DispatchService } from './dispatch.service';
-import { Zone } from './dispatch.model';
+import { CANONICAL_DISTRICTS, Zone } from './dispatch.model';
 
 @Component({
   selector: 'app-dispatch-zones',
@@ -89,6 +89,26 @@ import { Zone } from './dispatch.model';
         </div>
       </div>
 
+      <!-- Success Feedback Banner -->
+      @if (successMessage(); as msg) {
+        <div
+          id="zone-success-banner"
+          class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 flex items-center justify-between shadow-sm"
+        >
+          <div class="flex items-center gap-2">
+            <span>✅</span>
+            <span>{{ msg }}</span>
+          </div>
+          <button
+            type="button"
+            class="text-xs font-bold text-emerald-700 hover:text-emerald-900 cursor-pointer"
+            (click)="successMessage.set(null)"
+          >
+            ✕
+          </button>
+        </div>
+      }
+
       <!-- Main Zone Grid -->
       <div class="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
         <ui-card title="Delivery zones" id="zones">
@@ -112,8 +132,8 @@ import { Zone } from './dispatch.model';
                     {{ zone.served ? '● Served' : '○ Paused' }}
                   </span>
                   <div class="mt-2 flex gap-2">
-                    <button type="button" class="text-xs text-indigo-600" (click)="editZone(zone)">Edit</button>
-                    <button type="button" class="text-xs text-rose-600" (click)="removeZone(zone)">Delete</button>
+                    <button type="button" class="text-xs text-indigo-600 cursor-pointer" (click)="editZone(zone)">Edit</button>
+                    <button type="button" class="text-xs text-rose-600 cursor-pointer" (click)="removeZone(zone)">Delete</button>
                   </div>
                 </div>
               </div>
@@ -189,9 +209,9 @@ import { Zone } from './dispatch.model';
             <ui-button
               id="add-zone-submit-btn"
               type="submit"
-              [disabled]="zoneForm.invalid"
+              [disabled]="zoneForm.invalid || isSaving()"
             >
-              {{ editingZoneId ? 'Save changes' : 'Add zone' }}
+              {{ isSaving() ? 'Saving...' : (editingZoneId ? 'Save changes' : 'Add zone') }}
             </ui-button>
           </form>
         </ui-card>
@@ -202,34 +222,10 @@ import { Zone } from './dispatch.model';
 export class DispatchZonesComponent {
   readonly dispatchService = inject(DispatchService);
   readonly mutationError = signal<string | null>(null);
+  readonly successMessage = signal<string | null>(null);
+  readonly isSaving = signal<boolean>(false);
   editingZoneId: string | null = null;
-  readonly districts = [
-    'Ampara',
-    'Anuradhapura',
-    'Badulla',
-    'Batticaloa',
-    'Colombo',
-    'Galle',
-    'Gampaha',
-    'Hambantota',
-    'Jaffna',
-    'Kalutara',
-    'Kandy',
-    'Kegalle',
-    'Kilinochchi',
-    'Kurunegala',
-    'Mannar',
-    'Matale',
-    'Matara',
-    'Monaragala',
-    'Mullaitivu',
-    'Nuwara Eliya',
-    'Polonnaruwa',
-    'Puttalam',
-    'Ratnapura',
-    'Trincomalee',
-    'Vavuniya',
-  ];
+  readonly districts = CANONICAL_DISTRICTS;
 
   readonly zones = signal<Zone[]>([]);
 
@@ -253,29 +249,44 @@ export class DispatchZonesComponent {
   }
 
   saveZone(): void {
-    if (this.zoneForm.invalid) {
+    if (this.zoneForm.invalid || this.isSaving()) {
       this.zoneForm.markAllAsTouched();
       return;
     }
     this.mutationError.set(null);
+    this.isSaving.set(true);
     const request = this.zoneForm.getRawValue();
-    const operation = this.editingZoneId
-      ? this.dispatchService.updateZone(this.editingZoneId, request)
+    const isEditing = !!this.editingZoneId;
+    const zoneName = request.name;
+
+    const operation = isEditing
+      ? this.dispatchService.updateZone(this.editingZoneId!, request)
       : this.dispatchService.createZone(request);
+
     operation.subscribe({
       next: () => {
         this.editingZoneId = null;
+        this.isSaving.set(false);
+        this.successMessage.set(
+          isEditing
+            ? `Delivery zone "${zoneName}" updated successfully.`
+            : `Delivery zone "${zoneName}" created successfully.`
+        );
         this.zoneForm.reset({ name: '', districts: [], served: true, baseFeeLkr: 0 });
         this.loadZones();
       },
-      error: (error) => this.mutationError.set(
-        error?.error?.message || error?.message || 'Unable to save the delivery zone.'
-      ),
+      error: (error) => {
+        this.isSaving.set(false);
+        this.mutationError.set(
+          error?.error?.message || error?.message || 'Unable to save the delivery zone.'
+        );
+      },
     });
   }
 
   editZone(zone: Zone): void {
     this.editingZoneId = zone.id;
+    this.mutationError.set(null);
     this.zoneForm.setValue({
       name: zone.name,
       districts: zone.districts,
@@ -288,8 +299,12 @@ export class DispatchZonesComponent {
     if (!window.confirm(`Delete zone ${zone.name}?`)) {
       return;
     }
+    this.mutationError.set(null);
     this.dispatchService.deleteZone(zone.id).subscribe({
-      next: () => this.loadZones(),
+      next: () => {
+        this.successMessage.set(`Delivery zone "${zone.name}" deleted successfully.`);
+        this.loadZones();
+      },
       error: (error) => this.mutationError.set(
         error?.error?.message || error?.message || 'Unable to delete the delivery zone.'
       ),
