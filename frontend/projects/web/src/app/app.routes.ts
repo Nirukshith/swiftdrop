@@ -4,8 +4,9 @@ import { roleGuard } from 'shared-auth';
 export const routes: Routes = [
   {
     path: '',
-    redirectTo: 'login',
     pathMatch: 'full',
+    loadComponent: () =>
+      import('./pages/landing/landing.component').then((m) => m.LandingComponent),
   },
   {
     path: 'login',
