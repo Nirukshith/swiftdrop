@@ -127,7 +127,7 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
           </nav>
 
           <!-- Sidebar Footer Utilities -->
-          <div class="hidden md:flex flex-col items-center gap-3 pt-4 border-t border-[#f0ebe5]/60 mt-auto">
+          <div class="hidden md:flex flex-col items-center gap-3 pt-4 md:!mt-4 border-t border-[#f0ebe5]/60">
             <app-notification-bell></app-notification-bell>
 
             <button
