@@ -60,7 +60,7 @@ class GoogleOAuthTest {
         properties = new GoogleOAuthProperties();
         properties.setClientId("test-google-client-id");
         properties.setClientSecret("test-google-client-secret");
-        properties.setRedirectUri("http://localhost/api/v1/auth/oauth2/callback/google");
+        properties.setRedirectUri("http://localhost:8081/api/v1/auth/oauth2/callback/google");
         properties.setAuthUrl("https://accounts.google.com/o/oauth2/v2/auth");
         properties.setTokenUrl("https://oauth2.googleapis.com/token");
         properties.setFrontendCallbackUrl("http://localhost:4200/auth/callback");
@@ -91,6 +91,16 @@ class GoogleOAuthTest {
                 .andExpect(header().string("Set-Cookie", containsString("HttpOnly")))
                 .andExpect(header().string("Set-Cookie", containsString("Path=/api/v1/auth/oauth2")))
                 .andExpect(header().string("Set-Cookie", containsString("SameSite=Lax")));
+    }
+
+    @Test
+    @DisplayName("Google OAuth initiation returns 503 when required credentials are not configured")
+    void initiateGoogleLogin_missingConfiguration_returns503() throws Exception {
+        properties.setClientId("");
+        properties.setClientSecret("");
+
+        mockMvc.perform(get("/api/v1/auth/oauth2/google"))
+                .andExpect(status().isServiceUnavailable());
     }
 
     @Test
