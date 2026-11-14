@@ -16,6 +16,10 @@
     "target": "http://localhost:8082",
     "secure": false
   },
+  "/api/v1/addresses": {
+    "target": "http://localhost:8082",
+    "secure": false
+  },
   "/addresses": {
     "target": "http://localhost:8082",
     "secure": false
