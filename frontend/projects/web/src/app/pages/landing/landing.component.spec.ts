@@ -48,3 +48,4 @@ describe('LandingComponent', () => {
     expect(bentoCards.length).toBe(4);
   });
 });
+

@@ -38,6 +38,7 @@ describe('App', () => {
   it('should render notification bell for customers only', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
+    jest.spyOn(app, 'isAuthPage').mockReturnValue(false);
     jest.spyOn(app.authService, 'hasRole').mockImplementation((role: string) => role === 'CUSTOMER');
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
@@ -66,6 +67,7 @@ describe('App', () => {
   it('should show admin links only when user has ADMIN role', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
+    jest.spyOn(app, 'isAuthPage').mockReturnValue(false);
     jest.spyOn(app.authService, 'hasRole').mockImplementation((role: string) => role === 'ADMIN');
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
@@ -80,6 +82,7 @@ describe('App', () => {
   it('should show dispatcher links only when user has DISPATCHER role', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
+    jest.spyOn(app, 'isAuthPage').mockReturnValue(false);
     jest.spyOn(app.authService, 'hasRole').mockImplementation((role: string) => role === 'DISPATCHER');
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;

@@ -29,28 +29,14 @@ export class App {
   isAuthPage(): boolean {
     const url = this.currentUrl() || this.router.url || '';
     const cleanUrl = url.split('?')[0].split('#')[0];
-
-    if (
+    return (
+      cleanUrl === '' ||
+      cleanUrl === '/' ||
       cleanUrl === '/login' ||
       cleanUrl === '/register' ||
       cleanUrl === '/merchant-registration' ||
       cleanUrl === '/forgot-password' ||
       cleanUrl === '/reset-password'
-    ) {
-      return true;
-    }
-
-    if (cleanUrl === '' || cleanUrl === '/') {
-      const isSignedUser =
-        this.authService.isAuthenticated() ||
-        this.authService.hasRole('CUSTOMER') ||
-        this.authService.hasRole('ADMIN') ||
-        this.authService.hasRole('DISPATCHER') ||
-        this.authService.hasRole('COURIER') ||
-        this.authService.hasRole('MERCHANT');
-      return !isSignedUser;
-    }
-
-    return false;
+    );
   }
 }
