@@ -9,3 +9,12 @@ spring:
     driver-class-name: org.postgresql.Driver
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+
+swiftdrop:
+  auth:
+    sample-users:
+      enabled: ${SWIFTDROP_SAMPLE_USERS_ENABLED:true}
+      password: ${SWIFTDROP_SAMPLE_USERS_PASSWORD:Password123!}
+      courier-email: ${SWIFTDROP_SAMPLE_COURIER_EMAIL:courier@swiftdrop.lk}
+      dispatcher-email: ${SWIFTDROP_SAMPLE_DISPATCHER_EMAIL:dispatcher@swiftdrop.lk}
+      admin-email: ${SWIFTDROP_SAMPLE_ADMIN_EMAIL:admin@swiftdrop.lk}
