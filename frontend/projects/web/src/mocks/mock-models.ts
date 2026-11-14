@@ -102,3 +102,17 @@ export interface RatingResponse {
   comment?: string | null;
   createdAt: string;
 }
+
+export interface ParcelQuoteBreakdown {
+  dropoffZoneBaseFee: number;
+  weightBandCharge: number;
+  sizeCharge: number;
+}
+
+export interface ParcelQuoteResponse {
+  currency: string;
+  totalFee: number;
+  breakdown: ParcelQuoteBreakdown;
+  pickupZone?: string | null;
+  dropoffZone?: string | null;
+}

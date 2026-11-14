@@ -5,6 +5,7 @@ import {
   ParcelHistoryEntry,
   ParcelHistoryResponse,
   ParcelPageResponse,
+  ParcelQuoteResponse,
   ParcelResponse,
   ParcelStatus,
   PublicTrackingResponse,
@@ -167,6 +168,42 @@ export class MockParcelDb {
     this.parcels.push(parcel);
     this.history.set(parcel.id, [{ sequence: 1, fromStatus: null, toStatus: 'CREATED', occurredAt: created }]);
     return { status: 201, body: parcel };
+  }
+
+  getQuote(params: URLSearchParams): MockResult<ParcelQuoteResponse | ErrorResponse> {
+    const pickup = params.get('pickupDistrict')?.trim();
+    const dropoff = params.get('dropoffDistrict')?.trim();
+    const weightRaw = params.get('weightKg');
+    const size = params.get('size')?.trim();
+
+    if (!pickup || !dropoff || !weightRaw || !size) {
+      return error(400, 'VALIDATION_FAILED', 'pickupDistrict, dropoffDistrict, weightKg, and size are required');
+    }
+
+    const weight = Number(weightRaw);
+    if (isNaN(weight) || weight <= 0) {
+      return error(400, 'VALIDATION_FAILED', 'weightKg must be greater than 0');
+    }
+
+    const baseFee = 350;
+    const weightBandCharge = Math.round(weight * 100);
+    const sizeCharge = size === 'LARGE' ? 250 : size === 'MEDIUM' ? 100 : 0;
+    const totalFee = baseFee + weightBandCharge + sizeCharge;
+
+    return {
+      status: 200,
+      body: {
+        currency: 'LKR',
+        totalFee,
+        breakdown: {
+          dropoffZoneBaseFee: baseFee,
+          weightBandCharge,
+          sizeCharge,
+        },
+        pickupZone: `${pickup} Zone`,
+        dropoffZone: `${dropoff} Zone`,
+      },
+    };
   }
 
   cancelParcel(id: string, reason?: string | null): MockResult<ParcelResponse | ErrorResponse> {
