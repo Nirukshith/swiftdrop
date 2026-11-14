@@ -52,6 +52,14 @@
     "target": "http://localhost:8084",
     "secure": false
   },
+  "/api/v1/assistant": {
+    "target": "http://localhost:8084",
+    "secure": false
+  },
+  "/api/v1/notifications": {
+    "target": "http://localhost:8084",
+    "secure": false
+  },
   "/merchant": {
     "target": "http://localhost:8084",
     "secure": false

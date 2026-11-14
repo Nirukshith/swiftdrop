@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
+import { provideRouter, Router } from '@angular/router';
 import { AssistantChatComponent } from './assistant-chat.component';
 
 describe('AssistantChatComponent', () => {
@@ -10,6 +11,7 @@ describe('AssistantChatComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AssistantChatComponent, HttpClientTestingModule],
+      providers: [provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AssistantChatComponent);
@@ -125,5 +127,12 @@ describe('AssistantChatComponent', () => {
     component['onEnter'](shiftEnter);
     expect(spy).not.toHaveBeenCalled();
   }));
+
+  it('should navigate back to customer deliveries on goBack()', () => {
+    const router = TestBed.inject(Router);
+    const navigateSpy = jest.spyOn(router, 'navigate');
+    (component as any).goBack();
+    expect(navigateSpy).toHaveBeenCalledWith(['/customer']);
+  });
 });
 
