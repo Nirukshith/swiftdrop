@@ -22,14 +22,21 @@ npx ng serve --configuration mock
 ```
 
 The browser console shows `[SwiftDrop] Mock API is ON (MSW)`. Requests without a mock handler
-(for example `/api/v1/auth/**` or other services) pass through to the dev proxy as usual. Use the
-existing `MockAuthService` from `shared-auth` for login; the mock customer
+(for example other services) pass through to the dev proxy as usual. Mock mode uses
+`MockAuthService` for authentication. Use the Courier sample credentials from the login page
+(`courier@swiftdrop.lk` / `Password123!`) to enter the mock Courier portal. The mock customer
 (`customer@swiftdrop.lk`) owns all seeded parcels.
+
+With the normal `local` auth-service profile, sample Courier, Dispatcher, and Admin credentials
+are created automatically if those emails do not already exist. In normal development, Admin user
+management remains the primary way to create and manage staff accounts.
 
 **How it is switched on**
 
 - `environment.useMocks` (`projects/web/src/environments/`) is `false` by default and `true` in
   `environment.mock.ts`.
+- Mock mode provides `MockAuthService` instead of the real backend `AuthService`; normal mode always
+  uses the real auth-service.
 - The `mock` configuration in `angular.json` swaps in `environment.mock.ts` and
   `mocks/start-mocks.mock.ts`, and copies `mockServiceWorker.js`.
 - Default, development and production builds never bundle MSW or the worker, and unit tests
