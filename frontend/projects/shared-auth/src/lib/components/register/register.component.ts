@@ -188,14 +188,12 @@ import { AuthService } from '../../services/auth.service';
     }
     .yum-page {
       position: relative;
-      min-height: calc(100vh - 5rem);
-      margin: -1.5rem;
-      padding: 2.25rem 2rem 4rem;
+      min-height: 100vh;
+      margin: 0;
+      padding: 2.5rem 2rem 4rem;
       background: radial-gradient(55% 65% at 75% 45%, #b8432f 0%, #98311e 65%, #882b1a 100%), #98311e;
       color: #fff;
-      border-radius: 24px;
       overflow: hidden;
-      box-shadow: 0 20px 50px -20px rgba(40,10,5,0.45);
     }
     .top-bar {
       max-width: 1200px;

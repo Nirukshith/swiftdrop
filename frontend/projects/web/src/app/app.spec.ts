@@ -89,4 +89,24 @@ describe('App', () => {
     expect(compiled.textContent).toContain('Pricing');
     expect(compiled.textContent).not.toContain('Staff Management');
   });
+
+  it('should hide top bar navigation on auth routes (login, register, merchant-registration)', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    jest.spyOn(app, 'isAuthPage').mockReturnValue(true);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.querySelector('header')).toBeFalsy();
+  });
+
+  it('should show top bar navigation on non-auth signed-in routes', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    jest.spyOn(app, 'isAuthPage').mockReturnValue(false);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.querySelector('header')).toBeTruthy();
+  });
 });
