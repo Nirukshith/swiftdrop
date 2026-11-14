@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
+import { of } from 'rxjs';
 import { App } from './app';
 import { routes } from './app.routes';
 
@@ -111,5 +112,18 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
 
     expect(compiled.querySelector('header')).toBeTruthy();
+  });
+
+  it('should call authService.logout() and redirect to landing page on logout', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    const router = TestBed.inject(Router);
+    const navigateSpy = jest.spyOn(router, 'navigate').mockResolvedValue(true);
+    const logoutSpy = jest.spyOn(app.authService, 'logout').mockReturnValue(of(undefined));
+
+    app.logout();
+
+    expect(logoutSpy).toHaveBeenCalled();
+    expect(navigateSpy).toHaveBeenCalledWith(['/']);
   });
 });

@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
+import { AuthService } from 'shared-auth';
 import {
   AddressDto,
   CreateCustomerParcelRequest,
@@ -48,63 +50,81 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
           </div>
         </div>
 
-        <!-- Navigation Tabs (Segmented Pill Style) -->
-        <div
-          class="tab-pill-bar inline-flex rounded-full bg-[#f1f5f9] p-1.5 border border-[#e2e8f0]/80 text-sm font-bold"
-        >
-          <button
-            type="button"
-            id="tab-deliveries-btn"
-            (click)="activeTab.set('deliveries')"
-            [class.active]="activeTab() === 'deliveries'"
-            class="tab-pill px-5 py-2.5 rounded-full transition-all flex items-center gap-2 font-bold text-sm"
+        <div class="flex flex-wrap items-center gap-3">
+          <!-- Navigation Tabs (Segmented Pill Style) -->
+          <div
+            class="tab-pill-bar inline-flex rounded-full bg-[#f1f5f9] p-1.5 border border-[#e2e8f0]/80 text-sm font-bold"
           >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-              <line x1="12" y1="22.08" x2="12" y2="12"/>
-            </svg>
-            <span>My Deliveries</span>
-            <span
-              class="count-badge ml-1 text-xs px-2 py-0.5 rounded-full"
-              [class.active-badge]="activeTab() === 'deliveries'"
+            <button
+              type="button"
+              id="tab-deliveries-btn"
+              (click)="activeTab.set('deliveries')"
+              [class.active]="activeTab() === 'deliveries'"
+              class="tab-pill px-5 py-2.5 rounded-full transition-all flex items-center gap-2 font-bold text-sm"
             >
-              {{ parcels().length }}
-            </span>
-          </button>
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                <line x1="12" y1="22.08" x2="12" y2="12"/>
+              </svg>
+              <span>My Deliveries</span>
+              <span
+                class="count-badge ml-1 text-xs px-2 py-0.5 rounded-full"
+                [class.active-badge]="activeTab() === 'deliveries'"
+              >
+                {{ parcels().length }}
+              </span>
+            </button>
 
-          <button
-            type="button"
-            id="tab-wizard-btn"
-            (click)="activeTab.set('wizard')"
-            [class.active]="activeTab() === 'wizard'"
-            class="tab-pill px-5 py-2.5 rounded-full transition-all flex items-center gap-2 font-bold text-sm"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            <span>New Delivery</span>
-          </button>
-
-          <button
-            type="button"
-            id="tab-addresses-btn"
-            (click)="activeTab.set('addresses')"
-            [class.active]="activeTab() === 'addresses'"
-            class="tab-pill px-5 py-2.5 rounded-full transition-all flex items-center gap-2 font-bold text-sm"
-          >
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-              <circle cx="12" cy="10" r="3"></circle>
-            </svg>
-            <span>Address Book</span>
-            <span
-              class="count-badge ml-1 text-xs px-2 py-0.5 rounded-full"
-              [class.active-badge]="activeTab() === 'addresses'"
+            <button
+              type="button"
+              id="tab-wizard-btn"
+              (click)="activeTab.set('wizard')"
+              [class.active]="activeTab() === 'wizard'"
+              class="tab-pill px-5 py-2.5 rounded-full transition-all flex items-center gap-2 font-bold text-sm"
             >
-              {{ addresses().length }}
-            </span>
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>New Delivery</span>
+            </button>
+
+            <button
+              type="button"
+              id="tab-addresses-btn"
+              (click)="activeTab.set('addresses')"
+              [class.active]="activeTab() === 'addresses'"
+              class="tab-pill px-5 py-2.5 rounded-full transition-all flex items-center gap-2 font-bold text-sm"
+            >
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+              </svg>
+              <span>Address Book</span>
+              <span
+                class="count-badge ml-1 text-xs px-2 py-0.5 rounded-full"
+                [class.active-badge]="activeTab() === 'addresses'"
+              >
+                {{ addresses().length }}
+              </span>
+            </button>
+          </div>
+
+          <!-- Sign Out Button -->
+          <button
+            type="button"
+            id="customer-signout-btn"
+            (click)="signOut()"
+            class="px-4 py-2.5 rounded-full text-xs font-bold text-[#6f6d85] hover:text-[#a53a26] hover:bg-[#faf6f0] border border-[#e2e8f0]/80 transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Sign Out to Landing Page"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Sign Out</span>
           </button>
         </div>
       </div>
@@ -1230,6 +1250,19 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
 })
 export class CustomerComponent implements OnInit {
   private customerService = inject(CustomerService);
+  private authService = inject(AuthService, { optional: true });
+  private router = inject(Router, { optional: true });
+
+  signOut(): void {
+    if (this.authService) {
+      this.authService.logout().subscribe({
+        next: () => this.router?.navigate(['/']),
+        error: () => this.router?.navigate(['/']),
+      });
+    } else {
+      this.router?.navigate(['/']);
+    }
+  }
 
   readonly districts = SRI_LANKA_DISTRICTS;
   readonly sizeTiers: { size: ParcelSize; label: string; desc: string; surcharge: string }[] = [

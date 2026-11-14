@@ -311,4 +311,8 @@ describe('CustomerComponent', () => {
     expect(component.addresses().length).toBe(countBefore - 1);
     expect(component.addresses().some((a) => a.id === target.id)).toBe(false);
   }));
+
+  it('should execute signOut without error', () => {
+    expect(() => component.signOut()).not.toThrow();
+  });
 });

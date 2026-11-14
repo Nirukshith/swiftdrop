@@ -39,4 +39,11 @@ export class App {
       cleanUrl === '/reset-password'
     );
   }
+
+  logout(): void {
+    this.authService.logout().subscribe({
+      next: () => this.router.navigate(['/']),
+      error: () => this.router.navigate(['/']),
+    });
+  }
 }
