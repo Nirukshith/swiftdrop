@@ -111,10 +111,12 @@ mvn test -Dtest="AuthSecurityVerificationTest,Week7AuthSecurityVerificationTest,
 mvn spring-boot:run -pl services/auth-service -Dspring-boot.run.profiles=local
 ```
 
-The `local` profile creates enabled sample staff accounts when they do not already exist:
-`courier@swiftdrop.lk`, `dispatcher@swiftdrop.lk`, and `admin@swiftdrop.lk`, all using
-`Password123!`. This is development-only and never runs under the `docker` or production
-profiles. Admin-created staff accounts remain the normal provisioning path.
+The `local` profile creates enabled sample accounts when they do not already exist:
+`customer@swiftdrop.lk`, `merchant@swiftdrop.lk`, `courier@swiftdrop.lk`,
+`dispatcher@swiftdrop.lk`, and `admin@swiftdrop.lk`, all using `Password123!`.
+This is development-only and never runs under the `docker` or production profiles.
+Registration, merchant onboarding, and Admin-created staff accounts remain the normal
+provisioning paths.
 
 ---
 

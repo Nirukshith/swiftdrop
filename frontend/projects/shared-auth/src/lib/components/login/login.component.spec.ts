@@ -71,6 +71,24 @@ describe('LoginComponent', () => {
     expect(component.loginForm.valid).toBe(true);
   });
 
+  it('should toggle password visibility from hidden to visible and back', () => {
+    const passwordInput = fixture.nativeElement.querySelector('#password') as HTMLInputElement;
+    const toggle = fixture.nativeElement.querySelector('.password-toggle') as HTMLButtonElement;
+
+    expect(passwordInput.type).toBe('password');
+    expect(toggle.getAttribute('aria-label')).toBe('Show password');
+
+    toggle.click();
+    fixture.detectChanges();
+    expect(passwordInput.type).toBe('text');
+    expect(toggle.getAttribute('aria-label')).toBe('Hide password');
+
+    toggle.click();
+    fixture.detectChanges();
+    expect(passwordInput.type).toBe('password');
+    expect(toggle.getAttribute('aria-label')).toBe('Show password');
+  });
+
   it('should navigate to user role route on successful login', () => {
     authServiceMock.login.mockReturnValue(of(mockAuthResponse));
 

@@ -24,6 +24,8 @@ public class LocalSampleUserInitializer implements CommandLineRunner {
     private final String courierEmail;
     private final String dispatcherEmail;
     private final String adminEmail;
+    private final String customerEmail;
+    private final String merchantEmail;
 
     public LocalSampleUserInitializer(
             UserRepository userRepository,
@@ -32,7 +34,9 @@ public class LocalSampleUserInitializer implements CommandLineRunner {
             @Value("${swiftdrop.auth.sample-users.password:Password123!}") String password,
             @Value("${swiftdrop.auth.sample-users.courier-email:courier@swiftdrop.lk}") String courierEmail,
             @Value("${swiftdrop.auth.sample-users.dispatcher-email:dispatcher@swiftdrop.lk}") String dispatcherEmail,
-            @Value("${swiftdrop.auth.sample-users.admin-email:admin@swiftdrop.lk}") String adminEmail) {
+            @Value("${swiftdrop.auth.sample-users.admin-email:admin@swiftdrop.lk}") String adminEmail,
+            @Value("${swiftdrop.auth.sample-users.customer-email:customer@swiftdrop.lk}") String customerEmail,
+            @Value("${swiftdrop.auth.sample-users.merchant-email:merchant@swiftdrop.lk}") String merchantEmail) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.enabled = enabled;
@@ -40,6 +44,8 @@ public class LocalSampleUserInitializer implements CommandLineRunner {
         this.courierEmail = courierEmail.trim().toLowerCase();
         this.dispatcherEmail = dispatcherEmail.trim().toLowerCase();
         this.adminEmail = adminEmail.trim().toLowerCase();
+        this.customerEmail = customerEmail.trim().toLowerCase();
+        this.merchantEmail = merchantEmail.trim().toLowerCase();
     }
 
     @Override
@@ -51,6 +57,8 @@ public class LocalSampleUserInitializer implements CommandLineRunner {
         createIfMissing(courierEmail, "Sample Courier", "COURIER");
         createIfMissing(dispatcherEmail, "Sample Dispatcher", "DISPATCHER");
         createIfMissing(adminEmail, "Sample Administrator", "ADMIN");
+        createIfMissing(customerEmail, "Sample Customer", "CUSTOMER");
+        createIfMissing(merchantEmail, "Sample Merchant", "MERCHANT");
     }
 
     private void createIfMissing(String email, String fullName, String role) {

@@ -27,9 +27,10 @@ The browser console shows `[SwiftDrop] Mock API is ON (MSW)`. Requests without a
 (`courier@swiftdrop.lk` / `Password123!`) to enter the mock Courier portal. The mock customer
 (`customer@swiftdrop.lk`) owns all seeded parcels.
 
-With the normal `local` auth-service profile, sample Courier, Dispatcher, and Admin credentials
-are created automatically if those emails do not already exist. In normal development, Admin user
-management remains the primary way to create and manage staff accounts.
+With the normal `local` auth-service profile, sample Customer, Merchant, Courier, Dispatcher, and
+Admin credentials are created automatically if those emails do not already exist. In normal
+development, registration, merchant onboarding, and Admin user management remain the primary
+account-provisioning flows.
 
 **How it is switched on**
 
