@@ -99,7 +99,6 @@ import { AuthRole } from '../../models/auth.models';
                   role="tab"
                   [attr.aria-selected]="selectedRole() === r.id"
                 >
-                  <span class="role-icon">{{ r.icon }}</span>
                   <span class="role-name">{{ r.label }}</span>
                 </button>
               }
@@ -107,7 +106,7 @@ import { AuthRole } from '../../models/auth.models';
 
             <div class="sample-hint-row">
               <button type="button" class="sample-link" (click)="useSampleCredentials(selectedRole())">
-                ⚡ Fill sample {{ currentRoleMeta().label }} credentials
+                Fill sample {{ currentRoleMeta().label }} credentials
               </button>
             </div>
 
@@ -423,16 +422,16 @@ import { AuthRole } from '../../models/auth.models';
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 0.3rem;
-      padding: 0.5rem 0.2rem;
+      padding: 0.65rem 0.5rem;
       border: none;
       border-radius: 9999px;
       background: transparent;
       color: var(--ink-3);
-      font-size: 0.78rem;
-      font-weight: 800;
+      font-size: 0.85rem;
+      font-weight: 700;
       cursor: pointer;
       transition: all 0.2s ease;
+      font-family: inherit;
     }
     .role-tab:hover { color: var(--ink); }
     .role-tab.active {
@@ -440,7 +439,6 @@ import { AuthRole } from '../../models/auth.models';
       color: var(--ink);
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
-    .role-icon { font-size: 0.85rem; }
     .sample-hint-row {
       margin-bottom: 1.25rem;
       text-align: right;
@@ -650,10 +648,10 @@ export class LoginComponent implements OnInit {
   }
 
   readonly roles = [
-    { id: 'CUSTOMER' as const, label: 'Customer', icon: '👤', placeholder: 'customer@swiftdrop.lk', target: '/customer', desc: 'Sign in to track and manage personal deliveries' },
-    { id: 'MERCHANT' as const, label: 'Merchant', icon: '🏪', placeholder: 'merchant@swiftdrop.lk', target: '/merchant', desc: 'Access merchant bulk orders, CSV tools, and API' },
-    { id: 'ADMIN' as const, label: 'Admin', icon: '🛡️', placeholder: 'admin@swiftdrop.lk', target: '/admin', desc: 'System user management, approvals, and audits' },
-    { id: 'DISPATCHER' as const, label: 'Dispatcher', icon: '⚡', placeholder: 'dispatcher@swiftdrop.lk', target: '/dispatch', desc: 'Courier dispatch queue, workload, and zone rates' },
+    { id: 'CUSTOMER' as const, label: 'Customer', placeholder: 'customer@swiftdrop.lk', target: '/customer', desc: 'Sign in to track and manage personal deliveries' },
+    { id: 'MERCHANT' as const, label: 'Merchant', placeholder: 'merchant@swiftdrop.lk', target: '/merchant', desc: 'Access merchant bulk orders, CSV tools, and API' },
+    { id: 'ADMIN' as const, label: 'Admin', placeholder: 'admin@swiftdrop.lk', target: '/admin', desc: 'System user management, approvals, and audits' },
+    { id: 'DISPATCHER' as const, label: 'Dispatcher', placeholder: 'dispatcher@swiftdrop.lk', target: '/dispatch', desc: 'Courier dispatch queue, workload, and zone rates' },
   ];
 
   readonly currentRoleMeta = computed(() => {

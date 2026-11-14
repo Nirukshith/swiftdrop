@@ -39,10 +39,27 @@ import { AuthRole } from '../../models/auth.models';
           <p class="hero-lede">{{ currentRoleMeta().lede }}</p>
 
           <ul class="said-chips" aria-label="Role highlights">
-            @for (chip of currentRoleMeta().chips; track chip.text; let idx = $index) {
+            @for (text of currentRoleMeta().chips; track $index; let idx = $index) {
               <li class="said-chip" [class.chip-2]="idx === 1" [class.chip-3]="idx === 2">
-                <span class="chip-emoji">{{ chip.icon }}</span>
-                <span>{{ chip.text }}</span>
+                @if (idx === 0) {
+                  <svg class="chip-icon mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="22"/>
+                  </svg>
+                } @else if (idx === 1) {
+                  <svg class="chip-icon parcel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                    <line x1="12" y1="22.08" x2="12" y2="12"/>
+                  </svg>
+                } @else {
+                  <svg class="chip-icon check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                }
+                <span>{{ text }}</span>
               </li>
             }
           </ul>
@@ -69,7 +86,7 @@ import { AuthRole } from '../../models/auth.models';
               <p>{{ currentRoleMeta().cardSubtitle }}</p>
             </div>
 
-            <!-- 4-User Role Selector -->
+            <!-- 4-User Role Selector (clean pill style, no emojis) -->
             <div class="role-selector" role="tablist" aria-label="Select User Role">
               @for (r of roles; track r.id) {
                 <button
@@ -80,7 +97,6 @@ import { AuthRole } from '../../models/auth.models';
                   role="tab"
                   [attr.aria-selected]="selectedRole() === r.id"
                 >
-                  <span class="role-icon">{{ r.icon }}</span>
                   <span class="role-name">{{ r.label }}</span>
                 </button>
               }
@@ -172,21 +188,21 @@ import { AuthRole } from '../../models/auth.models';
             } @else if (selectedRole() === 'MERCHANT') {
               <div class="role-info-card">
                 <div class="info-item">
-                  <span class="info-icon">🏪</span>
+                  <div class="info-bullet"></div>
                   <div>
                     <strong>Verified Business Accounts</strong>
                     <p>Register your merchant entity for bulk discounts and automated door-to-door courier dispatch.</p>
                   </div>
                 </div>
                 <div class="info-item">
-                  <span class="info-icon">📑</span>
+                  <div class="info-bullet"></div>
                   <div>
                     <strong>Bulk CSV & API Automation</strong>
                     <p>Upload multi-parcel CSV manifests or integrate your store with SwiftDrop REST webhooks.</p>
                   </div>
                 </div>
                 <div class="info-item">
-                  <span class="info-icon">🛡️</span>
+                  <div class="info-bullet"></div>
                   <div>
                     <strong>Admin Review & Secure Keys</strong>
                     <p>Accounts are verified by an administrator before API secrets and credentials are issued.</p>
@@ -204,14 +220,14 @@ import { AuthRole } from '../../models/auth.models';
             } @else if (selectedRole() === 'ADMIN') {
               <div class="role-info-card">
                 <div class="info-item">
-                  <span class="info-icon">🛡️</span>
+                  <div class="info-bullet"></div>
                   <div>
                     <strong>Internal Security Provisioning</strong>
                     <p>Administrator accounts are provisioned internally by IT security operations. Public self-registration is disabled.</p>
                   </div>
                 </div>
                 <div class="info-item">
-                  <span class="info-icon">🔑</span>
+                  <div class="info-bullet"></div>
                   <div>
                     <strong>Platform Governance</strong>
                     <p>Authorized admins manage system users, approve merchant businesses, and audit security events.</p>
@@ -229,14 +245,14 @@ import { AuthRole } from '../../models/auth.models';
             } @else if (selectedRole() === 'DISPATCHER') {
               <div class="role-info-card">
                 <div class="info-item">
-                  <span class="info-icon">⚡</span>
+                  <div class="info-bullet"></div>
                   <div>
                     <strong>Operations Dispatch Console</strong>
                     <p>Dispatcher accounts are assigned and activated by operations management. Sign in with your operational credentials.</p>
                   </div>
                 </div>
                 <div class="info-item">
-                  <span class="info-icon">🚚</span>
+                  <div class="info-bullet"></div>
                   <div>
                     <strong>Courier Fleet & Zone Balancing</strong>
                     <p>Coordinate active couriers, balance delivery zones, and manage parcel dispatch queues.</p>
@@ -410,7 +426,12 @@ import { AuthRole } from '../../models/auth.models';
     .chip-2 { margin-left: 1.5rem; animation-delay: -2.3s; }
     .chip-3 { margin-left: 0.5rem; animation-delay: -4.6s; }
     @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-    .chip-emoji { font-size: 1.1rem; }
+    .chip-icon {
+      width: 18px;
+      height: 18px;
+      color: var(--coral);
+      flex-shrink: 0;
+    }
     .hero-store-row { margin-top: 0.5rem; }
     .store-badge {
       display: inline-flex;
@@ -472,20 +493,19 @@ import { AuthRole } from '../../models/auth.models';
       grid-template-columns: repeat(4, 1fr);
       background: #f1f5f9;
       padding: 0.35rem;
-      border-radius: 16px;
+      border-radius: 9999px;
       gap: 0.25rem;
       margin-bottom: 1.5rem;
     }
     .role-tab {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      gap: 0.25rem;
-      padding: 0.5rem 0.25rem;
+      justify-content: center;
+      padding: 0.65rem 0.5rem;
       border: none;
       background: transparent;
-      border-radius: 12px;
-      font-size: 0.78rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
       font-weight: 700;
       color: var(--ink-3);
       cursor: pointer;
@@ -495,10 +515,9 @@ import { AuthRole } from '../../models/auth.models';
     .role-tab:hover { color: var(--ink); }
     .role-tab.active {
       background: #fff;
-      color: var(--terracotta);
+      color: var(--ink);
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
-    .role-icon { font-size: 0.85rem; }
     .role-info-card {
       display: flex;
       flex-direction: column;
@@ -527,10 +546,13 @@ import { AuthRole } from '../../models/auth.models';
       color: var(--ink-3);
       font-size: 0.8125rem;
     }
-    .info-icon {
-      font-size: 1.2rem;
-      line-height: 1;
-      margin-top: 0.1rem;
+    .info-bullet {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--terracotta);
+      margin-top: 0.35rem;
+      flex-shrink: 0;
     }
     .role-btn-link {
       display: flex;
@@ -662,7 +684,7 @@ import { AuthRole } from '../../models/auth.models';
       .hero-headline { font-size: 2.1rem; }
       .said-chip { font-size: 0.825rem; padding: 0.65rem 1rem; }
       .auth-card { padding: 1.75rem 1.25rem; border-radius: 20px; }
-      .role-tab { font-size: 0.72rem; gap: 0.15rem; }
+      .role-tab { font-size: 0.72rem; }
     }
   `]
 })
@@ -680,61 +702,57 @@ export class RegisterComponent implements OnInit {
     {
       id: 'CUSTOMER' as const,
       label: 'Customer',
-      icon: '👤',
       heroBadge: 'SwiftDrop Member Registration',
       headline: 'Create your customer account',
       lede: 'Sign up in seconds to schedule door-to-door deliveries, monitor parcels in real time, and enjoy automated doorstep collections.',
       cardTitle: 'Join SwiftDrop',
       cardSubtitle: 'Enter your details to create your delivery account',
       chips: [
-        { icon: '🎙️', text: '“Send a care package to Galle today”' },
-        { icon: '📦', text: '“Track my delivery in real time”' },
-        { icon: '✅', text: '“Doorstep pickup confirmed”' }
+        '“Send a care package to Galle today”',
+        '“Track my delivery in real time”',
+        '“Doorstep pickup confirmed”'
       ]
     },
     {
       id: 'MERCHANT' as const,
       label: 'Merchant',
-      icon: '🏪',
       heroBadge: 'SwiftDrop Merchant Onboarding',
       headline: 'Scale your business deliveries',
       lede: 'Partner with SwiftDrop to automate multi-parcel dispatches, access bulk CSV tooling, and track merchant deliveries across Sri Lanka.',
       cardTitle: 'Merchant Partner',
       cardSubtitle: 'Scale your e-commerce logistics and fulfillment',
       chips: [
-        { icon: '🏪', text: '“Bulk dispatch 50 orders to Western Province”' },
-        { icon: '📊', text: '“Automated daily courier reconciliation”' },
-        { icon: '🔌', text: '“API keys & webhook delivery events active”' }
+        '“Bulk dispatch 50 orders to Western Province”',
+        '“Automated daily courier reconciliation”',
+        '“API keys & webhook delivery events active”'
       ]
     },
     {
       id: 'ADMIN' as const,
       label: 'Admin',
-      icon: '🛡️',
       heroBadge: 'Internal Administration',
       headline: 'System security & governance',
       lede: 'Manage platform users, approve merchant partner accounts, configure system zones, and review compliance audit trails.',
       cardTitle: 'Administrator Access',
       cardSubtitle: 'Internal security and platform provisioning',
       chips: [
-        { icon: '🛡️', text: '“Audit system security logs”' },
-        { icon: '📋', text: '“Approve merchant onboarding requests”' },
-        { icon: '👥', text: '“Manage role-based permissions”' }
+        '“Audit system security logs”',
+        '“Approve merchant onboarding requests”',
+        '“Manage role-based permissions”'
       ]
     },
     {
       id: 'DISPATCHER' as const,
       label: 'Dispatcher',
-      icon: '⚡',
       heroBadge: 'Operations & Dispatch',
       headline: 'Real-time courier dispatch',
       lede: 'Assign delivery queues, balance regional courier capacity, manage parcel transit states, and ensure delivery SLA targets.',
       cardTitle: 'Dispatcher Access',
       cardSubtitle: 'Operations console and courier management',
       chips: [
-        { icon: '⚡', text: '“Assign courier to urgent parcel”' },
-        { icon: '🗺️', text: '“Live zone capacity rebalancing”' },
-        { icon: '🚚', text: '“Update parcel status to Out for Delivery”' }
+        '“Assign courier to urgent parcel”',
+        '“Live zone capacity rebalancing”',
+        '“Update parcel status to Out for Delivery”'
       ]
     }
   ];
