@@ -42,6 +42,28 @@ export interface CourierProfile {
   vehicle: string | null;
 }
 
+const GOOGLE_MAPS_HOSTS = new Set(['google.com', 'www.google.com', 'maps.google.com']);
+const DESTINATION_QUERY_KEYS = ['query', 'destination', 'q', 'daddr'];
+
+/** Return a safe, actionable Google Maps destination URL or null. */
+export function normalizeGoogleMapsUrl(value?: string | null): string | null {
+  const candidate = value?.trim();
+  if (!candidate) return null;
+
+  try {
+    const url = new URL(candidate);
+    const host = url.hostname.toLowerCase();
+    const isGoogleMapsPath = host !== 'maps.google.com' && url.pathname.toLowerCase().startsWith('/maps/');
+    if (url.protocol !== 'https:' || !GOOGLE_MAPS_HOSTS.has(host) || (host !== 'maps.google.com' && !isGoogleMapsPath)) {
+      return null;
+    }
+
+    return DESTINATION_QUERY_KEYS.some((key) => Boolean(url.searchParams.get(key)?.trim())) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface CourierDeliveryCard {
   parcelId: string;
   trackingNumber: string;

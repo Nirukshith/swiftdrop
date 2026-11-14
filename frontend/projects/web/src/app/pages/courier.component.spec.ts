@@ -24,7 +24,7 @@ describe('CourierComponent', () => {
         recipientPhone: '+94 77 123 4567',
         pickupAddress: '100 Union Place, Colombo 02',
         dropoffAddress: '75 Galle Road, Colombo 04',
-        googleMapsUrl: 'https://maps.google.com',
+        googleMapsUrl: 'https://www.google.com/maps/search/?api=1&query=75+Galle+Road+Colombo+04',
         weightKg: 1.5,
         attemptCount: 1,
         sequenceOrder: 1,
@@ -37,7 +37,7 @@ describe('CourierComponent', () => {
         recipientPhone: '+94 71 987 6543',
         pickupAddress: '54 Bauddhaloka Mw, Colombo 07',
         dropoffAddress: '12 Havelock Place, Colombo 05',
-        googleMapsUrl: 'https://maps.google.com',
+        googleMapsUrl: 'https://www.google.com/maps/search/?api=1&query=12+Havelock+Place+Colombo+05',
         weightKg: 0.8,
         attemptCount: 0,
         sequenceOrder: 2,
@@ -50,12 +50,21 @@ describe('CourierComponent', () => {
         recipientPhone: '+94 72 333 4455',
         pickupAddress: '5 Alexandra Place, Colombo 07',
         dropoffAddress: '18/4 Ward Place, Colombo 07',
-        googleMapsUrl: 'https://maps.google.com',
+        googleMapsUrl: 'https://www.google.com/maps/search/?api=1&query=18%2F4+Ward+Place+Colombo+07',
         weightKg: 2.1,
         attemptCount: 1,
         sequenceOrder: 3,
       },
     ],
+  };
+
+  const mockProfile = {
+    userId: 'courier-1',
+    name: 'Kamal Perera',
+    phone: '+94771234567',
+    zone: 'Colombo',
+    availability: true,
+    vehicle: 'MOTORBIKE',
   };
 
   beforeEach(async () => {
@@ -73,6 +82,9 @@ describe('CourierComponent', () => {
     const req = httpMock.expectOne('/api/v1/courier/deliveries');
     expect(req.request.method).toBe('GET');
     req.flush(mockDeliveriesResponse);
+    const profileReq = httpMock.expectOne('/api/v1/courier/me');
+    expect(profileReq.request.method).toBe('GET');
+    profileReq.flush(mockProfile);
     fixture.detectChanges();
   });
 
@@ -90,6 +102,43 @@ describe('CourierComponent', () => {
     expect(component.stats().delivered).toBe(1);
     expect(component.stats().created).toBe(1);
     expect(component.stats().outForDelivery).toBe(1);
+  });
+
+  it('loads and displays the authenticated courier profile in the dashboard header', () => {
+    expect(component.profileLoaded()).toBe(true);
+    expect(component.profileLoading()).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('Kamal Perera');
+    expect(fixture.nativeElement.textContent).toContain('courier-1');
+    expect(fixture.nativeElement.textContent).toContain('Colombo');
+  });
+
+  it('shows the profile API error and does not display stale profile values', () => {
+    component.loadProfile();
+    const profileReq = httpMock.expectOne('/api/v1/courier/me');
+    profileReq.flush({ message: 'Unauthorized' }, { status: 401, statusText: 'Unauthorized' });
+    fixture.detectChanges();
+
+    expect(component.profileLoaded()).toBe(false);
+    expect(component.profileLoading()).toBe(false);
+    expect(component.profileError()).toContain('session has expired');
+    expect(fixture.nativeElement.textContent).toContain('session has expired');
+    const headerText = fixture.nativeElement.querySelector('h1').parentElement.textContent;
+    expect(headerText).not.toContain('Kamal Perera');
+    expect(fixture.nativeElement.textContent).not.toContain('courier-1');
+  });
+
+  it('reports a missing courier profile without fabricating dashboard identity', () => {
+    component.loadProfile();
+    const profileReq = httpMock.expectOne('/api/v1/courier/me');
+    profileReq.flush({ message: 'Courier profile not found' }, { status: 404, statusText: 'Not Found' });
+    fixture.detectChanges();
+
+    expect(component.profileLoaded()).toBe(false);
+    expect(component.profileError()).toBe('No courier profile is available for this account.');
+    expect(fixture.nativeElement.textContent).toContain('No courier profile is available');
+    const headerText = fixture.nativeElement.querySelector('h1').parentElement.textContent;
+    expect(headerText).not.toContain('Kamal Perera');
+    expect(fixture.nativeElement.textContent).not.toContain('courier-1');
   });
 
   it('should filter deliveries when changing filter tab', () => {

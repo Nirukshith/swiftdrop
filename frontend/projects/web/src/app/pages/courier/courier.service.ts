@@ -17,6 +17,7 @@ import {
   ProofUploadPayload,
   ProofUploadResponse,
   isValidFailedDeliveryRequest,
+  normalizeGoogleMapsUrl,
 } from './courier.model';
 
 @Injectable({
@@ -119,6 +120,7 @@ export class CourierService {
    */
   getDeliveryDetail(parcelId: string): Observable<CourierDeliveryDetail> {
     return this.http.get<CourierDeliveryDetail>(`${this.baseUrl}/${parcelId}`).pipe(
+      map((detail) => ({ ...detail, googleMapsUrl: normalizeGoogleMapsUrl(detail.googleMapsUrl) })),
       tap((detail) => {
         this.mergeDetail(detail);
       })
@@ -251,7 +253,15 @@ export class CourierService {
     if (date?.trim()) {
       params = params.set('date', date.trim());
     }
-    return this.http.get<CourierDailySummary>('/api/v1/courier/summary', { params });
+    return this.http.get<CourierDailySummary>('/api/v1/courier/summary', { params }).pipe(
+      map((summary) => ({
+        ...summary,
+        deliveries: (summary.deliveries || []).map((delivery) => ({
+          ...delivery,
+          googleMapsUrl: normalizeGoogleMapsUrl(delivery.googleMapsUrl),
+        })),
+      }))
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -278,7 +288,7 @@ export class CourierService {
         city: '',
         district: '',
       },
-      googleMapsUrl: card.googleMapsUrl,
+      googleMapsUrl: normalizeGoogleMapsUrl(card.googleMapsUrl),
       weightKg: card.weightKg,
       attemptCount: card.attemptCount,
       sequenceOrder: card.sequenceOrder,
@@ -314,7 +324,7 @@ export class CourierService {
       proofRequired: detail.proofRequired,
       proof: detail.proof,
       failureReason: detail.failureReason,
-      googleMapsUrl: detail.googleMapsUrl,
+      googleMapsUrl: normalizeGoogleMapsUrl(detail.googleMapsUrl),
       updatedAt: new Date().toISOString(),
     };
 

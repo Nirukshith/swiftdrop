@@ -39,7 +39,10 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
               </span>
             </div>
             <p class="text-xs sm:text-sm text-slate-500 font-medium">
-              {{ profile().name }} (ID: {{ profile().userId }}) • {{ profile().zone || 'Assigned Zone' }}
+              {{ profileLoaded() ? profile().name : (profileLoading() ? 'Loading courier profile...' : 'Profile unavailable') }}
+              <ng-container *ngIf="profileLoaded()">
+                (ID: {{ profile().userId }}) • {{ profile().zone || 'Assigned Zone' }}
+              </ng-container>
             </p>
           </div>
         </div>
@@ -178,17 +181,17 @@ type FilterTab = 'ALL' | 'ACTIVE' | 'DELIVERED' | 'FAILED';
 
       <!-- Error State Alert -->
       <div
-        *ngIf="errorMessage()"
+        *ngIf="errorMessage() || profileError()"
         id="courier-error-banner"
         class="rounded-xl p-4 bg-rose-50 border border-rose-200 text-rose-900 text-sm flex items-center justify-between shadow-sm"
       >
         <div class="flex items-center gap-2">
           <span>⚠️</span>
-          <span class="font-medium">{{ errorMessage() }}</span>
+          <span class="font-medium">{{ errorMessage() || profileError() }}</span>
         </div>
         <button
           type="button"
-          (click)="refreshDeliveries()"
+          (click)="refreshDashboard()"
           class="px-3 py-1 bg-white border border-rose-200 rounded-lg text-xs font-bold text-rose-700 hover:bg-rose-100"
         >
           Retry
@@ -710,6 +713,10 @@ export class CourierComponent implements OnInit {
   readonly isLoading = this.courierService.isLoading;
   readonly errorMessage = this.courierService.error;
 
+  profileLoading = signal(true);
+  profileLoaded = signal(false);
+  profileError = signal<string | null>(null);
+
   activeFilter = signal<FilterTab>('ALL');
   searchQuery = signal<string>('');
   toastMessage = signal<string>('');
@@ -736,7 +743,12 @@ export class CourierComponent implements OnInit {
   isLoadingProofImage = signal<boolean>(false);
 
   ngOnInit(): void {
+    this.refreshDashboard();
+  }
+
+  refreshDashboard(): void {
     this.refreshDeliveries();
+    this.loadProfile();
   }
 
   refreshDeliveries(): void {
@@ -745,6 +757,32 @@ export class CourierComponent implements OnInit {
         // Handled in service signal
       },
     });
+  }
+
+  loadProfile(): void {
+    this.profileLoading.set(true);
+    this.profileLoaded.set(false);
+    this.profileError.set(null);
+
+    this.courierService.getProfile().subscribe({
+      next: () => {
+        this.profileLoaded.set(true);
+      },
+      error: (error) => {
+        this.profileError.set(this.profileErrorMessage(error));
+        this.profileLoading.set(false);
+      },
+      complete: () => {
+        this.profileLoading.set(false);
+      },
+    });
+  }
+
+  private profileErrorMessage(error: { status?: number; error?: { message?: string } }): string {
+    if (error?.status === 401) return 'Your session has expired. Please sign in again.';
+    if (error?.status === 403) return 'Only authenticated couriers can load this profile.';
+    if (error?.status === 404) return 'No courier profile is available for this account.';
+    return error?.error?.message || 'Unable to load the courier profile.';
   }
 
   isActionPending(parcelId: string): boolean {
