@@ -78,6 +78,20 @@ describe('MockParcelDb', () => {
       expect(db.createParcel({ ...createRequest(), recipientName: '' }).status).toBe(400);
     });
 
+    it('calculates delivery fee quote with zone breakdown and validates params', () => {
+      const result = db.getQuote(new URLSearchParams('pickupDistrict=Colombo&dropoffDistrict=Kandy&weightKg=2.5&size=MEDIUM'));
+      expect(result.status).toBe(200);
+      const quote = result.body as any;
+      expect(quote.currency).toBe('LKR');
+      expect(quote.totalFee).toBe(700);
+      expect(quote.breakdown.dropoffZoneBaseFee).toBe(350);
+      expect(quote.breakdown.weightBandCharge).toBe(250);
+      expect(quote.breakdown.sizeCharge).toBe(100);
+
+      expect(db.getQuote(new URLSearchParams('pickupDistrict=Colombo')).status).toBe(400);
+      expect(db.getQuote(new URLSearchParams('pickupDistrict=Colombo&dropoffDistrict=Kandy&weightKg=-1&size=SMALL')).status).toBe(400);
+    });
+
     it('cancels only while CREATED, otherwise 409 ILLEGAL_STATUS_TRANSITION', () => {
       const created = db.createParcel(createRequest()).body as ParcelResponse;
       const cancelled = db.cancelParcel(created.id, 'Changed my mind');
