@@ -100,4 +100,12 @@ describe('MerchantRegistrationComponent', () => {
     const submitBtn = fixture.nativeElement.querySelector('ui-button[type="submit"]');
     expect(submitBtn).toBeTruthy();
   });
+
+  it('renders Customer, Merchant, and Sign In in top bar navigation', () => {
+    const navLinks = fixture.nativeElement.querySelectorAll('.nav-links a');
+    expect(navLinks.length).toBe(3);
+    expect(navLinks[0].textContent.trim()).toBe('Customer');
+    expect(navLinks[1].textContent.trim()).toBe('Merchant');
+    expect(navLinks[2].textContent.trim()).toBe('Sign In');
+  });
 });

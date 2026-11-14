@@ -1,51 +1,54 @@
-<main class="min-h-screen bg-slate-50 text-slate-900 p-6">
-  <header class="mb-6 pb-4 border-b border-slate-200">
-    <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold text-slate-800">Hello, web</h1>
-      <div class="flex items-center gap-4">
-        @if (authService.hasRole('CUSTOMER')) {
-          <app-notification-bell></app-notification-bell>
-        }
-        <div *ngIf="authService.isAuthenticated()" class="flex items-center gap-2 text-xs">
-          <span class="px-2.5 py-1 rounded-full bg-slate-200 text-slate-800 font-bold">
-            Role: {{ authService.userRole() }}
-          </span>
-          <button
-            type="button"
-            (click)="authService.logout().subscribe()"
-            class="text-slate-500 hover:text-slate-800 underline"
-          >
-            Sign Out
-          </button>
+<main [class.p-6]="!isAuthPage()" [class.bg-slate-50]="!isAuthPage()" class="min-h-screen text-slate-900">
+  <h1 class="sr-only">Hello, web</h1>
+  @if (!isAuthPage()) {
+    <header class="mb-6 pb-4 border-b border-slate-200">
+      <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-slate-800">Hello, web</h1>
+        <div class="flex items-center gap-4">
+          @if (authService.hasRole('CUSTOMER')) {
+            <app-notification-bell></app-notification-bell>
+          }
+          <div *ngIf="authService.isAuthenticated()" class="flex items-center gap-2 text-xs">
+            <span class="px-2.5 py-1 rounded-full bg-slate-200 text-slate-800 font-bold">
+              Role: {{ authService.userRole() }}
+            </span>
+            <button
+              type="button"
+              (click)="logout()"
+              class="text-slate-500 hover:text-slate-800 underline"
+            >
+              Sign Out
+            </button>
+          </div>
+          <nav *ngIf="!authService.isAuthenticated()" class="flex gap-4 text-sm font-medium text-slate-600">
+            <a routerLink="/login" class="hover:text-indigo-600">Sign In</a>
+            <a routerLink="/register" class="hover:text-indigo-600">Register</a>
+            <a routerLink="/merchant-registration" class="hover:text-indigo-600">Merchant registration</a>
+          </nav>
         </div>
-        <nav *ngIf="!authService.isAuthenticated()" class="flex gap-4 text-sm font-medium text-slate-600">
-          <a routerLink="/login" class="hover:text-indigo-600">Sign In</a>
-          <a routerLink="/register" class="hover:text-indigo-600">Register</a>
-          <a routerLink="/merchant-registration" class="hover:text-indigo-600">Merchant registration</a>
-        </nav>
       </div>
-    </div>
-    <nav class="flex gap-4 mt-3 text-sm font-medium text-indigo-600">
-      <a routerLink="/customer" class="hover:underline">Customer</a>
-      <a routerLink="/merchant" class="hover:underline">Merchant</a>
-      <a routerLink="/courier" class="hover:underline">Courier</a>
-      <a routerLink="/courier/profile" class="hover:underline">Courier profile</a>
-      <a routerLink="/courier/summary" class="hover:underline">Daily summary</a>
-      @if (authService.hasRole('ADMIN')) {
-        <a routerLink="/admin" class="hover:underline">Admin</a>
-        <a routerLink="/admin/users" class="hover:underline">Staff Management</a>
-        <a routerLink="/admin/merchants" class="hover:underline">Merchant Approval</a>
-      }
-      @if (authService.hasRole('DISPATCHER')) {
-        <a routerLink="/dispatch" class="hover:underline">Dispatch</a>
-        <a routerLink="/dispatch/zones" class="hover:underline">Zones</a>
-        <a routerLink="/dispatch/pricing" class="hover:underline">Pricing</a>
-      }
-      @if (authService.hasRole('CUSTOMER')) {
-        <a routerLink="/customer/assistant" class="hover:underline">AI Assistant</a>
-      }
-      <a routerLink="/track" class="hover:underline">Track a parcel</a>
-    </nav>
-  </header>
+      <nav class="flex gap-4 mt-3 text-sm font-medium text-indigo-600">
+        <a routerLink="/customer" class="hover:underline">Customer</a>
+        <a routerLink="/merchant" class="hover:underline">Merchant</a>
+        <a routerLink="/courier" class="hover:underline">Courier</a>
+        <a routerLink="/courier/profile" class="hover:underline">Courier profile</a>
+        <a routerLink="/courier/summary" class="hover:underline">Daily summary</a>
+        @if (authService.hasRole('ADMIN')) {
+          <a routerLink="/admin" class="hover:underline">Admin</a>
+          <a routerLink="/admin/users" class="hover:underline">Staff Management</a>
+          <a routerLink="/admin/merchants" class="hover:underline">Merchant Approval</a>
+        }
+        @if (authService.hasRole('DISPATCHER')) {
+          <a routerLink="/dispatch" class="hover:underline">Dispatch</a>
+          <a routerLink="/dispatch/zones" class="hover:underline">Zones</a>
+          <a routerLink="/dispatch/pricing" class="hover:underline">Pricing</a>
+        }
+        @if (authService.hasRole('CUSTOMER')) {
+          <a routerLink="/customer/assistant" class="hover:underline">AI Assistant</a>
+        }
+        <a routerLink="/track" class="hover:underline">Track a parcel</a>
+      </nav>
+    </header>
+  }
   <router-outlet></router-outlet>
 </main>

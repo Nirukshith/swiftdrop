@@ -122,4 +122,25 @@ describe('RegisterComponent', () => {
     expect(component.errorMessage()).toContain('Too many registration attempts');
     expect(component.isLoading()).toBe(false);
   });
+
+  it('should render top bar with Customer, Merchant, and Sign In navigation links', () => {
+    const navLinks = fixture.nativeElement.querySelectorAll('.nav-links a');
+    expect(navLinks.length).toBe(3);
+    expect(navLinks[0].textContent.trim()).toBe('Customer');
+    expect(navLinks[1].textContent.trim()).toBe('Merchant');
+    expect(navLinks[2].textContent.trim()).toBe('Sign In');
+  });
+
+  it('should render customer registration form directly without tab selection', () => {
+    const form = fixture.nativeElement.querySelector('form.auth-form');
+    expect(form).toBeTruthy();
+    const roleTabs = fixture.nativeElement.querySelectorAll('.role-tab');
+    expect(roleTabs.length).toBe(0);
+  });
+
+  it('should render link to merchant registration in the footer', () => {
+    const merchantLink = fixture.nativeElement.querySelector('.auth-footer a[href="/merchant-registration"]');
+    expect(merchantLink).toBeTruthy();
+    expect(merchantLink.textContent.trim()).toContain('Register business');
+  });
 });
