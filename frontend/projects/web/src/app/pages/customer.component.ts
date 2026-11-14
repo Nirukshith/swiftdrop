@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from 'shared-auth';
@@ -18,7 +18,7 @@ import {
 } from './customer/customer.model';
 import { CustomerService } from './customer/customer.service';
 
-type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
+type CustomerTab = 'deliveries' | 'wizard' | 'addresses' | 'settings';
 
 @Component({
   selector: 'app-customer',
@@ -176,18 +176,72 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
                 <app-notification-bell></app-notification-bell>
               </div>
 
-              <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-[#faf8f6] border border-[#e8e2dc]">
-                <div
-                  class="w-8 h-8 rounded-full bg-[#a53a26] text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm"
+              <div id="profile-menu" class="relative">
+                <button
+                  type="button"
+                  id="profile-menu-btn"
+                  (click)="toggleProfileMenu()"
+                  aria-haspopup="menu"
+                  [attr.aria-expanded]="profileMenuOpen()"
+                  class="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-[#faf8f6] border border-[#e8e2dc] hover:border-[#a53a26]/40 transition-colors cursor-pointer"
                 >
-                  {{ customerInitials() }}
-                </div>
-                <div class="flex items-center gap-1 cursor-pointer" (click)="signOut()" title="Click to Sign Out">
+                  <span
+                    class="w-8 h-8 rounded-full bg-[#a53a26] text-white flex items-center justify-center font-bold text-xs uppercase shadow-sm"
+                  >
+                    {{ customerInitials() }}
+                  </span>
                   <span class="text-xs font-bold text-[#1d1b2c]">{{ customerName() }}</span>
-                  <svg class="w-3.5 h-3.5 text-[#6f6d85]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <svg
+                    class="w-3.5 h-3.5 text-[#6f6d85] transition-transform"
+                    [class.rotate-180]="profileMenuOpen()"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                  >
                     <polyline points="6 9 12 15 18 9"></polyline>
                   </svg>
+                </button>
+
+                @if (profileMenuOpen()) {
+                <div
+                  role="menu"
+                  id="profile-menu-panel"
+                  class="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-[#e8e2dc] shadow-lg shadow-[#1d1b2c]/5 py-2 z-30"
+                >
+                  <div class="px-4 py-2 border-b border-[#f0ebe5]">
+                    <p class="text-xs font-bold text-[#1d1b2c] truncate">{{ customerName() }}</p>
+                    <p class="text-[11px] text-[#6f6d85] truncate">{{ customerEmail() }}</p>
+                  </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    id="profile-menu-settings"
+                    (click)="openSettings()"
+                    class="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-[#1d1b2c] hover:bg-[#faf8f6] hover:text-[#a53a26] transition-colors cursor-pointer"
+                  >
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="3"></circle>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    <span>Settings</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    id="profile-menu-logout"
+                    (click)="logOutFromMenu()"
+                    class="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-[#a53a26] hover:bg-[#faf8f6] transition-colors cursor-pointer"
+                  >
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                      <polyline points="16 17 21 12 16 7"></polyline>
+                      <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    <span>Log out</span>
+                  </button>
                 </div>
+                }
               </div>
             </div>
           </div>
@@ -1285,6 +1339,82 @@ type CustomerTab = 'deliveries' | 'wizard' | 'addresses';
             </div>
           </div>
           }
+
+          @if (activeTab() === 'settings') {
+          <div id="settings-panel" class="space-y-6 max-w-3xl">
+            <div>
+              <h2 class="text-xl font-black text-[#1d1b2c] tracking-tight">Settings</h2>
+              <p class="text-xs text-[#6f6d85] font-medium mt-0.5">Your account details and preferences.</p>
+            </div>
+
+            <section class="rounded-3xl border border-[#eee7e0] bg-[#faf8f6] p-6 space-y-4">
+              <h3 class="text-sm font-black text-[#1d1b2c]">Account</h3>
+              <div class="flex items-center gap-4">
+                <span class="w-12 h-12 flex-shrink-0 rounded-full bg-[#a53a26] text-white flex items-center justify-center font-bold text-sm uppercase">
+                  {{ customerInitials() }}
+                </span>
+                <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1 min-w-0 text-xs">
+                  <div>
+                    <dt class="text-[#6f6d85] font-medium">Full name</dt>
+                    <dd id="settings-name" class="font-bold text-[#1d1b2c] mt-0.5">{{ customerName() }}</dd>
+                  </div>
+                  <div class="min-w-0">
+                    <dt class="text-[#6f6d85] font-medium">Email</dt>
+                    <dd id="settings-email" class="font-bold text-[#1d1b2c] mt-0.5 truncate">{{ customerEmail() }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-[#6f6d85] font-medium">Account type</dt>
+                    <dd class="font-bold text-[#1d1b2c] mt-0.5">Customer</dd>
+                  </div>
+                </dl>
+              </div>
+            </section>
+
+            <section class="rounded-3xl border border-[#eee7e0] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 class="text-sm font-black text-[#1d1b2c]">Saved addresses</h3>
+                <p class="text-xs text-[#6f6d85] font-medium mt-0.5">Add or remove the pickup and drop-off addresses you use often.</p>
+              </div>
+              <button
+                type="button"
+                id="settings-addresses-btn"
+                (click)="activeTab.set('addresses')"
+                class="px-5 py-2.5 bg-[#1d1b2c] hover:bg-black text-white text-xs font-bold rounded-full transition-all cursor-pointer whitespace-nowrap"
+              >
+                Manage address book
+              </button>
+            </section>
+
+            <section class="rounded-3xl border border-[#eee7e0] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 class="text-sm font-black text-[#1d1b2c]">Password</h3>
+                <p class="text-xs text-[#6f6d85] font-medium mt-0.5">We will email you a secure link to set a new password.</p>
+              </div>
+              <a
+                routerLink="/forgot-password"
+                id="settings-password-link"
+                class="px-5 py-2.5 bg-[#f1f5f9] hover:bg-[#e2e8f0] text-[#1d1b2c] text-xs font-bold rounded-full transition-all no-underline whitespace-nowrap text-center"
+              >
+                Change password
+              </a>
+            </section>
+
+            <section class="rounded-3xl border border-[#eee7e0] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 class="text-sm font-black text-[#1d1b2c]">Sign out</h3>
+                <p class="text-xs text-[#6f6d85] font-medium mt-0.5">Log out of SwiftDrop on this device.</p>
+              </div>
+              <button
+                type="button"
+                id="settings-logout-btn"
+                (click)="signOut()"
+                class="px-5 py-2.5 bg-[#a53a26] hover:bg-[#7e2615] text-white text-xs font-bold rounded-full transition-all cursor-pointer whitespace-nowrap"
+              >
+                Log out
+              </button>
+            </section>
+          </div>
+          }
         </main>
     </div>
   `,
@@ -1412,6 +1542,37 @@ export class CustomerComponent implements OnInit {
   customerName = computed(() => {
     return this.authService?.currentUser()?.fullName || 'Diana';
   });
+
+  customerEmail = computed(() => this.authService?.currentUser()?.email ?? '');
+
+  profileMenuOpen = signal(false);
+
+  toggleProfileMenu(): void {
+    this.profileMenuOpen.update((open) => !open);
+  }
+
+  openSettings(): void {
+    this.profileMenuOpen.set(false);
+    this.activeTab.set('settings');
+  }
+
+  logOutFromMenu(): void {
+    this.profileMenuOpen.set(false);
+    this.signOut();
+  }
+
+  @HostListener('document:click', ['$event'])
+  closeProfileMenuOnOutsideClick(event: MouseEvent): void {
+    const target = event.target as Element | null;
+    if (this.profileMenuOpen() && !target?.closest('#profile-menu')) {
+      this.profileMenuOpen.set(false);
+    }
+  }
+
+  @HostListener('document:keydown.escape')
+  closeProfileMenuOnEscape(): void {
+    this.profileMenuOpen.set(false);
+  }
 
   customerInitials = computed(() => {
     const name = this.customerName();
