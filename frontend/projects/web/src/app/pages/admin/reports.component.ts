@@ -4,6 +4,7 @@ import { HttpResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ReportsService } from './reports.service';
+import { AdminSearchService } from './admin-search.service';
 
 @Component({
   selector: 'app-reports',
@@ -14,13 +15,33 @@ import { ReportsService } from './reports.service';
 export class ReportsComponent implements OnInit {
   private readonly formBuilder = inject(FormBuilder);
   readonly reportsService = inject(ReportsService);
+  readonly adminSearchService = inject(AdminSearchService);
   readonly invalidRange = signal(false);
   readonly rows = this.reportsService.rows;
+  readonly availableZones = this.reportsService.availableZones;
+  readonly zoneSummaries = this.reportsService.zoneSummaries;
 
   readonly filterForm = this.formBuilder.nonNullable.group({
     from: ['', Validators.required],
     to: ['', Validators.required],
+    zone: [''],
   });
+
+  readonly filteredRows = computed(() => {
+    const q = this.adminSearchService.query().trim().toLowerCase();
+    if (!q) {
+      return this.rows();
+    }
+    return this.rows().filter((row) => row.reportDate.toLowerCase().includes(q));
+  });
+
+  readonly displayRows = computed(() => {
+    return this.filteredRows().filter((r) => r.totalDeliveries > 0);
+  });
+
+  readonly activeDaysCount = computed(() =>
+    this.rows().filter((r) => r.totalDeliveries > 0).length
+  );
 
   readonly totalDeliveries = computed(() =>
     this.rows().reduce((total, row) => total + row.totalDeliveries, 0)
@@ -41,32 +62,74 @@ export class ReportsComponent implements OnInit {
   );
 
   ngOnInit(): void {
+    this.reportsService.loadAvailableZones().subscribe({ error: () => undefined });
     const today = new Date();
     const from = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
     this.filterForm.setValue({
+      from: this.toColomboDate(from),
+      to: this.toColomboDate(today),
+      zone: '',
+    });
+    this.loadReport();
+  }
+
+  setPreset(days: number): void {
+    const today = new Date();
+    const from = new Date(today.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+    this.filterForm.patchValue({
       from: this.toColomboDate(from),
       to: this.toColomboDate(today),
     });
     this.loadReport();
   }
 
+  setThisMonth(): void {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    this.filterForm.patchValue({
+      from: this.toColomboDate(firstDay),
+      to: this.toColomboDate(today),
+    });
+    this.loadReport();
+  }
+
+
+  formatDayOfWeek(dateStr: string): string {
+    try {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      return date.toLocaleDateString('en-US', { weekday: 'short' });
+    } catch {
+      return '';
+    }
+  }
+
+  formatZoneName(zoneName: string): string {
+    if (!zoneName) return '';
+    return zoneName
+      .replace(/_/g, ' ')
+      .toLowerCase()
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
   loadReport(): void {
-    const { from, to } = this.filterForm.getRawValue();
+    const { from, to, zone } = this.filterForm.getRawValue();
     this.invalidRange.set(!from || !to || from > to);
     if (this.invalidRange()) {
       return;
     }
-    this.reportsService.load(from, to).subscribe({ error: () => undefined });
+    this.reportsService.load(from, to, zone).subscribe({ error: () => undefined });
+    this.reportsService.loadZoneReports(from, to).subscribe({ error: () => undefined });
   }
 
   exportCsv(): void {
-    const { from, to } = this.filterForm.getRawValue();
+    const { from, to, zone } = this.filterForm.getRawValue();
     this.invalidRange.set(!from || !to || from > to);
     if (this.invalidRange() || this.reportsService.exporting()) {
       return;
     }
 
-    this.reportsService.exportCsv(from, to).subscribe({
+    this.reportsService.exportCsv(from, to, zone).subscribe({
       next: (response) => this.downloadCsv(response),
       error: () => undefined,
     });

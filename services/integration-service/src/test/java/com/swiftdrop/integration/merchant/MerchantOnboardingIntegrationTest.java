@@ -156,6 +156,8 @@ class MerchantOnboardingIntegrationTest {
                 .andExpect(jsonPath("$.status").value("REJECTED"))
                 .andExpect(jsonPath("$.rejectionReason").value("Business details could not be verified"));
 
+        verify(merchantApprovalMailSender).sendRejectionEmail("reject@example.test", "Store", "Business details could not be verified");
+
         mockMvc.perform(post("/api/v1/admin/merchants/{merchantId}/reject", merchant.getId())
                         .contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().isConflict());

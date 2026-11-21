@@ -28,17 +28,25 @@ public class ReportController {
     @GetMapping("/daily")
     public List<DailyReportRow> daily(
             @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+            @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(value = "zone", required = false) String zone
     ) {
+        if (zone != null && !zone.isBlank()) {
+            return reportService.getDailyReport(from, to, zone);
+        }
         return reportService.getDailyReport(from, to);
     }
 
     @GetMapping(value = "/daily.csv", produces = "text/csv")
     public ResponseEntity<String> exportDailyCsv(
             @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+            @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(value = "zone", required = false) String zone
     ) {
-        String csv = DailyReportCsvSerializer.serialize(reportService.getDailyReport(from, to));
+        List<DailyReportRow> rows = (zone != null && !zone.isBlank())
+                ? reportService.getDailyReport(from, to, zone)
+                : reportService.getDailyReport(from, to);
+        String csv = DailyReportCsvSerializer.serialize(rows);
         ContentDisposition disposition = ContentDisposition.attachment()
                 .filename("daily-report.csv")
                 .build();
@@ -46,5 +54,13 @@ public class ReportController {
                 .contentType(MediaType.parseMediaType("text/csv"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .body(csv);
+    }
+
+    @GetMapping("/zones")
+    public List<ZoneReportSummary> zones(
+            @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return reportService.getZoneReport(from, to);
     }
 }

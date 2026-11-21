@@ -32,12 +32,13 @@ public class AdminAuditController {
         @RequestParam(required = false) String targetType,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant fromDate,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant toDate,
+        @RequestParam(required = false) Boolean administrativeOnly,
         @RequestParam(required = false, defaultValue = "0") int page,
         @RequestParam(required = false, defaultValue = "20") int size
     ) {
-        AuditLogPageResponse response = adminAuditService.getAuditLogs(
-            action, actorId, targetType, fromDate, toDate, page, size
-        );
+        AuditLogPageResponse response = administrativeOnly != null
+            ? adminAuditService.getAuditLogs(action, actorId, targetType, fromDate, toDate, administrativeOnly, page, size)
+            : adminAuditService.getAuditLogs(action, actorId, targetType, fromDate, toDate, page, size);
         return ResponseEntity.ok(response);
     }
 }

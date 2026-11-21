@@ -82,9 +82,9 @@ public class InternalServiceSecurityFilter extends OncePerRequestFilter {
         } else if (path.startsWith("/internal/v1/users/") && path.endsWith("/activate") && "POST".equalsIgnoreCase(method)) {
             // User activation: permitted ONLY for merchant-service
             authorized = "merchant-service".equals(caller);
-        } else if (path.matches("/internal/v1/merchant-provisioning/[0-9a-fA-F-]{36}(/credentials)?")
-                && (("GET".equals(method) || "PUT".equals(method)) && !path.endsWith("/credentials")
-                    || "POST".equals(method) && path.endsWith("/credentials"))) {
+        } else if (path.matches("/internal/v1/merchant-provisioning/[0-9a-fA-F-]{36}(/credentials|/reject)?")
+                && (("GET".equals(method) || "PUT".equals(method)) && !path.endsWith("/credentials") && !path.endsWith("/reject")
+                    || "POST".equals(method) && (path.endsWith("/credentials") || path.endsWith("/reject")))) {
             authorized = "merchant-service".equals(caller);
         } else if (path.startsWith("/internal/v1/clients") && "POST".equalsIgnoreCase(method)) {
             // Client creation & token exchange: permitted for merchant-service

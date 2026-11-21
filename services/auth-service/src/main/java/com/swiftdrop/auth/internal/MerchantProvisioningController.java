@@ -32,6 +32,13 @@ public class MerchantProvisioningController {
         return secretResponse(service.replace(operationId, request));
     }
 
+    @PostMapping("/{merchantId}/reject")
+    public ResponseEntity<Void> reject(@PathVariable UUID merchantId,
+            @Valid @RequestBody RejectionAuditRequest request) {
+        service.recordRejection(merchantId, request);
+        return ResponseEntity.noContent().build();
+    }
+
     private ResponseEntity<MerchantProvisioningService.Result> secretResponse(MerchantProvisioningService.Result result) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(result);
     }
@@ -42,4 +49,7 @@ public class MerchantProvisioningController {
 
     public record ReplacementRequest(@NotNull UUID replacementId, @NotBlank @Size(max=64) String actorId,
             @NotNull @AssertTrue Boolean confirmReplacement) {}
+
+    public record RejectionAuditRequest(@NotBlank String businessName, @NotBlank String email,
+            @NotBlank String reason, @NotBlank String actorId) {}
 }

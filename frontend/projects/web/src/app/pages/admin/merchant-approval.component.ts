@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MerchantApprovalService } from './merchant-approval.service';
 import { MerchantSummary } from './merchant-approval.model';
 import { MerchantCredentialsComponent } from '../merchant/merchant-credentials.component';
@@ -15,7 +15,7 @@ type Action = 'approve' | 'reject' | 'recover';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink, MerchantCredentialsComponent],
   template: `
-    <main class="mx-auto max-w-[1320px] space-y-6 pb-16 text-[#211f32]">
+    <main class="mx-auto max-w-[1320px] px-4 py-6 sm:px-6 lg:px-8 space-y-6 pb-16 text-[#211f32]">
       <header class="rounded-[1.5rem] border border-[#e9e3dd] bg-white p-7 shadow-[0_8px_24px_rgba(42,32,25,0.04)]">
         <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
@@ -50,7 +50,11 @@ type Action = 'approve' | 'reject' | 'recover';
       @if (handoff(); as credentials) {
         <section aria-label="One-time merchant credential handoff">
           <p class="mb-3 text-sm font-bold text-[#211f32]">Credentials for {{ handoffBusinessName() }}</p>
-          <app-merchant-credentials [credentials]="credentials" (secretSaved)="clearHandoff()" />
+          <app-merchant-credentials
+            [credentials]="credentials"
+            [showTokenRequest]="false"
+            (secretSaved)="clearHandoff()"
+          />
           @if (!credentials.clientSecret) {
             <button id="dismiss-merchant-handoff" type="button" class="mt-3 rounded-full border border-[#e8e4df] px-4 py-2 text-sm font-bold text-[#77748a]" (click)="clearHandoff()">Close</button>
           }
@@ -98,7 +102,10 @@ type Action = 'approve' | 'reject' | 'recover';
                       <p class="text-slate-800">{{ merchant.contactName }}</p>
                       <p class="text-xs text-slate-500">{{ merchant.phoneNumber }}</p>
                     </td>
-                    <td class="px-5 py-4 text-slate-600">{{ merchant.createdAt | date: 'medium' }}</td>
+                    <td class="px-5 py-4">
+                      <p class="font-medium text-slate-800">{{ merchant.createdAt | date: 'mediumDate' }}</p>
+                      <p class="text-xs text-slate-500">{{ merchant.createdAt | date: 'mediumTime' }}</p>
+                    </td>
                     <td class="px-5 py-4"><span class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">{{ merchant.status }}</span></td>
                     <td class="px-5 py-4">
                       <div class="flex justify-end gap-2">
@@ -175,8 +182,11 @@ type Action = 'approve' | 'reject' | 'recover';
             }
             @if (currentAction === 'recover') {
               <p class="mt-4 text-sm text-amber-900">This replaces the secret on the existing client. The old secret will stop obtaining new tokens. Already issued tokens keep their normal expiry.</p>
-              <label class="mt-4 block"><input type="checkbox" [ngModel]="confirmReplacement()" (ngModelChange)="confirmReplacement.set($event)" /> I confirm replacement of the lost secret.</label>
-              <p class="mt-2 text-xs">Retry keeps the same recovery reference. If its one-time response was already lost, close this dialog and explicitly confirm a new recovery.</p>
+              <label class="mt-4 flex items-center gap-2.5 cursor-pointer text-sm font-medium text-slate-800">
+                <input type="checkbox" id="confirm-replacement-checkbox" class="h-4 w-4 rounded border-slate-300 text-[#9b432f] focus:ring-[#9b432f]" [ngModel]="confirmReplacement()" (ngModelChange)="confirmReplacement.set($event)" />
+                <span>I confirm replacement of the lost secret.</span>
+              </label>
+              <p class="mt-2 text-xs text-slate-500">Retry keeps the same recovery reference. If its one-time response was already lost, close this dialog and explicitly confirm a new recovery.</p>
             }
             @if (currentAction === 'reject') {
               <label for="rejection-reason" class="mt-5 block text-sm font-semibold text-slate-700">Rejection reason</label>
@@ -185,8 +195,22 @@ type Action = 'approve' | 'reject' | 'recover';
             }
             @if (reasonError()) { <p class="mt-1 text-xs text-rose-600" role="alert">{{ reasonError() }}</p> }
             <div class="mt-6 flex justify-end gap-2">
-              <button type="button" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700" [disabled]="isSubmitting()" (click)="closeAction()">Cancel</button>
-              <button type="button" class="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" [class.bg-emerald-600]="currentAction === 'approve'" [class.bg-rose-600]="currentAction === 'reject'" [disabled]="isSubmitting()" (click)="confirmAction()">{{ isSubmitting() ? 'Submitting…' : (currentAction === 'recover' ? 'Confirm replacement' : (currentAction === 'approve' ? 'Confirm approval' : 'Confirm rejection')) }}</button>
+              <button type="button" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" [disabled]="isSubmitting()" (click)="closeAction()">Cancel</button>
+              <button
+                type="button"
+                id="confirm-merchant-action-btn"
+                class="rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50"
+                [class.bg-emerald-600]="currentAction === 'approve'"
+                [class.hover:bg-emerald-700]="currentAction === 'approve'"
+                [class.bg-rose-600]="currentAction === 'reject'"
+                [class.hover:bg-rose-700]="currentAction === 'reject'"
+                [class.bg-[#9b432f]]="currentAction === 'recover'"
+                [class.hover:bg-[#833724]]="currentAction === 'recover'"
+                [disabled]="isSubmitting() || (currentAction === 'recover' && !confirmReplacement())"
+                (click)="confirmAction()"
+              >
+                {{ isSubmitting() ? 'Submitting…' : (currentAction === 'recover' ? 'Replace credentials' : (currentAction === 'approve' ? 'Confirm approval' : 'Confirm rejection')) }}
+              </button>
             </div>
           </section>
         </div>
@@ -196,6 +220,8 @@ type Action = 'approve' | 'reject' | 'recover';
 })
 export class MerchantApprovalComponent implements OnInit, OnDestroy {
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router, { optional: true });
+  private readonly route = inject(ActivatedRoute, { optional: true });
   readonly merchantService = inject(MerchantApprovalService);
   readonly listStatus = signal<'PENDING' | 'APPROVED'>('PENDING');
   readonly confirmReplacement = signal(false);
@@ -210,7 +236,13 @@ export class MerchantApprovalComponent implements OnInit, OnDestroy {
   readonly handoffBusinessName = signal('');
 
   ngOnInit(): void {
-    this.reload();
+    const qParam = this.route?.snapshot?.queryParamMap?.get('status')?.toUpperCase();
+    if (qParam === 'APPROVED' || qParam === 'PENDING') {
+      this.listStatus.set(qParam);
+      this.merchantService.loadMerchants(0, this.merchantService.pageSize(), qParam).subscribe({ error: () => undefined });
+    } else {
+      this.reload();
+    }
   }
 
   ngOnDestroy(): void {
@@ -249,6 +281,13 @@ export class MerchantApprovalComponent implements OnInit, OnDestroy {
 
   changeStatus(status: 'PENDING' | 'APPROVED'): void {
     this.listStatus.set(status);
+    if (this.router && this.route) {
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { status },
+        queryParamsHandling: 'merge',
+      });
+    }
     this.merchantService.loadMerchants(0, this.merchantService.pageSize(), status).subscribe({ error: () => undefined });
   }
 

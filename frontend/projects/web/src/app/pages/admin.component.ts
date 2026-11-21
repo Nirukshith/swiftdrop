@@ -103,6 +103,15 @@ export class AdminComponent implements OnInit {
           statusClass: 'bg-emerald-100 text-emerald-800',
           link: '/admin/merchants',
         };
+      case 'MERCHANT_REJECTED':
+        return {
+          title: 'Merchant Registration Rejected',
+          area: 'MERCHANT',
+          areaClass: areaThemeClass,
+          status: 'REJECTED',
+          statusClass: 'bg-rose-100 text-rose-800',
+          link: '/admin/merchants',
+        };
       case 'MERCHANT_REGISTERED':
       case 'MERCHANT_PROVISIONED':
       case 'MERCHANT_ACTIVATED':
@@ -174,8 +183,14 @@ export class AdminComponent implements OnInit {
       return record.targetId ? `Target: ${record.targetId}` : '';
     }
     const d = record.details;
+    if (d['businessName'] && d['reason']) {
+      return `${d['businessName']} — ${d['reason']}`;
+    }
     if (d['email'] && d['fullName']) {
       return `${d['fullName']} (${d['email']})`;
+    }
+    if (d['businessName']) {
+      return `${d['businessName']}`;
     }
     if (d['email']) {
       return `${d['email']}`;

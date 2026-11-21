@@ -17,10 +17,12 @@ public class MerchantService {
 
     private final MerchantRepository merchantRepository;
     private final MerchantRecoveryService recovery;
+    private final MerchantApprovalMailSender mailSender;
 
-    public MerchantService(MerchantRepository merchantRepository, MerchantRecoveryService recovery) {
+    public MerchantService(MerchantRepository merchantRepository, MerchantRecoveryService recovery, MerchantApprovalMailSender mailSender) {
         this.merchantRepository = merchantRepository;
         this.recovery = recovery;
+        this.mailSender = mailSender;
     }
 
     public MerchantRegistrationResponse register(MerchantRegistrationRequest request) {
@@ -56,6 +58,12 @@ public class MerchantService {
 
     public MerchantSummary reject(UUID merchantId, String reason) {
         return recovery.reject(merchantId, reason);
+    }
+
+    public void sendCredentialsEmail(UUID merchantId, String clientId, String clientSecret) {
+        Merchant merchant = merchantRepository.findById(merchantId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Merchant not found"));
+        mailSender.sendCredentialsEmail(merchant.getEmail(), merchant.getBusinessName(), clientId, clientSecret);
     }
 
     private String normalize(String value) {

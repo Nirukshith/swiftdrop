@@ -190,4 +190,21 @@ public class MerchantProvisioningService {
                          boolean mustChangePassword, String temporaryPassword) {
         @Override public String toString() { return "ProvisioningResult[operationId=" + operationId + ", credentialRecoveryRequired=" + credentialRecoveryRequired + "]"; }
     }
+
+    public void recordRejection(UUID merchantId, MerchantProvisioningController.RejectionAuditRequest request) {
+        if (auditService != null) {
+            auditService.record(
+                request.actorId(),
+                "ADMIN",
+                "MERCHANT_REJECTED",
+                "MERCHANT",
+                merchantId.toString(),
+                Map.of(
+                    "email", request.email().trim().toLowerCase(Locale.ROOT),
+                    "businessName", request.businessName().trim(),
+                    "reason", request.reason().trim()
+                )
+            );
+        }
+    }
 }

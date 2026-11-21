@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -62,7 +63,7 @@ public class JpaAuditService implements AuditService {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(String actorId, String actorRole, String action,
                        String targetType, String targetId, Map<String, Object> details) {
         AuditEvent event = new AuditEvent(
@@ -81,7 +82,7 @@ public class JpaAuditService implements AuditService {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(AuditEvent event) {
         if (event == null) {
             log.warn("Attempted to record null AuditEvent");

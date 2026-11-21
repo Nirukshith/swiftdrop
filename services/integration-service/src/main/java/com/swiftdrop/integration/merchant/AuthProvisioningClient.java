@@ -7,9 +7,12 @@ public interface AuthProvisioningClient {
     ProvisioningResponse provision(UUID operationId, ProvisioningRequest request);
     ProvisioningResponse provisioningStatus(UUID operationId);
     ProvisioningResponse replaceCredential(UUID operationId, ReplacementRequest request);
+    void recordRejection(UUID merchantId, RejectionAuditRequest request);
     AuthUserResponse createMerchantUser(AuthCreateUserRequest request);
     AuthUserResponse activateUser(String userId);
     AuthClientCredentialsResponse createClient(AuthCreateClientRequest request);
+
+    record RejectionAuditRequest(String businessName, String email, String reason, String actorId) {}
 
     record AuthCreateUserRequest(String email, String password, String fullName, String phoneNumber,
                                  String role, String merchantId, Boolean enabled) {}

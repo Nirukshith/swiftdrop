@@ -47,6 +47,17 @@ public class HttpAuthProvisioningClient implements AuthProvisioningClient {
     }
 
     @Override
+    public void recordRejection(UUID merchantId, RejectionAuditRequest request) {
+        try {
+            restClient.post().uri("/internal/v1/merchant-provisioning/{id}/reject", merchantId)
+                    .body(request).retrieve().toBodilessEntity();
+        } catch (Exception ex) {
+            org.slf4j.LoggerFactory.getLogger(HttpAuthProvisioningClient.class)
+                    .warn("Failed to record merchant rejection audit in auth service for merchant {}: {}", merchantId, ex.getMessage());
+        }
+    }
+
+    @Override
     public AuthUserResponse createMerchantUser(AuthCreateUserRequest request) {
         return restClient.post().uri("/internal/v1/users").body(request).retrieve().body(AuthUserResponse.class);
     }

@@ -94,15 +94,24 @@ public class MerchantRecoveryService {
     }
 
     public MerchantSummary reject(UUID id, String reason) {
-        return transaction.execute(status -> {
+        String actor = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication() != null
+                ? org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName()
+                : "admin";
+        MerchantSummary summary = transaction.execute(status -> {
             Merchant merchant = lock(id);
             requireState(merchant, false);
-            if (merchant.getProvisioningOperationId() != null || merchant.getAuthUserId() != null) {
+            if (merchant.getAuthUserId() != null || merchant.getClientId() != null) {
                 throw conflict("Provisioning has begun; reconcile the account before rejecting this merchant");
             }
             merchant.reject(reason.trim());
             return MerchantSummary.from(merchants.saveAndFlush(merchant));
         });
+        if (summary != null) {
+            approvalMailSender.sendRejectionEmail(summary.email(), summary.businessName(), summary.rejectionReason());
+            auth.recordRejection(id, new AuthProvisioningClient.RejectionAuditRequest(
+                    summary.businessName(), summary.email(), summary.rejectionReason(), actor));
+        }
+        return summary;
     }
 
     private void validate(ProvisioningResponse response, UUID operation, Merchant merchant) {

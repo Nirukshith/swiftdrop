@@ -62,4 +62,16 @@ public interface LoginGuard {
     default void recordFailure(String email, String ipAddress) {
         recordFailure(email);
     }
+
+    /**
+     * Checks if the account or IP is currently locked out.
+     */
+    default boolean isLocked(String email, String ipAddress) {
+        try {
+            checkLoginAllowed(email, ipAddress);
+            return false;
+        } catch (AccountLockedException ex) {
+            return true;
+        }
+    }
 }

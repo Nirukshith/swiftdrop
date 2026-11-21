@@ -55,6 +55,15 @@ public class MerchantController {
         return merchantService.reject(merchantId, request.reason());
     }
 
+    @PostMapping("/api/v1/admin/merchants/{merchantId}/send-credentials")
+    public ResponseEntity<Void> sendCredentials(@PathVariable UUID merchantId,
+                                                @Valid @RequestBody MerchantCredentialsEmailRequest request,
+                                                Authentication authentication) {
+        requireAdmin(authentication);
+        merchantService.sendCredentialsEmail(merchantId, request.clientId(), request.clientSecret());
+        return ResponseEntity.noContent().build();
+    }
+
     private void requireAdmin(Authentication authentication) {
         boolean isAdmin = authentication != null && authentication.isAuthenticated()
                 && authentication.getAuthorities().stream().map(GrantedAuthority::getAuthority)

@@ -20,6 +20,7 @@ describe('MerchantApprovalComponent', () => {
     loadMerchants: jest.Mock;
     approve: jest.Mock;
     reject: jest.Mock;
+    sendCredentialsEmail: jest.Mock;
     messageFor: jest.Mock;
   };
   const merchant: MerchantSummary = {
@@ -46,6 +47,7 @@ describe('MerchantApprovalComponent', () => {
       loadMerchants: jest.fn().mockReturnValue(of({ content: [merchant], totalElements: 1, totalPages: 1, page: 0, size: 20 })),
       approve: jest.fn().mockReturnValue(of({ merchant: { ...merchant, status: 'APPROVED' }, clientId: 'client-1' })),
       reject: jest.fn().mockReturnValue(of({ ...merchant, status: 'REJECTED', rejectionReason: 'Not verified' })),
+      sendCredentialsEmail: jest.fn().mockReturnValue(of(void 0)),
       messageFor: jest.fn().mockReturnValue('Action failed'),
     };
 
@@ -103,7 +105,8 @@ describe('MerchantApprovalComponent', () => {
     expect(component.action()).toBeNull();
     expect(service.approve).toHaveBeenCalledTimes(1);
     const handoff = fixture.nativeElement.querySelector('app-merchant-credentials');
-    (handoff.querySelector('button') as HTMLButtonElement).click();
+    const buttons = handoff.querySelectorAll('button');
+    (buttons[buttons.length - 1] as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(component.handoff()).toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain('one-time-test-secret');

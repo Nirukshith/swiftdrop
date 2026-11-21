@@ -201,8 +201,22 @@ public class AuthController {
         if (user == null || user.getPasswordHash() == null ||
                 !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             loginGuard.recordFailure(normalizedEmail, clientIp);
+            String portal = request.role() != null && !request.role().isBlank()
+                    ? request.role().trim().toUpperCase()
+                    : (user != null && user.getRole() != null ? user.getRole() : "CUSTOMER");
+
+            if (loginGuard.isLocked(normalizedEmail, clientIp)) {
+                auditService.record("SYSTEM", "SECURITY", "ACCOUNT_LOCKED", "USER", normalizedEmail,
+                        Map.of(
+                                "email", normalizedEmail,
+                                "portal", portal,
+                                "ipAddress", clientIp,
+                                "reason", "5 consecutive failed password attempts (locked for 15 minutes)"
+                        ));
+            }
+
             auditService.record("ANONYMOUS", "ANONYMOUS", "USER_LOGIN_FAILED", "USER", normalizedEmail,
-                    Map.of("email", normalizedEmail, "ipAddress", clientIp));
+                    Map.of("email", normalizedEmail, "portal", portal, "ipAddress", clientIp));
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password credentials");
         }
 

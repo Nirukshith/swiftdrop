@@ -20,7 +20,8 @@ describe('MerchantCredentialsComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('client-1');
     expect(fixture.nativeElement.textContent).toContain('one-time-test-secret');
-    (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();
+    const buttons = fixture.nativeElement.querySelectorAll('button');
+    (buttons[buttons.length - 1] as HTMLButtonElement).click();
     expect(saved).toHaveBeenCalledTimes(1);
     fixture.componentRef.setInput('credentials', null);
     fixture.detectChanges();

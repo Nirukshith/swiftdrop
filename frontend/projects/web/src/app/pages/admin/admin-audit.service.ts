@@ -44,7 +44,8 @@ export class AdminAuditService {
 
     const params = new HttpParams()
       .set('page', page.toString())
-      .set('size', size.toString());
+      .set('size', size.toString())
+      .set('administrativeOnly', 'true');
 
     return this.http.get<AuditLogPage>(this.baseUrl, { params }).pipe(
       tap((res) => {
@@ -62,6 +63,15 @@ export class AdminAuditService {
         return throwError(() => err);
       })
     );
+  }
+
+  loadSecurityAlerts(limit: number = 5): Observable<AuditLogPage> {
+    const params = new HttpParams()
+      .set('action', 'ACCOUNT_LOCKED')
+      .set('page', '0')
+      .set('size', limit.toString());
+
+    return this.http.get<AuditLogPage>(this.baseUrl, { params });
   }
 }
 

@@ -93,7 +93,7 @@ import { MerchantApiCredentials } from './merchant.model';
                       Copy and store this secret securely. It will not be shown again after you hide it or leave this page.
                     </p>
                     <div class="pt-1">
-                      <ui-button variant="secondary" (click)="hideSecret()">I saved the secret</ui-button>
+                      <ui-button variant="secondary" (click)="hideSecret()">Done</ui-button>
                     </div>
                   </div>
                 } @else {
@@ -103,41 +103,43 @@ import { MerchantApiCredentials } from './merchant.model';
                 }
               </div>
 
-              <!-- Token Request Guide -->
-              <div class="rounded-2xl border border-[#eee7e0] p-5 bg-white space-y-3">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <h3 class="text-xs font-black uppercase tracking-wider text-[#1d1b2c]">Token request</h3>
-                    <p class="text-xs text-[#6f6d85] mt-0.5">
-                      Request a short-lived bearer token using the client credentials grant. Send the token in the Authorization header when calling merchant APIs.
-                    </p>
+              @if (showTokenRequest()) {
+                <!-- Token Request Guide -->
+                <div class="rounded-2xl border border-[#eee7e0] p-5 bg-white space-y-3">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <h3 class="text-xs font-black uppercase tracking-wider text-[#1d1b2c]">Token request</h3>
+                      <p class="text-xs text-[#6f6d85] mt-0.5">
+                        Request a short-lived bearer token using the client credentials grant. Send the token in the Authorization header when calling merchant APIs.
+                      </p>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#a53a26]/10 text-[#a53a26]">
+                      OAuth 2.0
+                    </span>
                   </div>
-                  <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-[#a53a26]/10 text-[#a53a26]">
-                    OAuth 2.0
-                  </span>
-                </div>
 
-                <div class="space-y-2 pt-1">
-                  <span class="text-[10px] uppercase font-bold text-[#a09eaf] block">Request Header Format</span>
-                  <code class="block overflow-x-auto rounded-xl bg-[#1d1b2c] px-4 py-3 text-xs font-mono text-[#faf8f6] shadow-sm">Authorization: Bearer &lt;access-token&gt;</code>
-                </div>
+                  <div class="space-y-2 pt-1">
+                    <span class="text-[10px] uppercase font-bold text-[#a09eaf] block">Request Header Format</span>
+                    <code class="block overflow-x-auto rounded-xl bg-[#1d1b2c] px-4 py-3 text-xs font-mono text-[#faf8f6] shadow-sm">Authorization: Bearer &lt;access-token&gt;</code>
+                  </div>
 
-                <!-- Integration Quick Reference -->
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-[11px]">
-                  <div class="p-3 rounded-xl bg-[#faf8f6] border border-[#e8e2dc]">
-                    <span class="font-bold text-[#1d1b2c] block">Base API URL</span>
-                    <span class="font-mono text-[#6f6d85] text-[10px] break-all block mt-0.5">/api/v1/merchant</span>
-                  </div>
-                  <div class="p-3 rounded-xl bg-[#faf8f6] border border-[#e8e2dc]">
-                    <span class="font-bold text-[#1d1b2c] block">Grant Type</span>
-                    <span class="font-mono text-[#6f6d85] text-[10px] block mt-0.5">client_credentials</span>
-                  </div>
-                  <div class="p-3 rounded-xl bg-[#faf8f6] border border-[#e8e2dc]">
-                    <span class="font-bold text-[#1d1b2c] block">Rate Limit</span>
-                    <span class="font-mono text-[#6f6d85] text-[10px] block mt-0.5">60 requests / min</span>
+                  <!-- Integration Quick Reference -->
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-[11px]">
+                    <div class="p-3 rounded-xl bg-[#faf8f6] border border-[#e8e2dc]">
+                      <span class="font-bold text-[#1d1b2c] block">Base API URL</span>
+                      <span class="font-mono text-[#6f6d85] text-[10px] break-all block mt-0.5">/api/v1/merchant</span>
+                    </div>
+                    <div class="p-3 rounded-xl bg-[#faf8f6] border border-[#e8e2dc]">
+                      <span class="font-bold text-[#1d1b2c] block">Grant Type</span>
+                      <span class="font-mono text-[#6f6d85] text-[10px] block mt-0.5">client_credentials</span>
+                    </div>
+                    <div class="p-3 rounded-xl bg-[#faf8f6] border border-[#e8e2dc]">
+                      <span class="font-bold text-[#1d1b2c] block">Rate Limit</span>
+                      <span class="font-mono text-[#6f6d85] text-[10px] block mt-0.5">60 requests / min</span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              }
 
               <p class="text-xs text-slate-500 font-medium">
                 Hand over these credentials securely to the merchant. The secret cannot be retrieved again from this page.
@@ -195,6 +197,7 @@ import { MerchantApiCredentials } from './merchant.model';
 })
 export class MerchantCredentialsComponent {
   readonly credentials = input<MerchantApiCredentials | null>(null);
+  readonly showTokenRequest = input<boolean>(false);
   readonly secretSaved = output<void>();
   readonly copiedField = signal<string | null>(null);
 

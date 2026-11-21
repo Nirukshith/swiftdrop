@@ -37,6 +37,20 @@ public class AdminAuditService {
         int page,
         int size
     ) {
+        return getAuditLogs(action, actorId, targetType, fromDate, toDate, false, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public AuditLogPageResponse getAuditLogs(
+        String action,
+        String actorId,
+        String targetType,
+        Instant fromDate,
+        Instant toDate,
+        Boolean administrativeOnly,
+        int page,
+        int size
+    ) {
         if (page < 0) {
             throw new IllegalArgumentException("Page index must not be negative");
         }
@@ -47,7 +61,7 @@ public class AdminAuditService {
             throw new IllegalArgumentException("fromDate must not be after toDate");
         }
 
-        Specification<AuditLogEntity> spec = createSpecification(action, actorId, targetType, fromDate, toDate);
+        Specification<AuditLogEntity> spec = createSpecification(action, actorId, targetType, fromDate, toDate, administrativeOnly);
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "occurredAt", "id"));
 
         Page<AuditLogEntity> resultPage = auditLogRepository.findAll(spec, pageRequest);
@@ -70,10 +84,17 @@ public class AdminAuditService {
         String actorId,
         String targetType,
         Instant fromDate,
-        Instant toDate
+        Instant toDate,
+        Boolean administrativeOnly
     ) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+
+            if (Boolean.TRUE.equals(administrativeOnly)) {
+                predicates.add(cb.not(root.get("action").in(
+                    "USER_LOGIN_SUCCESS", "USER_LOGOUT", "TOKEN_REFRESH_SUCCESS", "USER_LOGIN_FAILED"
+                )));
+            }
 
             if (action != null && !action.isBlank()) {
                 predicates.add(cb.equal(root.get("action"), action.trim()));
