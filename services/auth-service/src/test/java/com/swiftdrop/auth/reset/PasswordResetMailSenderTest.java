@@ -25,7 +25,7 @@ class PasswordResetMailSenderTest {
     @Test
     @DisplayName("Successful send logs a masked recipient")
     void send_success_logsMaskedRecipient(CapturedOutput output) {
-        new PasswordResetMailSender(mock(JavaMailSender.class), "").sendResetEmail(EMAIL, "123456");
+        new PasswordResetMailSender(mock(JavaMailSender.class), "", Runnable::run).sendResetEmail(EMAIL, "123456");
 
         assertThat(output.getAll()).contains("a***@example.com").doesNotContain(EMAIL).doesNotContain("123456");
     }
@@ -37,7 +37,7 @@ class PasswordResetMailSenderTest {
         doThrow(new MailSendException("550 mailbox unavailable: " + EMAIL))
                 .when(mailSender).send(any(SimpleMailMessage.class));
 
-        new PasswordResetMailSender(mailSender, "").sendResetEmail(EMAIL, "123456");
+        new PasswordResetMailSender(mailSender, "", Runnable::run).sendResetEmail(EMAIL, "123456");
 
         assertThat(output.getAll())
                 .contains("a***@example.com")
@@ -52,5 +52,45 @@ class PasswordResetMailSenderTest {
         assertThat(PasswordResetMailSender.maskEmail("no-at-sign")).isEqualTo("***");
         assertThat(PasswordResetMailSender.maskEmail("@example.com")).isEqualTo("***");
         assertThat(PasswordResetMailSender.maskEmail("bob@example.com")).isEqualTo("b***@example.com");
+    }
+
+    @Test
+    @DisplayName("Delivery is handed to the executor instead of running on the caller's thread")
+    void send_usesExecutor() {
+        JavaMailSender mailSender = mock(JavaMailSender.class);
+        java.util.List<Runnable> queued = new java.util.ArrayList<>();
+
+        new PasswordResetMailSender(mailSender, "", queued::add).sendResetEmail(EMAIL, "123456");
+
+        org.mockito.Mockito.verifyNoInteractions(mailSender);
+        assertThat(queued).hasSize(1);
+        queued.get(0).run();
+        org.mockito.Mockito.verify(mailSender).send(any(SimpleMailMessage.class));
+    }
+
+    @Test
+    @DisplayName("Inside a transaction the email waits for commit, and is never sent on rollback")
+    void send_waitsForCommit() {
+        JavaMailSender mailSender = mock(JavaMailSender.class);
+        PasswordResetMailSender sender = new PasswordResetMailSender(mailSender, "", Runnable::run);
+
+        org.springframework.transaction.support.TransactionSynchronizationManager.initSynchronization();
+        try {
+            sender.sendResetEmail(EMAIL, "123456");
+            org.mockito.Mockito.verifyNoInteractions(mailSender);
+
+            // Simulate a rollback: synchronizations get afterCompletion, never afterCommit.
+            org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(sync -> sync.afterCompletion(
+                            org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK));
+            org.mockito.Mockito.verifyNoInteractions(mailSender);
+
+            sender.sendResetEmail(EMAIL, "654321");
+            var syncs = org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations();
+            syncs.get(syncs.size() - 1).afterCommit();
+            org.mockito.Mockito.verify(mailSender).send(any(SimpleMailMessage.class));
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 }

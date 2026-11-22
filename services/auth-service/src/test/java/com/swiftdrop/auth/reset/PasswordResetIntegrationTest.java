@@ -95,6 +95,22 @@ class PasswordResetIntegrationTest {
         auditLogRepository.deleteAll();
     }
 
+    /** The reset email is sent asynchronously after commit, so poll Mailpit until it arrives. */
+    private JsonNode awaitMailpitMessages(int expectedTotal) {
+        long deadline = System.currentTimeMillis() + 10_000;
+        JsonNode messages = getMailpitMessages();
+        while (messages.get("total").asInt() < expectedTotal && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            messages = getMailpitMessages();
+        }
+        return messages;
+    }
+
     private JsonNode getMailpitMessages() {
         return mailpitClient.get()
                 .uri("/api/v1/messages")
@@ -121,7 +137,7 @@ class PasswordResetIntegrationTest {
         assertThat(forgotResponse.message()).isEqualTo(ForgotPasswordResponse.DEFAULT_MESSAGE);
 
         // 3. Verify email arrived in Mailpit
-        JsonNode messages = getMailpitMessages();
+        JsonNode messages = awaitMailpitMessages(1);
         assertThat(messages.get("total").asInt()).isEqualTo(1);
         JsonNode firstMessage = messages.get("messages").get(0);
         assertThat(firstMessage.get("To").get(0).get("Address").asText()).isEqualTo(email);
@@ -169,7 +185,7 @@ class PasswordResetIntegrationTest {
 
         passwordResetService.requestPasswordReset(email, "127.0.0.1", "corr-timeout");
 
-        JsonNode messages = getMailpitMessages();
+        JsonNode messages = awaitMailpitMessages(1);
         String messageId = messages.get("messages").get(0).get("ID").asText();
         JsonNode fullMsg = mailpitClient.get().uri("/api/v1/message/" + messageId).retrieve().body(JsonNode.class);
         Matcher matcher = Pattern.compile("(?m)^\\s*(\\d{6})\\s*$").matcher(fullMsg.get("Text").asText());
@@ -198,7 +214,7 @@ class PasswordResetIntegrationTest {
         userRepository.save(new User(userId, email, originalHash, "Target User", null, "CUSTOMER", true, null));
 
         passwordResetService.requestPasswordReset(email, "10.0.0.5", "corr-brute");
-        JsonNode messages = getMailpitMessages();
+        JsonNode messages = awaitMailpitMessages(1);
         String messageId = messages.get("messages").get(0).get("ID").asText();
         JsonNode fullMsg = mailpitClient.get().uri("/api/v1/message/" + messageId).retrieve().body(JsonNode.class);
         Matcher matcher = Pattern.compile("(?m)^\\s*(\\d{6})\\s*$").matcher(fullMsg.get("Text").asText());
