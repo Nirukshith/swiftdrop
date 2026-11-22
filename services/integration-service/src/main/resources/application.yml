@@ -43,6 +43,9 @@ swiftdrop:
     provider-url: ${LLM_PROVIDER_URL:https://api.anthropic.com}
     provider-timeout: ${LLM_PROVIDER_TIMEOUT:PT10S}
     upstream-timeout: ${ASSISTANT_UPSTREAM_TIMEOUT:PT3S}
+    rate-limit:
+      max-requests: ${ASSISTANT_RATE_LIMIT_MAX_REQUESTS:10}
+      window: ${ASSISTANT_RATE_LIMIT_WINDOW:PT1M}
   security:
     internal:
       tokens:

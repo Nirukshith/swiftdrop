@@ -6,6 +6,7 @@ import com.swiftdrop.integration.assistant.client.FakeLlmClient;
 import com.swiftdrop.integration.assistant.controller.AssistantController;
 import com.swiftdrop.integration.assistant.dto.ChatMessageRequest;
 import com.swiftdrop.integration.assistant.mcp.McpServerController;
+import com.swiftdrop.integration.assistant.service.AssistantRateLimiter;
 import com.swiftdrop.integration.assistant.service.AssistantService;
 import com.swiftdrop.integration.assistant.tools.AssistantTools;
 import com.swiftdrop.integration.assistant.tools.AssistantToolsImpl;
@@ -124,6 +125,11 @@ class AssistantSecurityIntegrationTest {
         @org.springframework.context.annotation.Bean
         public AssistantService assistantService(AssistantTools tools) {
             return new AssistantService(new FakeLlmClient(), tools);
+        }
+
+        @org.springframework.context.annotation.Bean
+        public AssistantRateLimiter assistantRateLimiter() {
+            return new AssistantRateLimiter(10, java.time.Duration.ofMinutes(1), java.time.Clock.systemUTC());
         }
     }
 
@@ -354,6 +360,46 @@ class AssistantSecurityIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/assistant/chat returns 429 once a customer exceeds 10 messages per minute")
+    void assistantChat_overRateLimit_returns429() throws Exception {
+        ChatMessageRequest request = new ChatMessageRequest("Hello", null);
+        // Dedicated subject so this test does not consume other tests' quota.
+        var rateLimitedCustomer = jwt().jwt(builder -> builder
+                        .tokenValue("jwt-token-rate-limited")
+                        .subject("cust-rate-limited")
+                        .claim("roles", List.of("ROLE_CUSTOMER")))
+                .authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
+
+        for (int i = 0; i < 10; i++) {
+            mockMvc.perform(post("/api/v1/assistant/chat")
+                            .with(rateLimitedCustomer)
+                            .with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk());
+        }
+
+        mockMvc.perform(post("/api/v1/assistant/chat")
+                        .with(rateLimitedCustomer)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isTooManyRequests());
+
+        // Another customer is unaffected.
+        mockMvc.perform(post("/api/v1/assistant/chat")
+                        .with(jwt().jwt(builder -> builder
+                                .tokenValue(CUSTOMER_B_TOKEN)
+                                .subject(CUSTOMER_B_ID)
+                                .claim("roles", List.of("ROLE_CUSTOMER")))
+                                .authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER")))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk());
     }
 
     // =========================================================================

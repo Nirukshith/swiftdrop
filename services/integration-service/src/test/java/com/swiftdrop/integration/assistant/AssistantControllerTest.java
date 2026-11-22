@@ -1,6 +1,7 @@
 package com.swiftdrop.integration.assistant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
@@ -9,13 +10,18 @@ import com.swiftdrop.integration.assistant.client.LlmClient;
 import com.swiftdrop.integration.assistant.controller.AssistantController;
 import com.swiftdrop.integration.assistant.dto.ChatMessageRequest;
 import com.swiftdrop.integration.assistant.dto.ChatMessageResponse;
+import com.swiftdrop.integration.assistant.service.AssistantRateLimiter;
 import com.swiftdrop.integration.assistant.service.AssistantService;
 import com.swiftdrop.integration.assistant.tools.AssistantTools;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.server.ResponseStatusException;
 
 class AssistantControllerTest {
 
@@ -26,7 +32,7 @@ class AssistantControllerTest {
     @BeforeEach
     void setUp() {
         tools = mock(AssistantTools.class);
-        controller = new AssistantController(new AssistantService(new FakeLlmClient(), tools));
+        controller = new AssistantController(new AssistantService(new FakeLlmClient(), tools), unlimited());
         customerJwt = Jwt.withTokenValue("customer-token").header("alg", "none")
                 .subject("customer-1").claim("role", "CUSTOMER").build();
     }
@@ -104,7 +110,7 @@ class AssistantControllerTest {
             throw new IllegalStateException("provider secret");
         };
         AssistantController unavailableController =
-                new AssistantController(new AssistantService(unavailable, tools));
+                new AssistantController(new AssistantService(unavailable, tools), unlimited());
         when(tools.getCustomerParcels(null, 0, 20, "customer-token")).thenReturn(List.of());
 
         ChatMessageResponse response = unavailableController.chat(
@@ -145,5 +151,25 @@ class AssistantControllerTest {
         assertTrue(response.reply().contains("SD-20261114-BEK6JR"));
         assertTrue(response.reply().contains("CANCELLED"));
         assertTrue(!response.reply().contains("ParcelLookupResult"));
+    }
+
+    @Test
+    void rejectsMessagesOverThePerUserRateLimitWithoutCallingTools() {
+        AssistantController limited = new AssistantController(
+                new AssistantService(new FakeLlmClient(), tools),
+                new AssistantRateLimiter(2, Duration.ofMinutes(1), Clock.systemUTC()));
+        ChatMessageRequest request = new ChatMessageRequest("hello", null);
+
+        limited.chat(request, customerJwt, null);
+        limited.chat(request, customerJwt, null);
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> limited.chat(new ChatMessageRequest("Where is parcel SD-20261024-ABC123?", null), customerJwt, null));
+
+        assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatusCode());
+        verifyNoInteractions(tools);
+    }
+
+    private static AssistantRateLimiter unlimited() {
+        return new AssistantRateLimiter(Integer.MAX_VALUE, Duration.ofMinutes(1), Clock.systemUTC());
     }
 }
