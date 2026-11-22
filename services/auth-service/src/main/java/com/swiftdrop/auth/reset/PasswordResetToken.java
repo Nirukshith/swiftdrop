@@ -20,7 +20,7 @@ public class PasswordResetToken {
     @Column(name = "user_id", length = 64, nullable = false)
     private String userId;
 
-    @Column(name = "token_hash", length = 64, nullable = false, unique = true)
+    @Column(name = "token_hash", length = 64, nullable = false)
     private String tokenHash;
 
     @Column(name = "expires_at", nullable = false)
@@ -31,6 +31,9 @@ public class PasswordResetToken {
 
     @Column(name = "consumed_at")
     private Instant consumedAt;
+
+    @Column(name = "failed_attempts", nullable = false)
+    private int failedAttempts;
 
     public PasswordResetToken() {
     }
@@ -55,6 +58,14 @@ public class PasswordResetToken {
 
     public boolean isConsumed() {
         return consumedAt != null;
+    }
+
+    public int getFailedAttempts() {
+        return failedAttempts;
+    }
+
+    public void setFailedAttempts(int failedAttempts) {
+        this.failedAttempts = failedAttempts;
     }
 
     public String getId() {

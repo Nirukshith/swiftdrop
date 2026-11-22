@@ -188,4 +188,37 @@ class PasswordResetIntegrationTest {
         // Reset clock
         passwordResetService.setClock(Clock.systemUTC());
     }
+
+    @Test
+    @DisplayName("Five wrong codes invalidate the reset code, so the correct code is then rejected")
+    void resetPassword_fiveWrongCodes_locksCode() {
+        String userId = "usr-" + UUID.randomUUID();
+        String email = "bruteforce.target@example.com";
+        String originalHash = passwordEncoder.encode("OriginalPassword123!");
+        userRepository.save(new User(userId, email, originalHash, "Target User", null, "CUSTOMER", true, null));
+
+        passwordResetService.requestPasswordReset(email, "10.0.0.5", "corr-brute");
+        JsonNode messages = getMailpitMessages();
+        String messageId = messages.get("messages").get(0).get("ID").asText();
+        JsonNode fullMsg = mailpitClient.get().uri("/api/v1/message/" + messageId).retrieve().body(JsonNode.class);
+        Matcher matcher = Pattern.compile("(?m)^\\s*(\\d{6})\\s*$").matcher(fullMsg.get("Text").asText());
+        assertThat(matcher.find()).isTrue();
+        String realCode = matcher.group(1);
+        String wrongCode = realCode.equals("000000") ? "111111" : "000000";
+
+        for (int attempt = 1; attempt <= PasswordResetService.MAX_FAILED_ATTEMPTS; attempt++) {
+            assertThatThrownBy(() -> passwordResetService.verifyResetCode(email, wrongCode, "10.0.0.5", "corr-brute"))
+                    .isInstanceOf(InvalidResetTokenException.class);
+        }
+
+        // Failed attempts were committed despite the exception, and the code is now locked.
+        PasswordResetToken stored = tokenRepository.findByUserId(userId).get(0);
+        assertThat(stored.getFailedAttempts()).isEqualTo(PasswordResetService.MAX_FAILED_ATTEMPTS);
+        assertThat(stored.isConsumed()).isTrue();
+
+        assertThatThrownBy(() -> passwordResetService.resetPassword(
+                email, realCode, "AttackerPassword123!", "10.0.0.5", "corr-brute"))
+                .isInstanceOf(InvalidResetTokenException.class);
+        assertThat(userRepository.findById(userId).orElseThrow().getPasswordHash()).isEqualTo(originalHash);
+    }
 }

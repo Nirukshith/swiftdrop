@@ -14,9 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -88,7 +86,7 @@ class PasswordResetServiceTest {
         // Verify old tokens invalidated
         verify(tokenRepository).invalidateActiveTokensForUser(eq("usr-123"), eq(fixedNow));
 
-        // Verify token saved with 30-min expiration and hashed
+        // Verify token saved with 10-min expiration and hashed
         ArgumentCaptor<PasswordResetToken> tokenCaptor = ArgumentCaptor.forClass(PasswordResetToken.class);
         verify(tokenRepository).save(tokenCaptor.capture());
         PasswordResetToken savedToken = tokenCaptor.getValue();
@@ -115,15 +113,14 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    @DisplayName("Unregistered email throws ResponseStatusException with 404 NOT_FOUND")
-    void requestPasswordReset_unregisteredUser_throwsResponseStatusException() {
+    @DisplayName("Unregistered email returns the generic response without sending a code (no account enumeration)")
+    void requestPasswordReset_unregisteredUser_returnsGenericResponse() {
         when(userRepository.findByEmailIgnoreCase("unknown@example.com")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> resetService.requestPasswordReset("unknown@example.com", "127.0.0.1", "corr-2"))
-                .isInstanceOf(ResponseStatusException.class)
-                .extracting("statusCode", "reason")
-                .containsExactly(HttpStatus.NOT_FOUND, "This email is not registered yet");
+        ForgotPasswordResponse response =
+                resetService.requestPasswordReset("unknown@example.com", "127.0.0.1", "corr-2");
 
+        assertThat(response.message()).isEqualTo(ForgotPasswordResponse.DEFAULT_MESSAGE);
         verify(mailSender, never()).sendResetEmail(any(), any());
         verify(tokenRepository, never()).save(any());
 
@@ -138,16 +135,15 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    @DisplayName("Disabled user throws ResponseStatusException with 403 FORBIDDEN")
-    void requestPasswordReset_disabledUser_throwsResponseStatusException() {
+    @DisplayName("Disabled user returns the generic response without sending a code")
+    void requestPasswordReset_disabledUser_returnsGenericResponse() {
         User user = new User("usr-disabled", "disabled@example.com", "hashed", "Disabled", null, "CUSTOMER", false, null);
         when(userRepository.findByEmailIgnoreCase("disabled@example.com")).thenReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> resetService.requestPasswordReset("disabled@example.com", "127.0.0.1", "corr-3"))
-                .isInstanceOf(ResponseStatusException.class)
-                .extracting("statusCode", "reason")
-                .containsExactly(HttpStatus.FORBIDDEN, "Account is disabled. Please contact support.");
+        ForgotPasswordResponse response =
+                resetService.requestPasswordReset("disabled@example.com", "127.0.0.1", "corr-3");
 
+        assertThat(response.message()).isEqualTo(ForgotPasswordResponse.DEFAULT_MESSAGE);
         verify(mailSender, never()).sendResetEmail(any(), any());
         verify(tokenRepository, never()).save(any());
     }
@@ -160,7 +156,9 @@ class PasswordResetServiceTest {
         PasswordResetToken token = new PasswordResetToken("tok-1", "usr-123", tokenHash, fixedNow.plus(15, ChronoUnit.MINUTES));
         User user = new User("usr-123", "alice@example.com", "old_hash", "Alice", null, "CUSTOMER", true, null);
 
-        when(tokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(token));
+        when(userRepository.findByEmailIgnoreCase("alice@example.com")).thenReturn(Optional.of(user));
+        when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc("usr-123"))
+                .thenReturn(Optional.of(token));
         when(userRepository.findById("usr-123")).thenReturn(Optional.of(user));
         when(passwordEncoder.encode("NewSecret123!")).thenReturn("new_bcrypt_hash");
 
@@ -179,6 +177,7 @@ class PasswordResetServiceTest {
         assertThat(token.isConsumed()).isTrue();
         assertThat(token.getConsumedAt()).isEqualTo(fixedNow);
         verify(tokenRepository).save(token);
+        verify(tokenRepository, never()).incrementFailedAttempts(any());
 
         // Verify user password updated
         assertThat(user.getPasswordHash()).isEqualTo("new_bcrypt_hash");
@@ -205,36 +204,41 @@ class PasswordResetServiceTest {
         PasswordResetToken token = new PasswordResetToken(
                 "tok-verify", "usr-123", resetService.hashToken(rawToken), fixedNow.plus(10, ChronoUnit.MINUTES));
         User user = new User("usr-123", "alice@example.com", "old_hash", "Alice", null, "CUSTOMER", true, null);
-        when(tokenRepository.findByTokenHash(token.getTokenHash())).thenReturn(Optional.of(token));
-        when(userRepository.findById("usr-123")).thenReturn(Optional.of(user));
+        when(userRepository.findByEmailIgnoreCase("alice@example.com")).thenReturn(Optional.of(user));
+        when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc("usr-123"))
+                .thenReturn(Optional.of(token));
 
         resetService.verifyResetCode("alice@example.com", rawToken, "127.0.0.1", "corr-verify");
 
         assertThat(token.isConsumed()).isFalse();
+        verify(tokenRepository, never()).incrementFailedAttempts(any());
     }
 
     @Test
-    @DisplayName("Code for another email is rejected")
-    void verifyResetCode_emailMismatch_throwsException() {
-        String rawToken = "123456";
-        PasswordResetToken token = new PasswordResetToken(
-                "tok-verify", "usr-123", resetService.hashToken(rawToken), fixedNow.plus(10, ChronoUnit.MINUTES));
-        User user = new User("usr-123", "alice@example.com", "old_hash", "Alice", null, "CUSTOMER", true, null);
-        when(tokenRepository.findByTokenHash(token.getTokenHash())).thenReturn(Optional.of(token));
-        when(userRepository.findById("usr-123")).thenReturn(Optional.of(user));
+    @DisplayName("Code issued to another email is rejected and counted as a failed attempt")
+    void verifyResetCode_codeFromAnotherAccount_throwsException() {
+        String aliceCode = "123456";
+        PasswordResetToken bobToken = new PasswordResetToken(
+                "tok-bob", "usr-bob", resetService.hashToken("999999"), fixedNow.plus(10, ChronoUnit.MINUTES));
+        User bob = new User("usr-bob", "bob@example.com", "hash", "Bob", null, "CUSTOMER", true, null);
+        when(userRepository.findByEmailIgnoreCase("bob@example.com")).thenReturn(Optional.of(bob));
+        when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc("usr-bob"))
+                .thenReturn(Optional.of(bobToken));
 
         assertThatThrownBy(() -> resetService.verifyResetCode(
-                "another@example.com", rawToken, "127.0.0.1", "corr-mismatch"))
+                "bob@example.com", aliceCode, "127.0.0.1", "corr-mismatch"))
                 .isInstanceOf(InvalidResetTokenException.class);
+
+        verify(tokenRepository).incrementFailedAttempts("tok-bob");
     }
 
     @Test
-    @DisplayName("Non-existent token throws InvalidResetTokenException")
-    void resetPassword_nonExistentToken_throwsException() {
-        when(tokenRepository.findByTokenHash(any())).thenReturn(Optional.empty());
+    @DisplayName("Unknown email is rejected with the generic invalid-code error")
+    void resetPassword_unknownEmail_throwsException() {
+        when(userRepository.findByEmailIgnoreCase("ghost@example.com")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> resetService.resetPassword(
-                "alice@example.com", "654321", "NewSecret123!", "127.0.0.1", "corr-5"))
+                "ghost@example.com", "654321", "NewSecret123!", "127.0.0.1", "corr-ghost"))
                 .isInstanceOf(InvalidResetTokenException.class)
                 .hasMessageContaining("Invalid, expired, or already-used reset token");
 
@@ -242,17 +246,15 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    @DisplayName("Already consumed token throws InvalidResetTokenException")
-    void resetPassword_alreadyConsumedToken_throwsException() {
-        String rawToken = "123456";
-        String tokenHash = resetService.hashToken(rawToken);
-        PasswordResetToken token = new PasswordResetToken("tok-1", "usr-123", tokenHash, fixedNow.plus(15, ChronoUnit.MINUTES));
-        token.setConsumedAt(fixedNow.minus(5, ChronoUnit.MINUTES));
-
-        when(tokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(token));
+    @DisplayName("No active code (never issued, already used, or locked) throws InvalidResetTokenException")
+    void resetPassword_noActiveToken_throwsException() {
+        User user = new User("usr-123", "alice@example.com", "old_hash", "Alice", null, "CUSTOMER", true, null);
+        when(userRepository.findByEmailIgnoreCase("alice@example.com")).thenReturn(Optional.of(user));
+        when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc("usr-123"))
+                .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> resetService.resetPassword(
-                "alice@example.com", rawToken, "NewSecret123!", "127.0.0.1", "corr-6"))
+                "alice@example.com", "654321", "NewSecret123!", "127.0.0.1", "corr-5"))
                 .isInstanceOf(InvalidResetTokenException.class)
                 .hasMessageContaining("Invalid, expired, or already-used reset token");
 
@@ -261,14 +263,16 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    @DisplayName("Expired token (30 min past creation) throws InvalidResetTokenException using controllable clock")
+    @DisplayName("Expired token (10 min past creation) throws InvalidResetTokenException using controllable clock")
     void resetPassword_expiredToken_throwsException() {
         String rawToken = "123456";
         String tokenHash = resetService.hashToken(rawToken);
         // Token expired 1 minute ago
         PasswordResetToken token = new PasswordResetToken("tok-1", "usr-123", tokenHash, fixedNow.minus(1, ChronoUnit.MINUTES));
-
-        when(tokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(token));
+        User user = new User("usr-123", "alice@example.com", "old_hash", "Alice", null, "CUSTOMER", true, null);
+        when(userRepository.findByEmailIgnoreCase("alice@example.com")).thenReturn(Optional.of(user));
+        when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc("usr-123"))
+                .thenReturn(Optional.of(token));
 
         assertThatThrownBy(() -> resetService.resetPassword(
                 "alice@example.com", rawToken, "NewSecret123!", "127.0.0.1", "corr-7"))
@@ -278,5 +282,48 @@ class PasswordResetServiceTest {
         verify(userRepository, never()).save(any());
         verify(refreshTokenRepository, never()).revokeByUserId(any());
     }
-}
 
+    @Test
+    @DisplayName("Wrong code below the attempt limit records a failed attempt without locking the code")
+    void resetPassword_wrongCode_recordsFailedAttempt() {
+        PasswordResetToken token = new PasswordResetToken(
+                "tok-1", "usr-123", resetService.hashToken("123456"), fixedNow.plus(10, ChronoUnit.MINUTES));
+        User user = new User("usr-123", "alice@example.com", "old_hash", "Alice", null, "CUSTOMER", true, null);
+        when(userRepository.findByEmailIgnoreCase("alice@example.com")).thenReturn(Optional.of(user));
+        when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc("usr-123"))
+                .thenReturn(Optional.of(token));
+        when(tokenRepository.lockIfAttemptsExhausted("tok-1", PasswordResetService.MAX_FAILED_ATTEMPTS, fixedNow))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> resetService.resetPassword(
+                "alice@example.com", "000000", "NewSecret123!", "127.0.0.1", "corr-wrong"))
+                .isInstanceOf(InvalidResetTokenException.class);
+
+        verify(tokenRepository).incrementFailedAttempts("tok-1");
+        verify(userRepository, never()).save(any());
+        verify(auditService).record(
+                eq("usr-123"), eq("ANONYMOUS"), eq("PASSWORD_RESET_REJECTED"), eq("TOKEN"), eq("usr-123"),
+                argThat(details -> "TOKEN_MISMATCH".equals(details.get("reason"))));
+    }
+
+    @Test
+    @DisplayName("Wrong code that reaches the attempt limit locks the code")
+    void resetPassword_wrongCodeAtLimit_locksCode() {
+        PasswordResetToken token = new PasswordResetToken(
+                "tok-1", "usr-123", resetService.hashToken("123456"), fixedNow.plus(10, ChronoUnit.MINUTES));
+        User user = new User("usr-123", "alice@example.com", "old_hash", "Alice", null, "CUSTOMER", true, null);
+        when(userRepository.findByEmailIgnoreCase("alice@example.com")).thenReturn(Optional.of(user));
+        when(tokenRepository.findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc("usr-123"))
+                .thenReturn(Optional.of(token));
+        when(tokenRepository.lockIfAttemptsExhausted("tok-1", PasswordResetService.MAX_FAILED_ATTEMPTS, fixedNow))
+                .thenReturn(1);
+
+        assertThatThrownBy(() -> resetService.verifyResetCode(
+                "alice@example.com", "000000", "127.0.0.1", "corr-lock"))
+                .isInstanceOf(InvalidResetTokenException.class);
+
+        verify(auditService).record(
+                eq("usr-123"), eq("ANONYMOUS"), eq("PASSWORD_RESET_REJECTED"), eq("TOKEN"), eq("usr-123"),
+                argThat(details -> "TOKEN_LOCKED".equals(details.get("reason"))));
+    }
+}

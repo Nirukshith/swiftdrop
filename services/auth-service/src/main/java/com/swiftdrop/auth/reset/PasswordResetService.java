@@ -12,11 +12,9 @@ import com.swiftdrop.auth.user.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -36,6 +34,8 @@ public class PasswordResetService {
     private static final Logger log = LoggerFactory.getLogger(PasswordResetService.class);
     private static final int TOKEN_EXPIRY_MINUTES = 10;
     private static final int OTP_BOUND = 1_000_000;
+    /** Wrong guesses allowed before a code is invalidated and the user must request a new one. */
+    static final int MAX_FAILED_ATTEMPTS = 5;
     private static final Duration REFRESH_TOKEN_TTL = Duration.ofDays(7);
 
     private final UserRepository userRepository;
@@ -90,7 +90,8 @@ public class PasswordResetService {
                     normalizedEmail,
                     Map.of("reason", "USER_NOT_FOUND", "ipAddress", ipAddress != null ? ipAddress : "UNKNOWN")
             );
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "This email is not registered yet");
+            // Same generic answer as a registered email, so callers cannot enumerate accounts.
+            return new ForgotPasswordResponse();
         }
 
         User user = userOpt.get();
@@ -103,7 +104,7 @@ public class PasswordResetService {
                     normalizedEmail,
                     Map.of("reason", "USER_DISABLED", "ipAddress", ipAddress != null ? ipAddress : "UNKNOWN")
             );
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is disabled. Please contact support.");
+            return new ForgotPasswordResponse();
         }
 
         Instant now = clock.instant();
@@ -139,13 +140,14 @@ public class PasswordResetService {
         return new ForgotPasswordResponse();
     }
 
-    @Transactional
+    // A rejected code must still commit its failed-attempt count, so do not roll back on it.
+    @Transactional(noRollbackFor = InvalidResetTokenException.class)
     public void verifyResetCode(String email, String rawToken, String ipAddress, String correlationId) {
         Instant now = clock.instant();
         findValidToken(email, rawToken, ipAddress, now);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = InvalidResetTokenException.class)
     public PasswordResetResult resetPassword(
             String email, String rawToken, String newPassword, String ipAddress, String correlationId) {
         Instant now = clock.instant();
@@ -233,20 +235,24 @@ public class PasswordResetService {
             throw new InvalidResetTokenException("Invalid, expired, or already-used reset token.");
         }
 
-        String tokenHash = hashToken(rawToken);
-        PasswordResetToken token = tokenRepository.findByTokenHash(tokenHash)
-                .orElseThrow(() -> invalidToken("TOKEN_NOT_FOUND", ipAddress));
-
-        User user = userRepository.findById(token.getUserId())
+        User user = userRepository.findByEmailIgnoreCase(email.trim())
                 .orElseThrow(() -> invalidToken("USER_NOT_FOUND", ipAddress));
-        if (!user.getEmail().equalsIgnoreCase(email.trim())) {
-            throw invalidToken("EMAIL_MISMATCH", ipAddress);
-        }
-        if (token.isConsumed()) {
-            throw invalidToken("TOKEN_ALREADY_USED", ipAddress, token.getUserId());
-        }
+
+        // Only the user's newest unused code can match; used, replaced and locked codes are excluded.
+        PasswordResetToken token = tokenRepository
+                .findFirstByUserIdAndConsumedAtIsNullOrderByCreatedAtDesc(user.getId())
+                .orElseThrow(() -> invalidToken("TOKEN_NOT_FOUND", ipAddress, user.getId()));
         if (token.isExpired(now)) {
-            throw invalidToken("TOKEN_EXPIRED", ipAddress, token.getUserId());
+            throw invalidToken("TOKEN_EXPIRED", ipAddress, user.getId());
+        }
+
+        byte[] presentedHash = hashToken(rawToken).getBytes(StandardCharsets.UTF_8);
+        byte[] storedHash = token.getTokenHash().getBytes(StandardCharsets.UTF_8);
+        if (!MessageDigest.isEqual(presentedHash, storedHash)) {
+            tokenRepository.incrementFailedAttempts(token.getId());
+            boolean locked = tokenRepository.lockIfAttemptsExhausted(
+                    token.getId(), MAX_FAILED_ATTEMPTS, now) > 0;
+            throw invalidToken(locked ? "TOKEN_LOCKED" : "TOKEN_MISMATCH", ipAddress, user.getId());
         }
         return token;
     }

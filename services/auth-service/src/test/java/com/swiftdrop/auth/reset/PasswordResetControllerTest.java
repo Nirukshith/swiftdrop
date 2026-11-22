@@ -12,10 +12,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.server.ResponseStatusException;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -62,16 +60,16 @@ class PasswordResetControllerTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/auth/password/forgot with unregistered email returns 404 Not Found")
-    void forgotPassword_unregisteredEmail_returns404() throws Exception {
+    @DisplayName("POST /api/v1/auth/password/forgot with unregistered email returns the same 202 as a registered one")
+    void forgotPassword_unregisteredEmail_returns202() throws Exception {
         when(passwordResetService.requestPasswordReset(eq("unknown@example.com"), any(), any()))
-                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "This email is not registered yet"));
+                .thenReturn(new ForgotPasswordResponse());
 
         mockMvc.perform(post("/api/v1/auth/password/forgot")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ForgotPasswordRequest("unknown@example.com"))))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("This email is not registered yet"));
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.message").value(ForgotPasswordResponse.DEFAULT_MESSAGE));
     }
 
     @Test
