@@ -5,7 +5,6 @@ import com.swiftdrop.integration.notification.channel.EmailChannel;
 import com.swiftdrop.integration.notification.channel.NotificationMessage;
 import com.swiftdrop.integration.notification.channel.SmsChannel;
 import com.swiftdrop.integration.notification.client.AuthContactClient;
-import com.swiftdrop.integration.notification.client.ContactResolutionException;
 import com.swiftdrop.integration.notification.dto.NotificationDto;
 import com.swiftdrop.integration.notification.dto.NotificationPageResponse;
 import com.swiftdrop.integration.notification.dto.UserContactDto;
@@ -96,12 +95,14 @@ public class NotificationService {
             return;
         }
 
+        // An empty result means auth-service has no such user (404). Retrying cannot fix that, so keep the
+        // in-app notification and skip email/SMS. Transient failures (timeouts, 5xx) still throw and retry.
         Optional<UserContactDto> contactOpt = authContactClient.getContact(customerId);
-        if (contactOpt.isEmpty()) {
-            log.error("Could not resolve contact for customerId: {}", customerId);
-            throw new ContactResolutionException("Could not resolve contact for customer " + customerId);
+        UserContactDto contact = contactOpt.orElse(null);
+        if (contact == null) {
+            log.warn("No contact found for customer {} (event {}); storing in-app notification only",
+                    customerId, event.eventId());
         }
-        UserContactDto contact = contactOpt.get();
 
         // 4. Render template
         NotificationTemplateEngine.RenderedTemplate rendered = templateEngine.render(event);
@@ -127,7 +128,7 @@ public class NotificationService {
         notificationLogRepository.save(inAppLog);
 
         // 6. Send and store EMAIL notification
-        if (contact.email() != null && !contact.email().isBlank()) {
+        if (contact != null && contact.email() != null && !contact.email().isBlank()) {
             if (!emailChannel.isConfigured()) {
                 log.warn("JavaMailSender is not configured; skipping email notification for customer {}", customerId);
             } else {
@@ -168,7 +169,7 @@ public class NotificationService {
         }
 
         // 7. Dispatch SMS if phone number available
-        if (contact.phoneNumber() != null && !contact.phoneNumber().isBlank()) {
+        if (contact != null && contact.phoneNumber() != null && !contact.phoneNumber().isBlank()) {
             NotificationMessage smsMessage = new NotificationMessage(
                     "sms-" + UUID.randomUUID(),
                     event.eventId(),

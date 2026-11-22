@@ -108,5 +108,15 @@ class RestAuthContactClientTest {
 
         mockServer.verify();
     }
-}
 
+    @Test
+    @DisplayName("Without a configured internal token, lookups fail clearly instead of sending an empty or default secret")
+    void missingInternalToken_failsWithoutCallingAuthService() {
+        // Port 1 is never listening: if the client tried a request, the error would be a connection failure.
+        RestAuthContactClient client = new RestAuthContactClient("http://localhost:1", false, "");
+
+        assertThatThrownBy(() -> client.getContact("cust-1"))
+                .isInstanceOf(ContactResolutionException.class)
+                .hasMessageContaining("INTERNAL_NOTIFICATIONS_SERVICE_TOKEN");
+    }
+}

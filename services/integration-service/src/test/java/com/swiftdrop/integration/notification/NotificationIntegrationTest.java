@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.common.EventEnvelope;
 import com.swiftdrop.integration.notification.client.AuthContactClient;
-import com.swiftdrop.integration.notification.client.ContactResolutionException;
 import com.swiftdrop.integration.notification.dto.NotificationPageResponse;
 import com.swiftdrop.integration.notification.dto.UserContactDto;
+import com.swiftdrop.integration.notification.model.NotificationProcessedEventId;
 import com.swiftdrop.integration.notification.dto.UserRegisteredEvent;
 import com.swiftdrop.integration.notification.model.NotificationLogEntity;
 import com.swiftdrop.integration.notification.repository.NotificationLogRepository;
@@ -38,7 +38,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -390,8 +389,8 @@ class NotificationIntegrationTest {
     }
 
     @Test
-    @DisplayName("Contact lookup failure path: Throws ContactResolutionException when contact cannot be resolved")
-    void contactLookupFailurePath_throwsException() {
+    @DisplayName("Unknown customer (contact 404): keeps the in-app notification, sends no email, and does not retry")
+    void contactNotFound_storesInAppOnlyWithoutRetry() {
         String customerId = "cust-missing-" + UUID.randomUUID();
         String parcelId = "pcl-" + UUID.randomUUID();
 
@@ -414,8 +413,15 @@ class NotificationIntegrationTest {
                 null
         );
 
-        assertThatThrownBy(() -> notificationService.processStatusChangeEvent(event))
-                .isInstanceOf(ContactResolutionException.class)
-                .hasMessageContaining("Could not resolve contact for customer " + customerId);
+        // No exception: a missing user cannot be fixed by retrying, so the event must not go to retry/DLT.
+        notificationService.processStatusChangeEvent(event);
+
+        List<NotificationLogEntity> rows = notificationLogRepository.findAll().stream()
+                .filter(n -> event.eventId().equals(n.getEventId()))
+                .toList();
+        assertThat(rows).extracting(NotificationLogEntity::getChannel).containsExactly("IN_APP");
+        assertThat(getMailpitMessages().get("total").asInt()).isZero();
+        assertThat(processedEventRepository.existsById(new NotificationProcessedEventId(
+                UUID.fromString(event.eventId()), NotificationService.CONSUMER_GROUP))).isTrue();
     }
 }

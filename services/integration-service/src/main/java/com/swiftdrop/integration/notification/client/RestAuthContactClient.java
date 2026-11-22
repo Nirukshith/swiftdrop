@@ -25,21 +25,30 @@ public class RestAuthContactClient implements AuthContactClient {
 
     private final RestClient restClient;
     private final boolean fallbackEnabled;
+    private final boolean tokenConfigured;
 
     @Autowired
     public RestAuthContactClient(
             @Value("${swiftdrop.auth.base-url:http://localhost:8081}") String authBaseUrl,
             @Value("${swiftdrop.auth.contact-fallback-enabled:false}") boolean fallbackEnabled,
-            @Value("${swiftdrop.security.internal.tokens.notifications-service:${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:swiftdrop-internal-notif-secret-2026}}") String internalToken) {
+            @Value("${swiftdrop.security.internal.tokens.notifications-service:${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:}}") String internalToken) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(2000);
         requestFactory.setReadTimeout(2000);
 
-        this.restClient = RestClient.builder()
+        // No built-in default: the shared secret must come from configuration (shared rule G1).
+        this.tokenConfigured = internalToken != null && !internalToken.isBlank();
+        if (!tokenConfigured) {
+            log.warn("INTERNAL_NOTIFICATIONS_SERVICE_TOKEN is not configured; "
+                    + "contact lookups for notifications will fail until it is set");
+        }
+        RestClient.Builder builder = RestClient.builder()
                 .baseUrl(authBaseUrl)
-                .defaultHeader("X-Internal-Service-Token", internalToken)
-                .requestFactory(requestFactory)
-                .build();
+                .requestFactory(requestFactory);
+        if (tokenConfigured) {
+            builder.defaultHeader("X-Internal-Service-Token", internalToken);
+        }
+        this.restClient = builder.build();
         this.fallbackEnabled = fallbackEnabled;
     }
 
@@ -47,12 +56,17 @@ public class RestAuthContactClient implements AuthContactClient {
     RestAuthContactClient(RestClient restClient, boolean fallbackEnabled) {
         this.restClient = restClient;
         this.fallbackEnabled = fallbackEnabled;
+        this.tokenConfigured = true;
     }
 
     @Override
     public Optional<UserContactDto> getContact(String userId) {
         if (userId == null || userId.isBlank()) {
             return Optional.empty();
+        }
+        if (!tokenConfigured) {
+            throw new ContactResolutionException(
+                    "Internal service token for auth-service is not configured (INTERNAL_NOTIFICATIONS_SERVICE_TOKEN)");
         }
 
         int attempts = 0;
