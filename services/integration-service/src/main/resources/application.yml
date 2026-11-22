@@ -39,9 +39,10 @@ swiftdrop:
       handoff-encryption-key: ${MERCHANT_CREDENTIAL_HANDOFF_ENCRYPTION_KEY:}
   assistant:
     llm-provider: ${ASSISTANT_PROVIDER:fake}
-    model: ${LLM_MODEL:claude-3-5-haiku-latest}
+    model: ${LLM_MODEL:claude-opus-5-5}
     provider-url: ${LLM_PROVIDER_URL:https://api.anthropic.com}
-    provider-timeout: ${LLM_PROVIDER_TIMEOUT:PT10S}
+    provider-timeout: ${LLM_PROVIDER_TIMEOUT:PT30S}
+    refusal-fallback: ${ASSISTANT_REFUSAL_FALLBACK:true}
     upstream-timeout: ${ASSISTANT_UPSTREAM_TIMEOUT:PT3S}
     rate-limit:
       max-requests: ${ASSISTANT_RATE_LIMIT_MAX_REQUESTS:10}
@@ -49,6 +50,6 @@ swiftdrop:
   security:
     internal:
       tokens:
-        notifications-service: ${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:swiftdrop-internal-notif-secret-2026}
+        notifications-service: ${INTERNAL_NOTIFICATIONS_SERVICE_TOKEN:}
         merchant-service: ${INTERNAL_MERCHANT_SERVICE_TOKEN:swiftdrop-internal-merchant-secret-2026}
         pricing-service: ${INTERNAL_PRICING_SERVICE_TOKEN:swiftdrop-internal-pricing-secret-2026}
