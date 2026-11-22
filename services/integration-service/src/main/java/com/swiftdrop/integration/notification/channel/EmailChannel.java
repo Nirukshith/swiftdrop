@@ -47,7 +47,22 @@ public class EmailChannel implements NotificationChannel {
         mailMessage.setSubject(message.title());
         mailMessage.setText(message.content());
 
-        log.info("Dispatching email notification to {} with subject '{}'", message.recipientTarget(), message.title());
+        log.info("Dispatching email notification {} to {} with subject '{}'",
+                message.id(), maskEmail(message.recipientTarget()), message.title());
         mailSender.send(mailMessage);
+    }
+
+    /**
+     * Masks an email address for logging, e.g. {@code alice@example.com -> a***@example.com}.
+     */
+    public static String maskEmail(String email) {
+        if (email == null) {
+            return "***";
+        }
+        int at = email.indexOf('@');
+        if (at <= 0) {
+            return "***";
+        }
+        return email.charAt(0) + "***" + email.substring(at);
     }
 }

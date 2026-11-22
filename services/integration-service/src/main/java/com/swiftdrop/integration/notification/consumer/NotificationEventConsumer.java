@@ -41,8 +41,9 @@ public class NotificationEventConsumer {
     )
     public void onParcelEvent(String payload, @Header(KafkaHeaders.RECEIVED_TOPIC) String topic)
             throws JsonProcessingException {
-        log.info("Received notification event from topic {}: {}", topic, payload);
+        // Never log the raw payload: events carry contact details (PII). Log identifiers only.
         EventEnvelope event = objectMapper.readValue(payload, EventEnvelope.class);
+        log.info("Received notification event {} from topic {}", event.eventId(), topic);
         if ("parcel.status-changed.v1".equals(topic)) {
             notificationService.processStatusChangeEvent(event);
         } else {
@@ -62,13 +63,22 @@ public class NotificationEventConsumer {
             groupId = "integration-notification"
     )
     public void onUserRegistered(String payload) throws JsonProcessingException {
-        log.info("Received user.registered.v1 event: {}", payload);
         UserRegisteredEvent event = objectMapper.readValue(payload, UserRegisteredEvent.class);
+        log.info("Received user.registered.v1 event {}", event.eventId());
         notificationService.processUserRegisteredEvent(event);
     }
 
     @DltHandler
     public void handleDlt(String payload, @Header(KafkaHeaders.RECEIVED_TOPIC) String topic) {
-        log.error("Exhausted retry attempts for notification event from topic {}: {}", topic, payload);
+        log.error("Exhausted retry attempts for notification event {} from topic {}", eventIdOf(payload), topic);
+    }
+
+    private String eventIdOf(String payload) {
+        try {
+            String eventId = objectMapper.readTree(payload).path("eventId").asText(null);
+            return eventId != null && !eventId.isBlank() ? eventId : "<missing eventId>";
+        } catch (JsonProcessingException | IllegalArgumentException e) {
+            return "<unparseable payload>";
+        }
     }
 }
