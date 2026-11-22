@@ -47,10 +47,27 @@ public class PasswordResetMailSender {
                     """.formatted(resetCode));
 
             mailSender.send(message);
-            log.info("Password reset email successfully sent to recipient: {}", recipientEmail);
+            log.info("Password reset email successfully sent to recipient: {}", maskEmail(recipientEmail));
         } catch (Exception e) {
-            log.error("Failed to send password reset email to {}: {}", recipientEmail, e.getMessage(), e);
+            // SMTP error messages often echo the recipient address, so keep them out of the default log level.
+            log.error("Failed to send password reset email to {}: {}",
+                    maskEmail(recipientEmail), e.getClass().getSimpleName());
+            log.debug("Password reset email failure details", e);
         }
+    }
+
+    /**
+     * Masks an email address for logging, e.g. {@code alice@example.com -> a***@example.com}.
+     */
+    static String maskEmail(String email) {
+        if (email == null) {
+            return "***";
+        }
+        int at = email.indexOf('@');
+        if (at <= 0) {
+            return "***";
+        }
+        return email.charAt(0) + "***" + email.substring(at);
     }
 }
 
